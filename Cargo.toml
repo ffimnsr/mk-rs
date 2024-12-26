@@ -1,0 +1,18 @@
+[package]
+name = "mk-rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mk_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mk"
+path = "src/cli/bin/main.rs"
+
+[dependencies]
+anyhow = "1.0.95"
+log = "0.4.22"
+serde = { version = "1.0.216", features = ["derive"] }
+thiserror = "2.0.9"

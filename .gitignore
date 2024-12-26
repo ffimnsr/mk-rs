@@ -1,0 +1,9 @@
+/.trigger
+/target
+**/*.rs.bk
+/passport.db
+/data.db3
+/.env
+/.env.staging
+/.env.production
+/node_modules
