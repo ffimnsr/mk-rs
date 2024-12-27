@@ -1,7 +1,7 @@
 mod command;
-mod task_dependency;
 mod precondition;
 mod task;
+mod task_dependency;
 mod task_root;
 
 pub use command::*;

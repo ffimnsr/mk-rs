@@ -7,3 +7,5 @@
 /.env.staging
 /.env.production
 /node_modules
+/hello.txt
+/test.env

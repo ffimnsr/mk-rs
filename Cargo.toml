@@ -1,5 +1,5 @@
 [package]
-name = "mk-rs"
+name = "mk"
 version = "0.1.0"
 edition = "2021"
 
