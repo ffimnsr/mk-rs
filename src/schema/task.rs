@@ -1,10 +1,25 @@
 use anyhow::Context;
+use indicatif::{
+    HumanDuration,
+    MultiProgress,
+    ProgressBar,
+    ProgressStyle,
+};
+use rand::Rng as _;
 use serde::{
     Deserialize,
     Serialize,
 };
 use std::collections::HashMap;
-use std::fs;
+use std::sync::Arc;
+use std::time::{
+    Duration,
+    Instant,
+};
+use std::{
+    fs,
+    thread,
+};
 
 use super::{
     Command,
@@ -17,7 +32,7 @@ pub struct Task {
     pub commands: Vec<Command>,
 
     #[serde(default)]
-    pub precondition: Vec<Precondition>,
+    pub preconditions: Vec<Precondition>,
 
     #[serde(default)]
     pub depends_on: Vec<TaskDependency>,
@@ -37,17 +52,43 @@ pub struct Task {
 
 impl Task {
     pub fn run(&self) -> anyhow::Result<()> {
+        let started = Instant::now();
+
         let mut environment = self.environment.clone();
         let additional_env = self.load_env_file()?;
         environment.extend(additional_env);
 
-        for preconditions in &self.precondition {
-            preconditions.execute(Some(&environment))?;
-        }
+        let mut rng = rand::thread_rng();
+        let multi = Arc::new(MultiProgress::new());
 
-        for command in &self.commands {
-            command.execute(Some(&environment))?;
+        // spinners can be found here:
+        // https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json
+        let pb_style =
+            ProgressStyle::with_template("{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ")?
+                .tick_chars("⣾⣽⣻⢿⡿⣟⣯⣷");
+
+        let precondition_pb = multi.add(ProgressBar::new(self.preconditions.len() as u64));
+        precondition_pb.set_style(pb_style.clone());
+        precondition_pb.set_message("Running task precondition...");
+        for (i, precondition) in self.preconditions.iter().enumerate() {
+            thread::sleep(Duration::from_millis(rng.gen_range(40..300)));
+            precondition_pb.set_prefix(format!("{}/{}", i + 1, self.preconditions.len()));
+            precondition.execute(Some(&environment))?;
+            precondition_pb.inc(1);
         }
+        precondition_pb.finish_and_clear();
+
+        let command_pb = multi.add(ProgressBar::new(self.commands.len() as u64));
+        command_pb.set_style(pb_style);
+        command_pb.set_message("Running task command...");
+        for (i, command) in self.commands.iter().enumerate() {
+            thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
+            command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));
+            command.execute(multi.clone(), Some(&environment))?;
+            command_pb.inc(1);
+        }
+        let message = format!("Task completed in {}.", HumanDuration(started.elapsed()));
+        command_pb.finish_with_message(message);
 
         Ok(())
     }

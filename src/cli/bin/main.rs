@@ -3,6 +3,11 @@ use clap::{
     Subcommand,
 };
 use mk_lib::schema::TaskRoot;
+use prettytable::format::consts;
+use prettytable::{
+    row,
+    Table,
+};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -42,9 +47,16 @@ fn main() -> anyhow::Result<()> {
             task.run()?;
         },
         Some(Command::List) => {
-            for task_name in task_root.tasks.keys() {
-                println!("{}", task_name);
+            let mut table = Table::new();
+            table.set_titles(row![b->"Task", b->"Description"]);
+            table.set_format(*consts::FORMAT_CLEAN);
+
+            for (task_name, task) in task_root.tasks {
+                table.add_row(row![b->&task_name, Fg->&task.description]);
             }
+
+            println!("Available tasks:");
+            table.printstd();
         },
         None => {
             if let Some(task_name) = args.task_name {
@@ -56,7 +68,7 @@ fn main() -> anyhow::Result<()> {
                 log::trace!("Task: {:?}", task);
                 task.run()?;
             } else {
-                anyhow::bail!("No subcommand or task name provided");
+                anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
             }
         },
     }

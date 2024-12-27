@@ -1,12 +1,20 @@
+use anyhow::Context;
+use indicatif::MultiProgress;
 use serde::{
     Deserialize,
     Serialize,
 };
 use std::collections::HashMap;
+use std::io::{
+    BufRead as _,
+    BufReader,
+};
 use std::process::{
     Command as ProcessCommand,
     Stdio,
 };
+use std::sync::Arc;
+use std::thread;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Command {
@@ -23,14 +31,18 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn execute(&self, env_vars: Option<&HashMap<String, String>>) -> anyhow::Result<()> {
+    pub fn execute(
+        &self,
+        multi: Arc<MultiProgress>,
+        env_vars: Option<&HashMap<String, String>>,
+    ) -> anyhow::Result<()> {
         let stdout = if self.verbose {
-            Stdio::inherit()
+            Stdio::piped()
         } else {
             Stdio::null()
         };
         let stderr = if self.verbose {
-            Stdio::inherit()
+            Stdio::piped()
         } else {
             Stdio::null()
         };
@@ -39,6 +51,7 @@ impl Command {
         let mut cmd = ProcessCommand::new(shell);
         cmd.arg("-c").arg(&self.command).stdout(stdout).stderr(stderr);
 
+        // Inject environment variables
         if let Some(env_vars) = env_vars {
             for (key, value) in env_vars {
                 cmd.env(key, value);
@@ -46,6 +59,26 @@ impl Command {
         }
 
         let mut cmd = cmd.spawn()?;
+
+        let stdout = cmd.stdout.take().with_context(|| "Failed to open stdout")?;
+        let stderr = cmd.stderr.take().with_context(|| "Failed to open stderr")?;
+
+        let multi_clone = multi.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = multi_clone.println(line);
+            }
+        });
+
+        let multi_clone = multi.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = multi_clone.println(line);
+            }
+        });
+
         let status = cmd.wait()?;
         if !status.success() && !self.ignore_errors {
             anyhow::bail!("Command failed: {}", self.command);

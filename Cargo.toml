@@ -1,10 +1,10 @@
 [package]
 name = "mk"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
 readme = "README.md"
-description = "Yet another task runner 🦀"
+description = "Yet another simple task runner 🦀"
 categories = ["command-line-utilities", "development-tools"]
 homepage = "https://github.com/ffimnsr/mk-rs"
 repository = "https://github.com/ffimnsr/mk-rs"
@@ -23,7 +23,12 @@ path = "src/cli/bin/main.rs"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
+console = "0.15.10"
+env_logger = "0.11.6"
+indicatif = "0.17.9"
 log = "0.4.22"
+prettytable-rs = "0.10.0"
+rand = "0.8.5"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_yaml = "0.9.34"
 thiserror = "2.0.9"
