@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# This is same as the script being used by @BurntSushi in his `ripgrep` project
+if ! command -V sudo; then
+  apt-get update
+  apt-get install -y --no-install-recommends sudo
+fi
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends \
+  zsh xz-utils liblz4-tool musl-tools brotli zstd perl gcc libssl-dev
