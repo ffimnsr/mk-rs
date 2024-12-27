@@ -1,7 +1,16 @@
 [package]
 name = "mk"
 version = "0.1.0"
+authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
+readme = "README.md"
+description = "Do painless migration 🦀"
+categories = ["command-line-utilities", "development-tools"]
+homepage = "https://github.com/ffimnsr/mk-rs"
+repository = "https://github.com/ffimnsr/mk-rs"
+license = "MIT OR Apache-2.0"
+keywords = ["command-line", "task-runner", "cli", "runner", "utility"]
+exclude = [".gitignore"]
 
 [lib]
 name = "mk_lib"
