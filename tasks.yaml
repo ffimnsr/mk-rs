@@ -1,0 +1,22 @@
+tasks:
+  task1:
+    commands:
+      - command: echo \"Hello, World!\"
+        ignore_errors: false
+        verbose: true
+      - command: wel
+        ignore_errors: true
+        verbose: true
+      - command: echo \"Hello, World2!\"
+        ignore_errors: false
+        verbose: true
+    depends_on:
+      - name: task1
+    description: 'This is a task'
+    labels: {}
+    environment: {}
+    env_file: {}
+    aliases:
+      - t
+    interactive: false
+    ignore_errors: false
