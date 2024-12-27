@@ -1,9 +1,16 @@
 use anyhow::Context;
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::HashMap;
 use std::fs;
 
-use super::{Command, Precondition, TaskDependency};
+use super::{
+    Command,
+    Precondition,
+    TaskDependency,
+};
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Task {

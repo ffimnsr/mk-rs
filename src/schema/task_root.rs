@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize,
+};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -66,8 +69,8 @@ mod test {
             task_root.tasks["task1"].commands[0].command,
             "echo \"Hello, World!\""
         );
-        assert_eq!(task_root.tasks["task1"].commands[0].ignore_errors, false);
-        assert_eq!(task_root.tasks["task1"].commands[0].verbose, false);
+        assert!(!task_root.tasks["task1"].commands[0].ignore_errors);
+        assert!(!task_root.tasks["task1"].commands[0].verbose);
         assert_eq!(task_root.tasks["task1"].depends_on[0].name, "task2");
         assert_eq!(task_root.tasks["task1"].labels.len(), 0);
         assert_eq!(task_root.tasks["task1"].description, "This is a task");
@@ -78,8 +81,8 @@ mod test {
             task_root.tasks["task2"].commands[0].command,
             "echo \"Hello, World!\""
         );
-        assert_eq!(task_root.tasks["task2"].commands[0].ignore_errors, false);
-        assert_eq!(task_root.tasks["task2"].commands[0].verbose, false);
+        assert!(!task_root.tasks["task2"].commands[0].ignore_errors);
+        assert!(!task_root.tasks["task2"].commands[0].verbose);
         assert_eq!(task_root.tasks["task2"].depends_on[0].name, "task1");
         assert_eq!(task_root.tasks["task2"].labels.len(), 0);
         assert_eq!(task_root.tasks["task2"].description, "This is a task");
@@ -90,8 +93,8 @@ mod test {
             task_root.tasks["task3"].commands[0].command,
             "echo \"Hello, World!\""
         );
-        assert_eq!(task_root.tasks["task3"].commands[0].ignore_errors, false);
-        assert_eq!(task_root.tasks["task3"].commands[0].verbose, false);
+        assert!(!task_root.tasks["task3"].commands[0].ignore_errors);
+        assert!(!task_root.tasks["task3"].commands[0].verbose);
         assert_eq!(task_root.tasks["task3"].depends_on.len(), 0);
         assert_eq!(task_root.tasks["task3"].labels.len(), 0);
         assert_eq!(task_root.tasks["task3"].description.len(), 0);

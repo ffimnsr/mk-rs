@@ -1,7 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    process::{Command as ProcessCommand, Stdio},
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::HashMap;
+use std::process::{
+    Command as ProcessCommand,
+    Stdio,
 };
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -52,7 +56,7 @@ impl Precondition {
 }
 
 fn default_shell() -> String {
-    return "sh".to_string();
+    "sh".to_string()
 }
 
 mod test {

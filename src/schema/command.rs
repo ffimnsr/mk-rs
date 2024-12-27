@@ -1,7 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    process::{Command as ProcessCommand, Stdio},
+use serde::{
+    Deserialize,
+    Serialize,
+};
+use std::collections::HashMap;
+use std::process::{
+    Command as ProcessCommand,
+    Stdio,
 };
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -52,7 +56,7 @@ impl Command {
 }
 
 fn default_shell() -> String {
-    return "sh".to_string();
+    "sh".to_string()
 }
 
 mod test {
@@ -70,8 +74,8 @@ mod test {
             let command = serde_yaml::from_str::<Command>(yaml).unwrap();
 
             assert_eq!(command.command, "echo \"Hello, World!\"");
-            assert_eq!(command.ignore_errors, false);
-            assert_eq!(command.verbose, false);
+            assert!(!command.ignore_errors);
+            assert!(!command.verbose);
         }
 
         {
@@ -81,8 +85,8 @@ mod test {
             let command = serde_yaml::from_str::<Command>(yaml).unwrap();
 
             assert_eq!(command.command, "echo \"Hello, World!\"");
-            assert_eq!(command.ignore_errors, false);
-            assert_eq!(command.verbose, false);
+            assert!(!command.ignore_errors);
+            assert!(!command.verbose);
         }
 
         {
@@ -93,8 +97,8 @@ mod test {
             let command = serde_yaml::from_str::<Command>(yaml).unwrap();
 
             assert_eq!(command.command, "echo \"Hello, World!\"");
-            assert_eq!(command.ignore_errors, true);
-            assert_eq!(command.verbose, false);
+            assert!(command.ignore_errors);
+            assert!(!command.verbose);
         }
 
         {
@@ -105,8 +109,8 @@ mod test {
             let command = serde_yaml::from_str::<Command>(yaml).unwrap();
 
             assert_eq!(command.command, "echo \"Hello, World!\"");
-            assert_eq!(command.ignore_errors, false);
-            assert_eq!(command.verbose, true);
+            assert!(!command.ignore_errors);
+            assert!(command.verbose);
         }
     }
 }

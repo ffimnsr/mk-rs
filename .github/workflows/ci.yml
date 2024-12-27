@@ -1,0 +1,161 @@
+# Reference from here:
+# https://github.com/dtolnay/syn/blob/master/.github/workflows/ci.yml
+name: ci
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '00 01 * * *'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  check-pass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustc-dev
+      - name: Run cargo check tool
+        run: cargo check --all-targets --all-features --tests --benches --release --verbose
+  test:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - check-pass
+    env:
+      CARGO: cargo
+      TARGET_FLAGS: ""
+      TARGET_DIR: ./target
+      RUST_BACKTRACE: 1
+      CROSS_VERSION: v0.2.5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build: stable
+            os: ubuntu-latest
+            rust: stable
+          - build: beta
+            os: ubuntu-latest
+            rust: beta
+          - build: nightly
+            os: ubuntu-latest
+            rust: nightly
+          - build: stable-musl
+            os: ubuntu-latest
+            rust: stable
+            target: x86_64-unknown-linux-musl
+          - build: stable-x86
+            os: ubuntu-latest
+            rust: stable
+            target: i686-unknown-linux-gnu
+          - build: stable-aarch64
+            os: ubuntu-latest
+            rust: stable
+            target: aarch64-unknown-linux-gnu
+          - build: stable-powerpc64
+            os: ubuntu-latest
+            rust: stable
+            target: powerpc64-unknown-linux-gnu
+          - build: stable-s390x
+            os: ubuntu-latest
+            rust: stable
+            target: s390x-unknown-linux-gnu
+          - build: macos
+            os: macos-latest
+            rust: stable
+          - build: win-msvc
+            os: windows-latest
+            rust: nightly
+            target: x86_64-pc-windows-msvc
+          - build: win-gnu
+            os: windows-latest
+            rust: nightly-x86_64-gnu
+            target: x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packages (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          ci/ubuntu-install-packages
+      - name: Install packages (Windows GNU)
+        uses: msys2/setup-msys2@v2
+        if: matrix.os == 'windows-latest' && matrix.target == 'x86_64-pc-windows-gnu'
+        with:
+          msystem: UCRT64
+          update: false
+          install: git perl pkg-config mingw-w64-x86_64-toolchain mingw-w64-ucrt-x86_64-gcc openssl
+          path-type: inherit
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: llvm-tools, rustc-dev
+      - name: Use cross compiler
+        if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+        run: |
+          dir="$RUNNER_TEMP/cross-download"
+          mkdir "$dir"
+          echo "$dir" >> $GITHUB_PATH
+          cd "$dir"
+          curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+          tar xf cross-x86_64-unknown-linux-musl.tar.gz
+          echo "CARGO=cross" >> $GITHUB_ENV
+          echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+          echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+      - name: Show command used for Cargo
+        run: |
+          echo "cargo command is: ${{ env.CARGO }}"
+          echo "target flag is: ${{ env.TARGET_FLAGS }}"
+          echo "target dir is: ${{ env.TARGET_DIR }}"
+      - name: Build binary and dependency crates (native)
+        if: matrix.target == ''
+        run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
+      - name: Build binary and dependency crates (cross)
+        if: matrix.target != 'x86_64-pc-windows-gnu'
+        run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
+      - name: Build binary and dependency crates (win-gnu)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: msys2 {0}
+        run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
+      - name: Run tests (native)
+        if: matrix.target == ''
+        run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
+      - name: Run tests (cross)
+        if: matrix.target != 'x86_64-pc-windows-gnu'
+        run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
+      - name: Run tests (win-gnu)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        shell: msys2 {0}
+        run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy, rustc-dev
+      - run: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all

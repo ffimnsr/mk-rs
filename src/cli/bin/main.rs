@@ -1,4 +1,7 @@
-use clap::{Parser, Subcommand};
+use clap::{
+    Parser,
+    Subcommand,
+};
 use mk_lib::schema::TaskRoot;
 
 #[derive(Debug, Parser)]
