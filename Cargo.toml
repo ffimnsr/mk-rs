@@ -1,10 +1,10 @@
 [package]
 name = "mk"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
 readme = "README.md"
-description = "Do painless migration 🦀"
+description = "Yet another task runner 🦀"
 categories = ["command-line-utilities", "development-tools"]
 homepage = "https://github.com/ffimnsr/mk-rs"
 repository = "https://github.com/ffimnsr/mk-rs"
