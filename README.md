@@ -10,6 +10,57 @@
 
 Yet another task runner.
 
+## Usage
+
+### Using CLI
+
+Here is a sample command line usage of `mk`.
+
+```bash
+mk -c tasks.yaml <task_name>
+
+...or...
+
+mk run <task_name>
+```
+
+Both commands above are same. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
+
+### Sample taskfile yaml
+
+Let's create a sample yaml file called `tasks.yaml`.
+
+```yaml
+tasks:
+  task1:
+    commands:
+      - command: |
+          echo $FOO
+          echo $BAR
+        ignore_errors: false
+        verbose: true
+      - command: wel
+        ignore_errors: true
+        verbose: true
+      - command: echo $BAR
+        ignore_errors: false
+        verbose: true
+    depends_on:
+      - name: task1
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+```
+
+This yaml task named `task1` can be run on `mk` with the command below:
+
+```bash
+mk task1
+```
+
 ## Installation
 
 Binary for different OS distribution can be downloaded [here](https://github.com/ffimnsr/mk-rs/releases). Linux, macOS, and Windows are supported.
@@ -42,3 +93,8 @@ at your option.
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+
+### References:
+
+- https://taskfile.dev/ - Inspiration of this project
