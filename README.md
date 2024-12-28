@@ -109,7 +109,9 @@ tasks:
         verbose: true
       - task: task3
     description: This is a task
-    labels: {}
+    labels:
+      - label=1
+      - label=2
     environment:
       FOO: bar
     env_file:
@@ -176,31 +178,26 @@ tasks:
     depends_on:
       - task_b
     commands:
-      - LocalRun:
-          command: "echo 'Running task A'"
-          shell: "sh"
-          ignore_errors: false
-          verbose: true
-
+      - command: "echo 'Running task A'"
+        shell: "sh"
+        ignore_errors: false
+        verbose: true
   task_b:
     depends_on:
       - task_c
     commands:
-      - LocalRun:
-          command: "echo 'Running task B'"
-          shell: "sh"
-          ignore_errors: false
-          verbose: true
-
+      - command: "echo 'Running task B'"
+        shell: "sh"
+        ignore_errors: false
+        verbose: true
   task_c:
     depends_on:
       - task_a
     commands:
-      - LocalRun:
-          command: "echo 'Running task C'"
-          shell: "sh"
-          ignore_errors: false
-          verbose: true
+      - command: "echo 'Running task C'"
+        shell: "sh"
+        ignore_errors: false
+        verbose: true
 ```
 
 In this example, task_a depends on task_b, task_b depends on task_c, and task_c depends on task_a, creating a cyclic dependency.
@@ -228,6 +225,18 @@ Follow the instruction below to install and use `mk` on your system.
 
 1. Download the binary for your OS distribution [here](https://github.com/ffimnsr/mk-rs/releases).
 2. Copy it to your system binary directory (`/usr/local/bin`) or to your userspace binary directory (`$HOME/.local/bin`).
+
+## What's on the roadmap?
+
+- [ ] Add secrets env storage that use GPG storage
+- [ ] Add proper documentation
+- [ ] Add support for cargo env
+- [ ] Add support for trigger reload when on cargo run
+- [ ] Add unit tests and benchmarks
+- [ ] Make sure to support windows and macOS
+- [ ] Make use of labels
+- [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
+- [ ] There's still a lot of unknown, if you found a bug please report.
 
 ## License
 
