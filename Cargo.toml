@@ -32,6 +32,7 @@ rand = "0.8.5"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_yaml = "0.9.34"
 thiserror = "2.0.9"
+which = "7.0.1"
 
 [dev-dependencies]
 assert_cmd = "2.0.16"

@@ -8,11 +8,37 @@
 
 > Efficiency is doing things right; effectiveness is doing the right things. This tool helps you do both.
 
-Yet another task runner.
+Yet another simple task runner.
+
+`mk` is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows.
+
+## Features
+
+- **Simple Configuration**: Define your tasks in a straightforward YAML file.
+- **Flexible Execution**: Run tasks locally, in containers, or as nested tasks.
+- **Error Handling**: Control how errors are handled with `ignore_errors`.
+- **Verbose Output**: Enable verbose output for detailed logs.
 
 ## Usage
 
 ### Using CLI
+
+```
+Usage: mk [OPTIONS] [TASK_NAMES]... [COMMAND]
+
+Commands:
+  run   Run specific tasks
+  list  List all available tasks
+  help  Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [TASK_NAMES]...  The task names to run
+
+Options:
+  -c, --config <CONFIG>  Config file to source [default: tasks.yaml]
+  -h, --help             Print help
+  -V, --version          Print version
+```
 
 Here is a sample command line usage of `mk`.
 
@@ -24,7 +50,7 @@ mk -c tasks.yaml <task_name>
 mk run <task_name>
 ```
 
-Both commands above are same. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
+Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
 
 ### Sample taskfile yaml
 
@@ -57,9 +83,132 @@ tasks:
 
 This yaml task named `task1` can be run on `mk` with the command below:
 
+
 ```bash
 mk task1
 ```
+
+Here's a longer version Yaml that utilize container run on `task5`:
+
+```yaml
+tasks:
+  task1:
+    depends_on:
+      - name: task4
+    preconditions:
+      - command: echo "Precondition 1"
+      - command: echo "Precondition 2"
+    commands:
+      - command: |
+          echo $FOO
+          echo $BAR
+        verbose: true
+      - command: echo fubar
+        verbose: true
+      - command: echo $BAR
+        verbose: true
+      - task: task3
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task2:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    depends_on:
+      - name: task1
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task3:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task4:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: fubar
+    env_file:
+      - test.env
+  task5:
+    commands:
+      - container_command:
+          - bash
+          - -c
+          - echo $FOO
+        image: docker.io/library/bash:latest
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: fubar
+    env_file:
+      - test.env
+```
+
+#### Handling Cyclic Dependencies
+
+Cyclic dependencies occur when a task depends on itself, either directly or indirectly, creating a loop that can cause the system to run indefinitely. To prevent this, the system detects cyclic dependencies and exits immediately with an error message.
+
+##### Example of Cyclic Dependency
+
+Consider the following tasks:
+
+```yaml
+tasks:
+  task_a:
+    depends_on:
+      - task_b
+    commands:
+      - LocalRun:
+          command: "echo 'Running task A'"
+          shell: "sh"
+          ignore_errors: false
+          verbose: true
+
+  task_b:
+    depends_on:
+      - task_c
+    commands:
+      - LocalRun:
+          command: "echo 'Running task B'"
+          shell: "sh"
+          ignore_errors: false
+          verbose: true
+
+  task_c:
+    depends_on:
+      - task_a
+    commands:
+      - LocalRun:
+          command: "echo 'Running task C'"
+          shell: "sh"
+          ignore_errors: false
+          verbose: true
+```
+
+In this example, task_a depends on task_b, task_b depends on task_c, and task_c depends on task_a, creating a cyclic dependency.
+
+#### How the System Handles Cyclic Dependencies
+
+When the system detects a cyclic dependency, it exits immediately with an error message indicating the cycle. This prevents the system from entering an infinite loop.
+
 
 ## Installation
 
@@ -93,7 +242,6 @@ at your option.
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
-
 
 ### References:
 
