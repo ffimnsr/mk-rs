@@ -1,0 +1,69 @@
+tasks:
+  task1:
+    depends_on:
+      - name: task4
+    preconditions:
+      - command: echo "Precondition 1"
+      - command: echo "Precondition 2"
+    commands:
+      - command: |
+          echo $FOO
+          echo $BAR
+        verbose: true
+      - command: echo fubar
+        verbose: true
+      - command: echo $BAR
+        verbose: true
+      - task: task3
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task2:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    depends_on:
+      - name: task1
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task3:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: bar
+    env_file:
+      - test.env
+  task4:
+    commands:
+      - command: echo $FOO
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: fubar
+    env_file:
+      - test.env
+  task5:
+    commands:
+      - container_command:
+          - bash
+          - -c
+          - echo $FOO
+        image: docker.io/library/bash:latest
+        verbose: true
+    description: This is a task
+    labels: {}
+    environment:
+      FOO: fubar
+    env_file:
+      - test.env

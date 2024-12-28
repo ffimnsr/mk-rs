@@ -1,69 +1,28 @@
 tasks:
-  task1:
-    depends_on:
-      - name: task4
+  build:
+    commands:
+      - command: cargo b
+        verbose: true
+    description: Build
+  pack:
     preconditions:
-      - command: echo "Precondition 1"
-      - command: echo "Precondition 2"
+      - command: git diff-index --quiet --exit-code HEAD --
+      - command: cargo c
     commands:
       - command: |
-          echo $FOO
-          echo $BAR
+          latest_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          podman build \
+            --sbom=true \
+            --label org.opencontainers.image.created=$(date +%Y-%m-%dT%H:%M:%S%z) \
+            --label org.opencontainers.image.authors=gh:@ffimnsr \
+            --label org.opencontainers.image.description="$name $latest_version" \
+            --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+            --label org.opencontainers.image.source=$(git remote get-url origin) \
+            --label org.opencontainers.image.title=$name \
+            --label org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs \
+            --label org.opencontainers.image.version=$latest_version \
+            -f Containerfile \
+            -t ghcr.io/ffimnsr/$name-rs:$latest_version \
+            -t ghcr.io/ffimnsr/$name-rs:latest .
         verbose: true
-      - command: echo fubar
-        verbose: true
-      - command: echo $BAR
-        verbose: true
-      - task: task3
-    description: This is a task
-    labels: {}
-    environment:
-      FOO: bar
-    env_file:
-      - test.env
-  task2:
-    commands:
-      - command: echo $FOO
-        verbose: true
-    depends_on:
-      - name: task1
-    description: This is a task
-    labels: {}
-    environment:
-      FOO: bar
-    env_file:
-      - test.env
-  task3:
-    commands:
-      - command: echo $FOO
-        verbose: true
-    description: This is a task
-    labels: {}
-    environment:
-      FOO: bar
-    env_file:
-      - test.env
-  task4:
-    commands:
-      - command: echo $FOO
-        verbose: true
-    description: This is a task
-    labels: {}
-    environment:
-      FOO: fubar
-    env_file:
-      - test.env
-  task5:
-    commands:
-      - container_command:
-          - bash
-          - -c
-          - echo $FOO
-        image: docker.io/library/bash:latest
-        verbose: true
-    description: This is a task
-    labels: {}
-    environment:
-      FOO: fubar
-    env_file:
-      - test.env
