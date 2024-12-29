@@ -1,14 +1,11 @@
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::Deserialize;
 
 use super::TaskContext;
 
 /// This struct represents a task dependency. A task can depend on other tasks.
 /// If a task depends on another task, the dependent task must be executed before
 /// the dependent task.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize)]
 pub struct TaskDependency {
   pub name: String,
 }

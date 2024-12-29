@@ -5,10 +5,7 @@ use indicatif::{
   ProgressStyle,
 };
 use rand::Rng as _;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::{
   Duration,
@@ -19,18 +16,18 @@ use std::{
   thread,
 };
 
-use crate::defaults::default_true;
 use super::{
   CommandRunner,
   Precondition,
   TaskContext,
   TaskDependency,
 };
+use crate::defaults::default_true;
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
 /// must be met before the task can be executed.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Task {
   /// The commands to run
   pub commands: Vec<CommandRunner>,
@@ -195,19 +192,12 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun {
-        command,
-        work_dir,
-        shell,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(command, "echo \"Hello, World!\"");
-        assert_eq!(work_dir, &None);
-        assert_eq!(shell, "sh");
-        assert!(!*ignore_errors);
-        assert!(!*verbose);
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo \"Hello, World!\"");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert!(!local_run.ignore_errors);
+        assert!(!local_run.verbose);
       }
 
       assert_eq!(task.depends_on[0].name, "task1");
@@ -236,19 +226,12 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun {
-        command,
-        work_dir,
-        shell,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(command, "echo 'Hello, World!'");
-        assert_eq!(*work_dir, None);
-        assert_eq!(shell, "sh");
-        assert!(!*ignore_errors);
-        assert!(!*verbose);
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo 'Hello, World!'");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert!(!local_run.ignore_errors);
+        assert!(!local_run.verbose);
       }
 
       assert_eq!(task.description, "This is a task");
@@ -271,19 +254,12 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun {
-        command,
-        work_dir,
-        shell,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(command, "echo 'Hello, World!'");
-        assert_eq!(*work_dir, None);
-        assert_eq!(shell, "sh");
-        assert!(!*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo 'Hello, World!'");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert!(!local_run.ignore_errors);
+        assert!(local_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -309,21 +285,14 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun {
-        container_command,
-        image,
-        mounted_paths,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(container_command.len(), 2);
-        assert_eq!(container_command[0], "echo");
-        assert_eq!(container_command[1], "Hello, World!");
-        assert_eq!(image, "docker.io/library/hello-world:latest");
-        assert_eq!(*mounted_paths, Vec::<String>::new());
-        assert!(!*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+        assert_eq!(container_run.container_command.len(), 2);
+        assert_eq!(container_run.container_command[0], "echo");
+        assert_eq!(container_run.container_command[1], "Hello, World!");
+        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+        assert_eq!(container_run.mounted_paths, Vec::<String>::new());
+        assert!(!container_run.ignore_errors);
+        assert!(container_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -352,21 +321,14 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun {
-        container_command,
-        image,
-        mounted_paths,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(container_command.len(), 2);
-        assert_eq!(container_command[0], "echo");
-        assert_eq!(container_command[1], "Hello, World!");
-        assert_eq!(image, "docker.io/library/hello-world:latest");
-        assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert!(!*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+        assert_eq!(container_run.container_command.len(), 2);
+        assert_eq!(container_run.container_command[0], "echo");
+        assert_eq!(container_run.container_command[1], "Hello, World!");
+        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+        assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
+        assert!(!container_run.ignore_errors);
+        assert!(container_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -396,21 +358,14 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun {
-        container_command,
-        image,
-        mounted_paths,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(container_command.len(), 2);
-        assert_eq!(container_command[0], "echo");
-        assert_eq!(container_command[1], "Hello, World!");
-        assert_eq!(image, "docker.io/library/hello-world:latest");
-        assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert!(*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+        assert_eq!(container_run.container_command.len(), 2);
+        assert_eq!(container_run.container_command[0], "echo");
+        assert_eq!(container_run.container_command[1], "Hello, World!");
+        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+        assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
+        assert!(container_run.ignore_errors);
+        assert!(container_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -437,21 +392,14 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun {
-        container_command,
-        image,
-        mounted_paths,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(container_command.len(), 2);
-        assert_eq!(container_command[0], "echo");
-        assert_eq!(container_command[1], "Hello, World!");
-        assert_eq!(image, "docker.io/library/hello-world:latest");
-        assert_eq!(*mounted_paths, Vec::<String>::new());
-        assert!(!*ignore_errors);
-        assert!(!*verbose);
+      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+        assert_eq!(container_run.container_command.len(), 2);
+        assert_eq!(container_run.container_command[0], "echo");
+        assert_eq!(container_run.container_command[1], "Hello, World!");
+        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+        assert_eq!(container_run.mounted_paths, Vec::<String>::new());
+        assert!(!container_run.ignore_errors);
+        assert!(!container_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -474,15 +422,10 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun {
-        task,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(task, "task1");
-        assert!(!*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+        assert_eq!(task_run.task, "task1");
+        assert!(!task_run.ignore_errors);
+        assert!(task_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -506,15 +449,10 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun {
-        task,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(task, "task1");
-        assert!(!*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+        assert_eq!(task_run.task, "task1");
+        assert!(!task_run.ignore_errors);
+        assert!(task_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -538,15 +476,10 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun {
-        task,
-        ignore_errors,
-        verbose,
-      } = &task.commands[0]
-      {
-        assert_eq!(task, "task1");
-        assert!(*ignore_errors);
-        assert!(*verbose);
+      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+        assert_eq!(task_run.task, "task1");
+        assert!(task_run.ignore_errors);
+        assert!(task_run.verbose);
       }
 
       assert_eq!(task.description.len(), 0);

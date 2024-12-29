@@ -1,8 +1,5 @@
 use anyhow::Context as _;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::Deserialize;
 use std::io::{
   BufRead as _,
   BufReader,
@@ -21,7 +18,7 @@ use crate::defaults::{
 
 /// This struct represents a precondition that must be met before a task can be
 /// executed.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Precondition {
   pub command: String,
 

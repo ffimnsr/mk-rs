@@ -7,3 +7,17 @@ if [ $? -ne 0 ]; then
   echo >&2 "Please fix the errors before committing."
   exit 1
 fi
+
+echo "Checking if the code is formatted"
+cargo fmt --all --check
+if [ $? -ne 0 ]; then
+  echo >&2 "Please run 'cargo fmt' and commit the formatting changes."
+  exit 1
+fi
+
+echo "Checking for code warnings"
+cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
+if [ $? -ne 0 ]; then
+  echo >&2 "Please run 'cargo clippy' and fix the warnings."
+  exit 1
+fi

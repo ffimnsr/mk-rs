@@ -1,8 +1,5 @@
 use anyhow::Context;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -11,15 +8,14 @@ use super::Task;
 
 /// This struct represents the root of the task schema. It contains all the tasks
 /// that can be executed.
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize)]
 pub struct TaskRoot {
   pub tasks: HashMap<String, Task>,
 }
 
 impl TaskRoot {
   pub fn from_file(file: &str) -> anyhow::Result<Self> {
-    let file = File::open(file)
-      .with_context(|| format!("Failed to open file: {}", file))?;
+    let file = File::open(file).with_context(|| format!("Failed to open file: {}", file))?;
     let reader = BufReader::new(file);
     let task_root = serde_yaml::from_reader(reader)?;
 
@@ -70,19 +66,12 @@ mod test {
 
     assert_eq!(task_root.tasks.len(), 3);
 
-    if let CommandRunner::LocalRun {
-      command,
-      work_dir,
-      shell,
-      ignore_errors,
-      verbose,
-    } = &task_root.tasks["task1"].commands[0]
-    {
-      assert_eq!(command, "echo \"Hello, World 1!\"");
-      assert_eq!(*work_dir, None);
-      assert_eq!(shell, "sh");
-      assert!(!*ignore_errors);
-      assert!(!*verbose);
+    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task1"].commands[0] {
+      assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
+      assert_eq!(local_run.work_dir, None);
+      assert_eq!(local_run.shell, "sh");
+      assert!(!local_run.ignore_errors);
+      assert!(!local_run.verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -93,19 +82,12 @@ mod test {
     assert_eq!(task_root.tasks["task1"].environment.len(), 1);
     assert_eq!(task_root.tasks["task1"].env_file.len(), 1);
 
-    if let CommandRunner::LocalRun {
-      command,
-      work_dir,
-      shell,
-      ignore_errors,
-      verbose,
-    } = &task_root.tasks["task2"].commands[0]
-    {
-      assert_eq!(command, "echo \"Hello, World 2!\"");
-      assert_eq!(*work_dir, None);
-      assert_eq!(shell, "sh");
-      assert!(!*ignore_errors);
-      assert!(!*verbose);
+    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task2"].commands[0] {
+      assert_eq!(local_run.command, "echo \"Hello, World 2!\"");
+      assert_eq!(local_run.work_dir, None);
+      assert_eq!(local_run.shell, "sh");
+      assert!(!local_run.ignore_errors);
+      assert!(!local_run.verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -116,19 +98,12 @@ mod test {
     assert_eq!(task_root.tasks["task2"].environment.len(), 0);
     assert_eq!(task_root.tasks["task2"].env_file.len(), 0);
 
-    if let CommandRunner::LocalRun {
-      command,
-      work_dir,
-      shell,
-      ignore_errors,
-      verbose,
-    } = &task_root.tasks["task3"].commands[0]
-    {
-      assert_eq!(command, "echo \"Hello, World 3!\"");
-      assert_eq!(*work_dir, None);
-      assert_eq!(shell, "sh");
-      assert!(!*ignore_errors);
-      assert!(!*verbose);
+    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task3"].commands[0] {
+      assert_eq!(local_run.command, "echo \"Hello, World 3!\"");
+      assert_eq!(local_run.work_dir, None);
+      assert_eq!(local_run.shell, "sh");
+      assert!(!local_run.ignore_errors);
+      assert!(!local_run.verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
