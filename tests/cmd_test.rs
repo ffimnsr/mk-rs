@@ -3,7 +3,10 @@ use std::io::Write as _;
 
 use anyhow::Context;
 use assert_cmd::Command;
-use tempfile::{tempdir, TempDir};
+use tempfile::{
+  tempdir,
+  TempDir,
+};
 
 #[test]
 fn test_sanity() {
@@ -27,8 +30,7 @@ fn test_mk_2() -> anyhow::Result<()> {
   let version = env!("CARGO_PKG_VERSION");
   let version_str = format!("mk {}", version);
 
-  assert.success()
-    .stdout(predicates::str::contains(version_str));
+  assert.success().stdout(predicates::str::contains(version_str));
   Ok(())
 }
 
@@ -36,7 +38,8 @@ fn test_mk_2() -> anyhow::Result<()> {
 fn test_mk_3() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("ls").assert();
-  assert.success()
+  assert
+    .success()
     .stdout(predicates::str::contains("build-in-container"))
     .stdout(predicates::str::contains("check"));
   Ok(())
@@ -70,18 +73,19 @@ fn test_mk_6() -> anyhow::Result<()> {
 fn test_mk_7() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("u").assert();
-  assert.failure()
+  assert
+    .failure()
     .code(1)
     .stderr(predicates::str::contains("Task not found"));
   Ok(())
 }
 
-
 #[test]
 fn test_mk_8() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-c").arg("hello.yaml").assert();
-  assert.failure()
+  assert
+    .failure()
     .code(1)
     .stderr(predicates::str::contains("No such file or directory"));
   Ok(())
@@ -102,7 +106,8 @@ fn setup_hello_yaml(temp_dir: &TempDir) -> anyhow::Result<String> {
   ";
 
   writeln!(config, "{}", yaml_config)?;
-  let config_file_path: &str = &config_file.to_str()
+  let config_file_path: &str = config_file
+    .to_str()
     .with_context(|| "Failed to convert path to string")?;
 
   Ok(config_file_path.to_string())
@@ -124,7 +129,8 @@ fn test_mk_10() -> anyhow::Result<()> {
   let config_file_path = setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello0").assert();
-  assert.failure()
+  assert
+    .failure()
     .stderr(predicates::str::contains("Task not found"));
   Ok(())
 }

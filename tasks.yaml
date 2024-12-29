@@ -1,4 +1,19 @@
 tasks:
+  install-hooks:
+    commands:
+      - command: git config --local core.hooksPath .githooks/
+        verbose: true
+    description: Install git hooks
+  fmt:
+    commands:
+      - command: cargo fmt --all
+        verbose: true
+    description: Format the project
+  lint:
+    commands:
+      - command: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
+        verbose: true
+    description: Lint check the project
   check:
     commands:
       - command: cargo c

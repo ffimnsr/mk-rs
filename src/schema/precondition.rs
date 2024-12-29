@@ -117,7 +117,7 @@ mod test {
       assert_eq!(precondition.message, Some("This is a message".into()));
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert_eq!(precondition.verbose, false);
+      assert!(!precondition.verbose);
 
       Ok(())
     }
@@ -135,7 +135,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert_eq!(precondition.verbose, false);
+      assert!(!precondition.verbose);
 
       Ok(())
     }
@@ -154,7 +154,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert_eq!(precondition.verbose, false);
+      assert!(!precondition.verbose);
 
       Ok(())
     }
@@ -173,7 +173,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, Some("/tmp".into()));
-      assert_eq!(precondition.verbose, false);
+      assert!(!precondition.verbose);
 
       Ok(())
     }
@@ -192,7 +192,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert_eq!(precondition.verbose, true);
+      assert!(precondition.verbose);
 
       Ok(())
     }

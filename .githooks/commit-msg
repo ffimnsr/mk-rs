@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+COMMIT_SUBJECT=$(head -2 $1 | tail -1)
+echo "Commit message: $COMMIT_SUBJECT"
+
+# Check if the commit message starts with an emoji status
+if [[ ! $COMMIT_SUBJECT =~ ^(🍕|✨|🐛|🚑|👷|📦|💚|📝|💄|🧹|⚡|🧪|❌|🚀|🚧|🔖|🌐) ]]; then
+  echo >&2 "Commit message must start with one emoji status."
+  exit 1
+fi
+
+exit 0

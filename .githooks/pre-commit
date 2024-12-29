@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# Run checks before committing
+echo "Checking if the code is compilable"
+cargo check --all-targets --all-features
+if [ $? -ne 0 ]; then
+  echo >&2 "Please fix the errors before committing."
+  exit 1
+fi
