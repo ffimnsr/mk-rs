@@ -271,6 +271,79 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: gh release upload ${{ needs.create-release.outputs.MK_VERSION }} ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+  build-release-rpm:
+    runs-on: ubuntu-latest
+    needs:
+      - create-release
+    env:
+      CARGO: cargo
+      TARGET: x86_64-unknown-linux-musl
+      TARGET_FLAGS: ""
+      TARGET_DIR: ./target
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install packages (Ubuntu)
+        run: |
+          ci/ubuntu-install-packages
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          target: ${{ env.TARGET }}
+      - name: Show command used for Cargo
+        run: |
+          echo "cargo command is: ${{ env.CARGO }}"
+          echo "target flag is: ${{ env.TARGET_FLAGS }}"
+          echo "target dir is: ${{ env.TARGET_DIR }}"
+      - name: Build release binary
+        run: ${{ env.CARGO }} build --verbose --release --target ${{ env.TARGET }} ${{ env.TARGET_FLAGS }}
+      - name: Build rpm package
+        run: |
+          sudo apt-get install -y rpm
+          mkdir -p dist/rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          cp target/${{ env.TARGET }}/release/mk dist/rpm/SOURCES/
+          cat << EOF > dist/rpm/SPECS/mk.spec
+          Name: mk
+          Version: ${{ needs.create-release.outputs.MK_VERSION }}
+          Release: 1
+          Summary: Yet another simple task runner.
+          License: MIT
+          BuildArch: $(uname -m)
+
+          %description
+          mk is a powerful and flexible task runner designed to help you automate
+          and manage your tasks efficiently. It supports running commands both
+          locally and inside containers, making it versatile for various environments
+          and use cases. Running tasks in containers is a first-class citizen,
+          ensuring seamless integration with containerized workflows.
+
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          cp %{_sourcedir}/mk %{buildroot}/usr/bin/mk
+
+          %files
+          /usr/bin/mk
+
+          %define __strip /bin/true
+          %define __spec_install_post %{nil}
+          EOF
+
+          rpmbuild -bb --define "_topdir $(pwd)/dist/rpm" dist/rpm/SPECS/mk.spec
+          find dist/rpm/RPMS -name '*.rpm' -exec mv {} dist/mk-${{ needs.create-release.outputs.MK_VERSION }}-${{ env.TARGET }}.rpm \;
+      - name: Build hash
+        shell: bash
+        run: |
+          rpm_target="mk-${{ needs.create-release.outputs.MK_VERSION }}-${{ env.TARGET }}.rpm"
+          mv "dist/mk-${{ needs.create-release.outputs.MK_VERSION }}-${{ env.TARGET }}.rpm" .
+          shasum -a 256 "$rpm_target" > "$rpm_target.sha256"
+          echo "ASSET=$rpm_target" >> $GITHUB_ENV
+          echo "ASSET_SUM=$rpm_target.sha256" >> $GITHUB_ENV
+      - name: Upload release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload ${{ needs.create-release.outputs.MK_VERSION }} ${{ env.ASSET }} ${{ env.ASSET_SUM }}
   build-release-image:
     runs-on: ubuntu-latest
     needs:
