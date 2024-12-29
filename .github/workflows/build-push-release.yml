@@ -303,7 +303,9 @@ jobs:
           sudo apt-get install -y rpm
           mkdir -p dist/rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           cp target/${{ env.TARGET }}/release/mk dist/rpm/SOURCES/
-          cp {COPYRIGHT,LICENSE-APACHE,LICENSE-MIT,README.md} dist/rpm/SOURCES/
+          cp COPYRIGHT LICENSE-APACHE LICENSE-MIT README.md dist/rpm/SOURCES/
+          ls dist/rpm/SOURCES
+
           cat << EOF > dist/rpm/SPECS/mk.spec
           Name: mk
           Version: ${{ needs.create-release.outputs.MK_VERSION }}

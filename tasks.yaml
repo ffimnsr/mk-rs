@@ -1,7 +1,7 @@
 tasks:
   install-hooks:
     commands:
-      - command: git config --local core.hooksPath .githooks/
+      - command: git config --local core.hooksPath .githooks
         verbose: true
     description: Install git hooks
   fmt:
