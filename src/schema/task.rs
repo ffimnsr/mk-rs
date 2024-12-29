@@ -1,7 +1,6 @@
 use anyhow::Context;
 use indicatif::{
   HumanDuration,
-  MultiProgress,
   ProgressBar,
   ProgressStyle,
 };
@@ -11,7 +10,6 @@ use serde::{
   Serialize,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{
   Duration,
   Instant,
@@ -21,86 +19,53 @@ use std::{
   thread,
 };
 
+use crate::defaults::default_true;
 use super::{
   CommandRunner,
-  ExecutionStack,
   Precondition,
+  TaskContext,
   TaskDependency,
-  TaskRoot,
 };
-
-pub struct TaskContext {
-  pub task_root: Arc<TaskRoot>,
-  pub execution_stack: ExecutionStack,
-  pub multi: Arc<MultiProgress>,
-  pub env_vars: HashMap<String, String>,
-  pub ignore_errors: bool,
-  pub verbose: bool,
-  pub is_nested: bool,
-}
-
-impl TaskContext {
-  pub fn new(task_root: Arc<TaskRoot>, execution_stack: ExecutionStack) -> Self {
-    Self {
-      task_root: task_root.clone(),
-      execution_stack,
-      multi: Arc::new(MultiProgress::new()),
-      env_vars: HashMap::new(),
-      ignore_errors: false,
-      verbose: false,
-      is_nested: false,
-    }
-  }
-
-  pub fn from_context(context: &TaskContext) -> Self {
-    Self {
-      task_root: context.task_root.clone(),
-      execution_stack: context.execution_stack.clone(),
-      multi: context.multi.clone(),
-      env_vars: context.env_vars.clone(),
-      ignore_errors: context.ignore_errors,
-      verbose: context.verbose,
-      is_nested: true,
-    }
-  }
-
-  pub fn from_context_with_args(context: &TaskContext, ignore_errors: bool, verbose: bool) -> Self {
-    Self {
-      task_root: context.task_root.clone(),
-      execution_stack: context.execution_stack.clone(),
-      multi: context.multi.clone(),
-      env_vars: context.env_vars.clone(),
-      ignore_errors,
-      verbose,
-      is_nested: true,
-    }
-  }
-}
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
 /// must be met before the task can be executed.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Task {
+  /// The commands to run
   pub commands: Vec<CommandRunner>,
 
+  /// The preconditions that must be met before the task can be executed
   #[serde(default)]
   pub preconditions: Vec<Precondition>,
 
+  /// The tasks that must be executed before this task can be executed
   #[serde(default)]
   pub depends_on: Vec<TaskDependency>,
 
+  /// The labels for the task
   #[serde(default)]
   pub labels: HashMap<String, String>,
 
+  /// The description of the task
   #[serde(default)]
   pub description: String,
 
+  /// The environment variables to set before running the task
   #[serde(default)]
   pub environment: HashMap<String, String>,
 
+  /// The environment files to load before running the task
   #[serde(default)]
   pub env_file: Vec<String>,
+
+  /// Ignore errors if the task fails
+  #[serde(default)]
+  pub ignore_errors: bool,
+
+  /// Show verbose output
+  #[serde(default = "default_true")]
+  pub verbose: bool,
 }
 
 impl Task {
@@ -117,6 +82,8 @@ impl Task {
     current_env.extend(additional_env);
 
     context.env_vars = current_env;
+    context.set_ignore_errors(self.ignore_errors);
+    context.set_verbose(self.verbose);
 
     let mut rng = rand::thread_rng();
     // Spinners can be found here:
@@ -239,8 +206,8 @@ mod test {
         assert_eq!(command, "echo \"Hello, World!\"");
         assert_eq!(work_dir, &None);
         assert_eq!(shell, "sh");
-        assert_eq!(ignore_errors, &false);
-        assert_eq!(verbose, &false);
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
       }
 
       assert_eq!(task.depends_on[0].name, "task1");
@@ -316,7 +283,7 @@ mod test {
         assert_eq!(*work_dir, None);
         assert_eq!(shell, "sh");
         assert!(!*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -356,7 +323,7 @@ mod test {
         assert_eq!(image, "docker.io/library/hello-world:latest");
         assert_eq!(*mounted_paths, Vec::<String>::new());
         assert!(!*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -399,7 +366,7 @@ mod test {
         assert_eq!(image, "docker.io/library/hello-world:latest");
         assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
         assert!(!*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -443,7 +410,7 @@ mod test {
         assert_eq!(image, "docker.io/library/hello-world:latest");
         assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
         assert!(*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -465,7 +432,7 @@ mod test {
               - echo
               - Hello, World!
             image: docker.io/library/hello-world:latest
-            verbose: true
+            verbose: false
       ";
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
@@ -484,7 +451,7 @@ mod test {
         assert_eq!(image, "docker.io/library/hello-world:latest");
         assert_eq!(*mounted_paths, Vec::<String>::new());
         assert!(!*ignore_errors);
-        assert!(*verbose);
+        assert!(!*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -515,7 +482,7 @@ mod test {
       {
         assert_eq!(task, "task1");
         assert!(!*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -579,7 +546,7 @@ mod test {
       {
         assert_eq!(task, "task1");
         assert!(*ignore_errors);
-        assert!(!*verbose);
+        assert!(*verbose);
       }
 
       assert_eq!(task.description.len(), 0);

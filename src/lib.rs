@@ -11,6 +11,9 @@
 //!
 //! [YAML]: https://github.com/dtolnay/serde-yaml
 
+/// The defaults module contains the default values for the library
+pub mod defaults;
+
 /// The schema module contains the data structures used to represent the tasks
 pub mod schema;
 

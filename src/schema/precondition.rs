@@ -14,6 +14,10 @@ use std::process::{
 use std::thread;
 
 use super::TaskContext;
+use crate::defaults::{
+  default_shell,
+  default_true,
+};
 
 /// This struct represents a precondition that must be met before a task can be
 /// executed.
@@ -30,7 +34,7 @@ pub struct Precondition {
   #[serde(default)]
   pub work_dir: Option<String>,
 
-  #[serde(default)]
+  #[serde(default = "default_true")]
   pub verbose: bool,
 }
 
@@ -96,10 +100,6 @@ impl Precondition {
   }
 }
 
-fn default_shell() -> String {
-  "sh".to_string()
-}
-
 #[cfg(test)]
 mod test {
   use super::*;
@@ -117,7 +117,7 @@ mod test {
       assert_eq!(precondition.message, Some("This is a message".into()));
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(!precondition.verbose);
+      assert!(precondition.verbose);
 
       Ok(())
     }
@@ -135,7 +135,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(!precondition.verbose);
+      assert!(precondition.verbose);
 
       Ok(())
     }
@@ -154,7 +154,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(!precondition.verbose);
+      assert!(precondition.verbose);
 
       Ok(())
     }
@@ -173,7 +173,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, Some("/tmp".into()));
-      assert!(!precondition.verbose);
+      assert!(precondition.verbose);
 
       Ok(())
     }

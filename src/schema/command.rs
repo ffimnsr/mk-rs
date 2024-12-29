@@ -20,6 +20,7 @@ use std::{
 };
 use which::which;
 
+use crate::defaults::{default_shell, default_true};
 use super::TaskContext;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -42,7 +43,7 @@ pub enum CommandRunner {
     ignore_errors: bool,
 
     /// Show verbose output
-    #[serde(default)]
+    #[serde(default = "default_true")]
     verbose: bool,
   },
   TaskRun {
@@ -52,7 +53,7 @@ pub enum CommandRunner {
     #[serde(default)]
     ignore_errors: bool,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     verbose: bool,
   },
   ContainerRun {
@@ -71,7 +72,7 @@ pub enum CommandRunner {
     ignore_errors: bool,
 
     /// Show verbose output
-    #[serde(default)]
+    #[serde(default = "default_true")]
     verbose: bool,
   },
 }
@@ -265,10 +266,6 @@ impl CommandRunner {
   }
 }
 
-fn default_shell() -> String {
-  "sh".to_string()
-}
-
 #[cfg(test)]
 mod test {
   use super::*;
@@ -324,7 +321,7 @@ mod test {
         assert_eq!(shell, "sh");
         assert_eq!(work_dir, None);
         assert!(!ignore_errors);
-        assert!(!verbose);
+        assert!(verbose);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -353,7 +350,7 @@ mod test {
         assert_eq!(shell, "sh");
         assert_eq!(work_dir, None);
         assert!(ignore_errors);
-        assert!(!verbose);
+        assert!(verbose);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -367,7 +364,7 @@ mod test {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
-        verbose: true
+        verbose: false
       ";
       let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun {
@@ -382,7 +379,7 @@ mod test {
         assert_eq!(shell, "sh");
         assert_eq!(work_dir, None);
         assert!(!ignore_errors);
-        assert!(verbose);
+        assert!(!verbose);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -411,7 +408,7 @@ mod test {
         assert_eq!(shell, "sh");
         assert_eq!(work_dir, Some("/tmp".into()));
         assert!(!ignore_errors);
-        assert!(!verbose);
+        assert!(verbose);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
