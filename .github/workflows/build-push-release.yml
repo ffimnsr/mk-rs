@@ -321,17 +321,19 @@ jobs:
           ensuring seamless integration with containerized workflows.
 
           %install
-          mkdir -p %{buildroot}/usr/bin
-          cp %{_sourcedir}/mk %{buildroot}/usr/bin/mk
-          cp %{_sourcedir}/README.md %{buildroot}/README.md
-          cp %{_sourcedir}/COPYRIGHT %{buildroot}/COPYRIGHT
-          cp %{_sourcedir}/LICENSE-APACHE %{buildroot}/LICENSE-APACHE
-          cp %{_sourcedir}/LICENSE-MIT %{buildroot}/LICENSE-MIT
+          mkdir -p %{buildroot}%{_bindir}
+          mkdir -p %{buildroot}%{_docdir}/mk-{{ needs.create-release.outputs.MK_VERSION }}
+          mkdir -p %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}
+          cp %{_sourcedir}/mk %{buildroot}%{_bindir}/mk
+          cp %{_sourcedir}/README.md %{buildroot}%{_docdir}/mk-{{ needs.create-release.outputs.MK_VERSION }}/README.md
+          cp %{_sourcedir}/COPYRIGHT %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/COPYRIGHT
+          cp %{_sourcedir}/LICENSE-APACHE %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/LICENSE-APACHE
+          cp %{_sourcedir}/LICENSE-MIT %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/LICENSE-MIT
 
           %files
-          /usr/bin/mk
-          %license COPYRIGHT
-          %doc README.md LICENSE-APACHE LICENSE-MIT
+          %{_bindir}/mk
+          %license COPYRIGHT LICENSE-APACHE LICENSE-MIT
+          %doc README.md
 
           %define __strip /bin/true
           %define __spec_install_post %{nil}
