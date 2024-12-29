@@ -155,7 +155,7 @@ impl Task {
     let mut local_env: HashMap<String, String> = HashMap::new();
     for env_file in &self.env_file {
       let contents =
-        fs::read_to_string(env_file).with_context(|| format!("Failed to read env file: {}", env_file))?;
+        fs::read_to_string(env_file).with_context(|| format!("Failed to read env file - {}", env_file))?;
 
       for line in contents.lines() {
         if let Some((key, value)) = line.split_once('=') {

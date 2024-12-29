@@ -15,7 +15,7 @@ pub struct TaskRoot {
 
 impl TaskRoot {
   pub fn from_file(file: &str) -> anyhow::Result<Self> {
-    let file = File::open(file).with_context(|| format!("Failed to open file: {}", file))?;
+    let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
     let reader = BufReader::new(file);
     let task_root = serde_yaml::from_reader(reader)?;
 

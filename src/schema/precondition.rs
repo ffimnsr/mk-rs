@@ -90,7 +90,7 @@ impl Precondition {
 
     let status = cmd.wait()?;
     if !status.success() {
-      anyhow::bail!("Command failed: {}", self.command);
+      anyhow::bail!("Command failed - {}", self.command);
     }
 
     Ok(())

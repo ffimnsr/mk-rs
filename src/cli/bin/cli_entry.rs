@@ -97,7 +97,7 @@ impl CliEntry {
         let mut stack = self
           .execution_stack
           .lock()
-          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack: {}", e))?;
+          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
         stack.insert(task_name.clone());
       }
 
@@ -109,7 +109,7 @@ impl CliEntry {
         let mut stack = self
           .execution_stack
           .lock()
-          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack: {}", e))?;
+          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
         stack.clear();
       }
     }

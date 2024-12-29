@@ -25,10 +25,10 @@ impl TaskDependency {
       let mut stack = context
         .execution_stack
         .lock()
-        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
 
       if stack.contains(task_name) {
-        anyhow::bail!("Circular dependency detected: {}", task_name);
+        anyhow::bail!("Circular dependency detected - {}", task_name);
       }
 
       stack.insert(task_name.into());
