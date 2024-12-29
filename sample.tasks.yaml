@@ -67,3 +67,8 @@ tasks:
       FOO: fubar
     env_file:
       - test.env
+  task6:
+    commands:
+      - command: echo \"Hello, World!\"
+        verbose: true
+    description: This is a task

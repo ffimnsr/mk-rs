@@ -100,42 +100,101 @@ fn default_shell() -> String {
   "sh".to_string()
 }
 
+#[cfg(test)]
 mod test {
-  #[allow(unused_imports)]
   use super::*;
 
   #[test]
-  fn test_precondition() {
+  fn test_precondition_1() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
         message: 'This is a message'
       ";
-      let precondition = serde_yaml::from_str::<Precondition>(yaml).unwrap();
+      let precondition = serde_yaml::from_str::<Precondition>(yaml)?;
 
       assert_eq!(precondition.command, "echo \"Hello, World!\"");
       assert_eq!(precondition.message, Some("This is a message".into()));
-    }
+      assert_eq!(precondition.shell, "sh");
+      assert_eq!(precondition.work_dir, None);
+      assert_eq!(precondition.verbose, false);
 
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_precondition_2() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
       ";
-      let precondition = serde_yaml::from_str::<Precondition>(yaml).unwrap();
+      let precondition = serde_yaml::from_str::<Precondition>(yaml)?;
 
       assert_eq!(precondition.command, "echo \"Hello, World!\"");
       assert_eq!(precondition.message, None);
-    }
+      assert_eq!(precondition.shell, "sh");
+      assert_eq!(precondition.work_dir, None);
+      assert_eq!(precondition.verbose, false);
 
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_precondition_3() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
         message: null
       ";
-      let precondition = serde_yaml::from_str::<Precondition>(yaml).unwrap();
+      let precondition = serde_yaml::from_str::<Precondition>(yaml)?;
 
       assert_eq!(precondition.command, "echo \"Hello, World!\"");
       assert_eq!(precondition.message, None);
+      assert_eq!(precondition.shell, "sh");
+      assert_eq!(precondition.work_dir, None);
+      assert_eq!(precondition.verbose, false);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_precondition_4() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        command: 'echo \"Hello, World!\"'
+        work_dir: /tmp
+      ";
+      let precondition = serde_yaml::from_str::<Precondition>(yaml)?;
+
+      assert_eq!(precondition.command, "echo \"Hello, World!\"");
+      assert_eq!(precondition.message, None);
+      assert_eq!(precondition.shell, "sh");
+      assert_eq!(precondition.work_dir, Some("/tmp".into()));
+      assert_eq!(precondition.verbose, false);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_precondition_5() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        command: 'echo \"Hello, World!\"'
+        verbose: true
+      ";
+      let precondition = serde_yaml::from_str::<Precondition>(yaml)?;
+
+      assert_eq!(precondition.command, "echo \"Hello, World!\"");
+      assert_eq!(precondition.message, None);
+      assert_eq!(precondition.shell, "sh");
+      assert_eq!(precondition.work_dir, None);
+      assert_eq!(precondition.verbose, true);
+
+      Ok(())
     }
   }
 }

@@ -214,12 +214,7 @@ impl CommandRunner {
       .with_context(|| "Failed to find docker or podman")?;
 
     let mut cmd = ProcessCommand::new(container_runtime);
-    cmd
-      .arg("run")
-      .arg("--rm")
-      .arg("-it")
-      .stdout(stdout)
-      .stderr(stderr);
+    cmd.arg("run").arg("--rm").arg("-i").stdout(stdout).stderr(stderr);
 
     let current_dir = env::current_dir()?;
     cmd.arg("-v").arg(format!("{}:/workdir:z", current_dir.display()));
@@ -229,7 +224,9 @@ impl CommandRunner {
       cmd.arg("-v").arg(mounted_path);
     }
 
+    // Inject environment variables in both container and command
     for (key, value) in context.env_vars.iter() {
+      cmd.env(key, value);
       cmd.arg("-e").arg(format!("{}={}", key, value));
     }
 
@@ -272,19 +269,19 @@ fn default_shell() -> String {
   "sh".to_string()
 }
 
+#[cfg(test)]
 mod test {
-  #[allow(unused_imports)]
   use super::*;
 
   #[test]
-  fn test_command() {
+  fn test_command_1() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
         ignore_errors: false
         verbose: false
       ";
-      let command = serde_yaml::from_str::<CommandRunner>(yaml).unwrap();
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
 
       if let CommandRunner::LocalRun {
         command,
@@ -302,13 +299,18 @@ mod test {
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
-    }
 
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_command_2() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
       ";
-      let command = serde_yaml::from_str::<CommandRunner>(yaml).unwrap();
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
 
       if let CommandRunner::LocalRun {
         command,
@@ -326,14 +328,19 @@ mod test {
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
-    }
 
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_command_3() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
         ignore_errors: true
       ";
-      let command = serde_yaml::from_str::<CommandRunner>(yaml).unwrap();
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun {
         command,
         shell,
@@ -350,14 +357,19 @@ mod test {
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
-    }
 
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_command_4() -> anyhow::Result<()> {
     {
       let yaml = "
         command: 'echo \"Hello, World!\"'
         verbose: true
       ";
-      let command = serde_yaml::from_str::<CommandRunner>(yaml).unwrap();
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun {
         command,
         shell,
@@ -374,6 +386,37 @@ mod test {
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_command_5() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        command: 'echo \"Hello, World!\"'
+        work_dir: /tmp
+      ";
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
+      if let CommandRunner::LocalRun {
+        command,
+        shell,
+        work_dir,
+        ignore_errors,
+        verbose,
+      } = command
+      {
+        assert_eq!(command, "echo \"Hello, World!\"");
+        assert_eq!(shell, "sh");
+        assert_eq!(work_dir, Some("/tmp".into()));
+        assert!(!ignore_errors);
+        assert!(!verbose);
+      } else {
+        panic!("Expected CommandRunner::LocalRun");
+      }
+
+      Ok(())
     }
   }
 }

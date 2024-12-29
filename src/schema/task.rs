@@ -204,12 +204,12 @@ impl Task {
   }
 }
 
+#[cfg(test)]
 mod test {
-  #[allow(unused_imports)]
   use super::*;
 
   #[test]
-  fn test_task() {
+  fn test_task_1() -> anyhow::Result<()> {
     {
       let yaml = "
         commands:
@@ -218,15 +218,15 @@ mod test {
             verbose: false
         depends_on:
           - name: task1
-        description: 'This is a task'
-        labels: {}
+        description: This is a task
         environment:
           FOO: bar
         env_file:
           - test.env
+          - test2.env
       ";
 
-      let task = serde_yaml::from_str::<Task>(yaml).unwrap();
+      let task = serde_yaml::from_str::<Task>(yaml)?;
 
       if let CommandRunner::LocalRun {
         command,
@@ -247,7 +247,348 @@ mod test {
       assert_eq!(task.labels.len(), 0);
       assert_eq!(task.description, "This is a task");
       assert_eq!(task.environment.len(), 1);
-      assert_eq!(task.env_file.len(), 1);
+      assert_eq!(task.env_file.len(), 2);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_2() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - command: echo 'Hello, World!'
+            ignore_errors: false
+            verbose: false
+        description: This is a task
+        environment:
+          FOO: bar
+          BAR: foo
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::LocalRun {
+        command,
+        work_dir,
+        shell,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(command, "echo 'Hello, World!'");
+        assert_eq!(*work_dir, None);
+        assert_eq!(shell, "sh");
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description, "This is a task");
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 2);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_3() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - command: echo 'Hello, World!'
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::LocalRun {
+        command,
+        work_dir,
+        shell,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(command, "echo 'Hello, World!'");
+        assert_eq!(*work_dir, None);
+        assert_eq!(shell, "sh");
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_4() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - container_command:
+              - echo
+              - Hello, World!
+            image: docker.io/library/hello-world:latest
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::ContainerRun {
+        container_command,
+        image,
+        mounted_paths,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(container_command.len(), 2);
+        assert_eq!(container_command[0], "echo");
+        assert_eq!(container_command[1], "Hello, World!");
+        assert_eq!(image, "docker.io/library/hello-world:latest");
+        assert_eq!(*mounted_paths, Vec::<String>::new());
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_5() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - container_command:
+              - echo
+              - Hello, World!
+            image: docker.io/library/hello-world:latest
+            mounted_paths:
+              - /tmp
+              - /var/tmp
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::ContainerRun {
+        container_command,
+        image,
+        mounted_paths,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(container_command.len(), 2);
+        assert_eq!(container_command[0], "echo");
+        assert_eq!(container_command[1], "Hello, World!");
+        assert_eq!(image, "docker.io/library/hello-world:latest");
+        assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_6() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - container_command:
+              - echo
+              - Hello, World!
+            image: docker.io/library/hello-world:latest
+            mounted_paths:
+              - /tmp
+              - /var/tmp
+            ignore_errors: true
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::ContainerRun {
+        container_command,
+        image,
+        mounted_paths,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(container_command.len(), 2);
+        assert_eq!(container_command[0], "echo");
+        assert_eq!(container_command[1], "Hello, World!");
+        assert_eq!(image, "docker.io/library/hello-world:latest");
+        assert_eq!(*mounted_paths, vec!["/tmp", "/var/tmp"]);
+        assert!(*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_7() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - container_command:
+              - echo
+              - Hello, World!
+            image: docker.io/library/hello-world:latest
+            verbose: true
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::ContainerRun {
+        container_command,
+        image,
+        mounted_paths,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(container_command.len(), 2);
+        assert_eq!(container_command[0], "echo");
+        assert_eq!(container_command[1], "Hello, World!");
+        assert_eq!(image, "docker.io/library/hello-world:latest");
+        assert_eq!(*mounted_paths, Vec::<String>::new());
+        assert!(!*ignore_errors);
+        assert!(*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_8() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - task: task1
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::TaskRun {
+        task,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(task, "task1");
+        assert!(!*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_9() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - task: task1
+            verbose: true
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::TaskRun {
+        task,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(task, "task1");
+        assert!(!*ignore_errors);
+        assert!(*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_10() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands:
+          - task: task1
+            ignore_errors: true
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let CommandRunner::TaskRun {
+        task,
+        ignore_errors,
+        verbose,
+      } = &task.commands[0]
+      {
+        assert_eq!(task, "task1");
+        assert!(*ignore_errors);
+        assert!(!*verbose);
+      }
+
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+
+      Ok(())
     }
   }
 }

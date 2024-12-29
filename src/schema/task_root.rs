@@ -25,15 +25,13 @@ impl TaskRoot {
   }
 }
 
+#[cfg(test)]
 mod test {
-  #[allow(unused_imports)]
+  use super::*;
   use crate::schema::CommandRunner;
 
-  #[allow(unused_imports)]
-  use super::*;
-
   #[test]
-  fn test_task_root() {
+  fn test_task_root_1() -> anyhow::Result<()> {
     let yaml = "
       tasks:
         task1:
@@ -66,7 +64,7 @@ mod test {
               verbose: false
     ";
 
-    let task_root = serde_yaml::from_str::<TaskRoot>(yaml).unwrap();
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
 
     assert_eq!(task_root.tasks.len(), 3);
 
@@ -79,10 +77,10 @@ mod test {
     } = &task_root.tasks["task1"].commands[0]
     {
       assert_eq!(command, "echo \"Hello, World 1!\"");
-      assert_eq!(work_dir, &None);
+      assert_eq!(*work_dir, None);
       assert_eq!(shell, "sh");
-      assert_eq!(ignore_errors, &false);
-      assert_eq!(verbose, &false);
+      assert!(!*ignore_errors);
+      assert!(!*verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -102,10 +100,10 @@ mod test {
     } = &task_root.tasks["task2"].commands[0]
     {
       assert_eq!(command, "echo \"Hello, World 2!\"");
-      assert_eq!(work_dir, &None);
+      assert_eq!(*work_dir, None);
       assert_eq!(shell, "sh");
-      assert_eq!(ignore_errors, &false);
-      assert_eq!(verbose, &false);
+      assert!(!*ignore_errors);
+      assert!(!*verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -125,10 +123,10 @@ mod test {
     } = &task_root.tasks["task3"].commands[0]
     {
       assert_eq!(command, "echo \"Hello, World 3!\"");
-      assert_eq!(work_dir, &None);
+      assert_eq!(*work_dir, None);
       assert_eq!(shell, "sh");
-      assert_eq!(ignore_errors, &false);
-      assert_eq!(verbose, &false);
+      assert!(!*ignore_errors);
+      assert!(!*verbose);
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -138,5 +136,7 @@ mod test {
     assert_eq!(task_root.tasks["task3"].description.len(), 0);
     assert_eq!(task_root.tasks["task3"].environment.len(), 0);
     assert_eq!(task_root.tasks["task3"].env_file.len(), 0);
+
+    Ok(())
   }
 }

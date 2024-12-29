@@ -44,17 +44,18 @@ impl TaskDependency {
   }
 }
 
+#[cfg(test)]
 mod test {
-  #[allow(unused_imports)]
   use super::*;
 
   #[test]
-  fn test_task_dependency() {
+  fn test_task_dependency_1() -> anyhow::Result<()> {
     let yaml = "
       name: task1
     ";
-    let task_dependency = serde_yaml::from_str::<TaskDependency>(yaml).unwrap();
-
+    let task_dependency = serde_yaml::from_str::<TaskDependency>(yaml)?;
     assert_eq!(task_dependency.name, "task1");
+
+    Ok(())
   }
 }

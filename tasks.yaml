@@ -1,9 +1,26 @@
 tasks:
+  check:
+    commands:
+      - command: cargo c
+        verbose: true
+    description: Check the project
   build:
     commands:
       - command: cargo b
         verbose: true
-    description: Build
+    description: Build the project
+    depends_on:
+      - name: check
+  build-in-container:
+    commands:
+      - container_command:
+          - cargo
+          - c
+        image: docker.io/library/rust:latest
+        verbose: true
+    description: Build the project in a container
+    depends_on:
+      - name: check
   pack:
     preconditions:
       - command: git diff-index --quiet --exit-code HEAD --
@@ -26,3 +43,4 @@ tasks:
             -t ghcr.io/ffimnsr/$name-rs:$latest_version \
             -t ghcr.io/ffimnsr/$name-rs:latest .
         verbose: true
+    description: Build the container image
