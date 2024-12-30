@@ -238,6 +238,7 @@ Follow the instruction below to install and use `mk` on your system.
 
 ## What's on the roadmap?
 
+- [ ] Add platform checks (so can task commands have different runner) like if condition
 - [ ] Add secrets env storage that use GPG storage
 - [ ] Add proper documentation
 - [ ] Add support for cargo env

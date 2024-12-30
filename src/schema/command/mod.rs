@@ -1,6 +1,7 @@
 use super::TaskContext;
 use serde::Deserialize;
 
+mod container_build;
 mod container_run;
 mod local_run;
 mod task_run;
