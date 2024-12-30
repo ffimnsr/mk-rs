@@ -5,8 +5,3 @@ pub fn get_version_digits() -> String {
     Some(hash) => format!("{} (rev {})", semver, hash),
   }
 }
-
-pub fn get_version() -> String {
-  let digits = get_version_digits();
-  format!("mk {digits}")
-}

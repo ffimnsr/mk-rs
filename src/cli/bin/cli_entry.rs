@@ -9,20 +9,29 @@ use clap::{
   Subcommand,
 };
 use console::style;
+use lazy_static::lazy_static;
 use mk_lib::schema::{
   ExecutionStack,
   TaskContext,
   TaskRoot,
 };
+use mk_lib::version::get_version_digits;
 use prettytable::format::consts;
 use prettytable::{
   row,
   Table,
 };
-// use mk_lib::version::get_version;
+
+lazy_static! {
+  static ref VERSION: String = get_version_digits();
+}
 
 #[derive(Debug, Parser)]
-#[command(version, about, long_about = None)]
+#[command(
+  version = VERSION.as_str(),
+  about,
+  long_about = None
+)]
 struct Args {
   #[arg(short, long, help = "Config file to source", default_value = "tasks.yaml")]
   config: String,

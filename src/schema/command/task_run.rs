@@ -22,6 +22,8 @@ pub struct TaskRun {
 
 impl TaskRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
+    assert!(!self.task.is_empty());
+
     let task = context
       .task_root
       .tasks

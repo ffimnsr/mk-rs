@@ -12,6 +12,8 @@ pub struct TaskDependency {
 
 impl TaskDependency {
   pub fn run(&self, context: &TaskContext) -> anyhow::Result<()> {
+    assert!(!self.name.is_empty());
+
     let task_name: &str = &self.name;
     let task = context
       .task_root

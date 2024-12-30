@@ -8,17 +8,17 @@ mod task_run;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum CommandRunner {
+  ContainerRun(container_run::ContainerRun),
   LocalRun(local_run::LocalRun),
   TaskRun(task_run::TaskRun),
-  ContainerRun(container_run::ContainerRun),
 }
 
 impl CommandRunner {
   pub fn execute(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     match self {
+      CommandRunner::ContainerRun(container_run) => container_run.execute(context),
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
-      CommandRunner::ContainerRun(container_run) => container_run.execute(context),
     }
   }
 }

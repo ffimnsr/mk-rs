@@ -585,6 +585,7 @@ dependencies = [
  "console",
  "env_logger",
  "indicatif",
+ "lazy_static",
  "log",
  "predicates",
  "prettytable-rs",

@@ -41,6 +41,9 @@ pub struct LocalRun {
 
 impl LocalRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
+    assert!(!self.command.is_empty());
+    assert!(!self.shell.is_empty());
+
     let stdout = if self.verbose {
       Stdio::piped()
     } else {

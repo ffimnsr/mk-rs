@@ -41,6 +41,9 @@ pub struct ContainerRun {
 
 impl ContainerRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
+    assert!(!self.image.is_empty());
+    assert!(!self.container_command.is_empty());
+
     let stdout = if self.verbose {
       Stdio::piped()
     } else {
