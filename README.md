@@ -23,7 +23,9 @@ Yet another simple task runner.
 
 ### Using CLI
 
-```
+```bash
+Yet another simple task runner 🦀
+
 Usage: mk [OPTIONS] [TASK_NAMES]... [COMMAND]
 
 Commands:
@@ -63,9 +65,11 @@ tasks:
       - command: |
           echo $FOO
           echo $BAR
+        shell: bash
         ignore_errors: false
         verbose: true
-      - command: wel
+      - command: 'true'
+        shell: zsh
         ignore_errors: true
         verbose: true
       - command: echo $BAR
@@ -79,6 +83,12 @@ tasks:
       FOO: bar
     env_file:
       - test.env
+```
+
+Here's the `test.env` that needed by the yaml file:
+
+```dotenv
+BAR=foo
 ```
 
 This yaml task named `task1` can be run on `mk` with the command below:
@@ -236,6 +246,7 @@ Follow the instruction below to install and use `mk` on your system.
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
 - [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
+- [ ] Support for lima and nerdctrl
 - [ ] There's still a lot of unknown, if you found a bug please report.
 
 ## License
@@ -252,7 +263,7 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-### References:
+## References:
 
 - https://taskfile.dev/ - Inspiration of this project
 - https://compose-spec.github.io/compose-spec/ - Compose project

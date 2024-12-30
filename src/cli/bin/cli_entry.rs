@@ -4,6 +4,7 @@ use std::sync::{
   Mutex,
 };
 
+use anyhow::Ok;
 use clap::{
   Parser,
   Subcommand,
@@ -26,6 +27,7 @@ lazy_static! {
   static ref VERSION: String = get_version_digits();
 }
 
+/// The CLI arguments
 #[derive(Debug, Parser)]
 #[command(
   version = VERSION.as_str(),
@@ -43,15 +45,23 @@ struct Args {
   command: Option<Command>,
 }
 
+/// The available subcommands
 #[derive(Debug, Subcommand)]
 enum Command {
   #[command(aliases = ["r"], about = "Run specific tasks")]
   Run { task_names: Vec<String> },
 
   #[command(aliases = ["ls"], about = "List all available tasks")]
-  List,
+  List {
+    #[arg(short, long, help = "Show list that does not include headers")]
+    plain: bool,
+
+    #[arg(short, long, help = "Show list in JSON format", conflicts_with = "plain")]
+    json: bool,
+  },
 }
 
+/// The CLI entry
 pub struct CliEntry {
   args: Args,
   task_root: Arc<TaskRoot>,
@@ -59,9 +69,12 @@ pub struct CliEntry {
 }
 
 impl CliEntry {
+  /// Create a new CLI entry
   pub fn new() -> anyhow::Result<Self> {
     let args = Args::parse();
     log::trace!("Config: {}", args.config);
+
+    assert!(!args.config.is_empty());
 
     let task_root = Arc::new(TaskRoot::from_file(&args.config)?);
     let execution_stack = Arc::new(Mutex::new(HashSet::new()));
@@ -72,13 +85,14 @@ impl CliEntry {
     })
   }
 
+  /// Run the CLI entry
   pub fn run(&self) -> anyhow::Result<()> {
     match &self.args.command {
       Some(Command::Run { task_names }) => {
         self.run_tasks(task_names)?;
       },
-      Some(Command::List) => {
-        self.print_available_tasks();
+      Some(Command::List { plain, json }) => {
+        self.print_available_tasks(*plain, *json)?;
       },
       None => {
         if !self.args.task_names.is_empty() {
@@ -92,6 +106,7 @@ impl CliEntry {
     Ok(())
   }
 
+  /// Run the specified tasks
   fn run_tasks(&self, task_names: &[String]) -> anyhow::Result<()> {
     for task_name in task_names {
       let task = self
@@ -127,19 +142,40 @@ impl CliEntry {
     Ok(())
   }
 
-  fn print_available_tasks(&self) {
-    let mut table = Table::new();
-    table.set_titles(row![Fbb->"Task", Fbb->"Description"]);
-    table.set_format(*consts::FORMAT_CLEAN);
+  /// Print all available tasks
+  fn print_available_tasks(&self, plain: bool, json: bool) -> anyhow::Result<()> {
+    if json {
+      let tasks: Vec<_> = self
+        .task_root
+        .tasks
+        .iter()
+        .map(|(name, task)| {
+          serde_json::json!({
+            "name": name,
+            "description": task.description,
+          })
+        })
+        .collect();
+      println!("{}", serde_json::to_string_pretty(&tasks)?);
+    } else {
+      let mut table = Table::new();
+      if !plain {
+        table.set_titles(row![Fbb->"Task", Fbb->"Description"]);
 
-    for (task_name, task) in &self.task_root.tasks {
-      table.add_row(row![b->&task_name, Fg->&task.description]);
+        let msg = style("Available tasks:").bold().cyan();
+        println!();
+        println!("{msg}");
+        println!();
+      }
+      table.set_format(*consts::FORMAT_CLEAN);
+
+      for (task_name, task) in &self.task_root.tasks {
+        table.add_row(row![b->&task_name, Fg->&task.description]);
+      }
+
+      table.printstd();
     }
 
-    let msg = style("Available tasks:").bold().cyan();
-    println!();
-    println!("{msg}");
-    println!();
-    table.printstd();
+    Ok(())
   }
 }

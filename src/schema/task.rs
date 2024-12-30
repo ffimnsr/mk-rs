@@ -67,7 +67,7 @@ pub struct Task {
 
 impl Task {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
-    assert!(self.commands.is_empty());
+    assert!(!self.commands.is_empty());
 
     let started = Instant::now();
     let tick_interval = Duration::from_millis(80);
