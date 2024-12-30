@@ -68,17 +68,14 @@ pub struct Task {
 impl Task {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     let started = Instant::now();
-
-    let mut current_env = context.env_vars.clone();
+    let tick_interval = Duration::from_millis(80);
 
     // Load environment variables from the task environment and env files field
     let defined_env = self.environment.clone();
     let additional_env = self.load_env_file()?;
 
-    current_env.extend(defined_env);
-    current_env.extend(additional_env);
-
-    context.env_vars = current_env;
+    context.extend_env_vars(defined_env);
+    context.extend_env_vars(additional_env);
     context.set_ignore_errors(self.ignore_errors);
     context.set_verbose(self.verbose);
 
@@ -87,13 +84,14 @@ impl Task {
     // https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json
     let pb_style =
       ProgressStyle::with_template("{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ")?
-        .tick_chars("⣾⣽⣻⢿⡿⣟⣯⣷");
+        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⦿");
 
     let depends_on_pb = context.multi.add(ProgressBar::new(self.depends_on.len() as u64));
 
     if !self.depends_on.is_empty() {
       depends_on_pb.set_style(pb_style.clone());
       depends_on_pb.set_message("Running task dependencies...");
+      depends_on_pb.enable_steady_tick(tick_interval);
       for (i, dependency) in self.depends_on.iter().enumerate() {
         thread::sleep(Duration::from_millis(rng.gen_range(40..300)));
         depends_on_pb.set_prefix(format!("{}/{}", i + 1, self.depends_on.len()));
@@ -116,6 +114,7 @@ impl Task {
     if !self.preconditions.is_empty() {
       precondition_pb.set_style(pb_style.clone());
       precondition_pb.set_message("Running task precondition...");
+      precondition_pb.enable_steady_tick(tick_interval);
       for (i, precondition) in self.preconditions.iter().enumerate() {
         thread::sleep(Duration::from_millis(rng.gen_range(40..300)));
         precondition_pb.set_prefix(format!("{}/{}", i + 1, self.preconditions.len()));
@@ -134,6 +133,7 @@ impl Task {
     let command_pb = context.multi.add(ProgressBar::new(self.commands.len() as u64));
     command_pb.set_style(pb_style);
     command_pb.set_message("Running task command...");
+    command_pb.enable_steady_tick(tick_interval);
     for (i, command) in self.commands.iter().enumerate() {
       thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
       command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));

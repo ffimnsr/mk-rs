@@ -15,6 +15,14 @@ tasks:
       - command: echo $BAR
         verbose: true
       - task: task3
+      - command: sleep 10
+        verbose: true
+      - container_command:
+          - bash
+          - -c
+          - echo $FOO
+        image: docker.io/library/bash:latest
+        verbose: true
     description: This is a task
     labels: {}
     environment:

@@ -19,6 +19,7 @@ use prettytable::{
   row,
   Table,
 };
+// use mk_lib::version::get_version;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -127,6 +128,7 @@ impl CliEntry {
     }
 
     let msg = style("Available tasks:").bold().cyan();
+    println!();
     println!("{msg}");
     println!();
     table.printstd();

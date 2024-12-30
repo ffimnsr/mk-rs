@@ -3,7 +3,7 @@
 [![Crates.io Package](https://img.shields.io/crates/v/mk?style=flat-square)](https://crates.io/crates/mk)
 [![Crates.io Downloads](https://img.shields.io/crates/d/mk?style=flat-square)](https://crates.io/crates/mk)
 [![License](https://img.shields.io/crates/l/mk?style=flat-square)](https://github.com/ffimnsr/mk-rs/blob/master/LICENSE-APACHE)
-[![Github Workflow Status](https://img.shields.io/github/actions/workflow/status/ffimnsr/mk-rs/ci.yaml?style=flat-square)](https://github.com/ffimnsr/mk-rs/blob/master/.github/workflows/ci.yaml)
+[![Github Workflow Status](https://img.shields.io/github/actions/workflow/status/ffimnsr/mk-rs/ci.yml?style=flat-square)](https://github.com/ffimnsr/mk-rs/blob/master/.github/workflows/ci.yml)
 
 
 > Efficiency is doing things right; effectiveness is doing the right things. This tool helps you do both.
@@ -255,3 +255,4 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 ### References:
 
 - https://taskfile.dev/ - Inspiration of this project
+- https://compose-spec.github.io/compose-spec/ - Compose project

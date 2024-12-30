@@ -55,6 +55,13 @@ impl TaskContext {
     }
   }
 
+  pub fn extend_env_vars<I>(&mut self, iter: I)
+  where
+    I: IntoIterator<Item = (String, String)>,
+  {
+    self.env_vars.extend(iter);
+  }
+
   pub fn set_ignore_errors(&mut self, ignore_errors: bool) {
     self.ignore_errors = ignore_errors;
   }

@@ -1,0 +1,12 @@
+pub fn get_version_digits() -> String {
+  let semver = option_env!("CARGO_PKG_VERSION").unwrap_or("unknown");
+  match option_env!("MK_BUILD_GIT_HASH") {
+    None => semver.to_string(),
+    Some(hash) => format!("{} (rev {})", semver, hash),
+  }
+}
+
+pub fn get_version() -> String {
+  let digits = get_version_digits();
+  format!("mk {digits}")
+}

@@ -1,6 +1,6 @@
 [package]
 name = "mk"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
 readme = "README.md"
