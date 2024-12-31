@@ -327,10 +327,10 @@ jobs:
           mkdir -p %{buildroot}%{_docdir}/mk-{{ needs.create-release.outputs.MK_VERSION }}
           mkdir -p %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}
           cp %{_sourcedir}/mk %{buildroot}%{_bindir}/mk
-          cp %{_sourcedir}/README.md %{buildroot}%{_docdir}/mk-{{ needs.create-release.outputs.MK_VERSION }}/README.md
-          cp %{_sourcedir}/COPYRIGHT %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/COPYRIGHT
-          cp %{_sourcedir}/LICENSE-APACHE %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/LICENSE-APACHE
-          cp %{_sourcedir}/LICENSE-MIT %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}/LICENSE-MIT
+          cp %{_sourcedir}/README.md %{buildroot}%{_docdir}/mk-${{ needs.create-release.outputs.MK_VERSION }}/README.md
+          cp %{_sourcedir}/COPYRIGHT %{buildroot}%{_datadir}/licenses/mk-${{ needs.create-release.outputs.MK_VERSION }}/COPYRIGHT
+          cp %{_sourcedir}/LICENSE-APACHE %{buildroot}%{_datadir}/licenses/mk-${{ needs.create-release.outputs.MK_VERSION }}/LICENSE-APACHE
+          cp %{_sourcedir}/LICENSE-MIT %{buildroot}%{_datadir}/licenses/mk-${{ needs.create-release.outputs.MK_VERSION }}/LICENSE-MIT
 
           %files
           %{_bindir}/mk

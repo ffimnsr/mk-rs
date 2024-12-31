@@ -244,6 +244,7 @@ Follow the instruction below to install and use `mk` on your system.
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run
 - [ ] Add unit tests and benchmarks
+- [ ] Import and include yaml from local and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
 - [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
@@ -266,5 +267,6 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ## References:
 
-- https://taskfile.dev/ - Inspiration of this project
-- https://compose-spec.github.io/compose-spec/ - Compose project
+- https://taskfile.dev/ - Taskfile
+- https://compose-spec.github.io/compose-spec/ - Docker Compose
+- https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_intro.html - Ansible

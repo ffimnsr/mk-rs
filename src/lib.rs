@@ -20,4 +20,8 @@ pub mod schema;
 /// The version module contains the version information for the library
 pub mod version;
 
+/// The macros module contains the custom macros used in the library
+#[macro_use]
+pub mod macros;
+
 pub use schema::ExecutionStack;

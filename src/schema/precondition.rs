@@ -15,6 +15,7 @@ use crate::defaults::{
   default_shell,
   default_true,
 };
+use crate::handle_output;
 
 /// This struct represents a precondition that must be met before a task can be
 /// executed.
@@ -71,24 +72,8 @@ impl Precondition {
     let mut cmd = cmd.spawn()?;
 
     if self.verbose {
-      let stdout = cmd.stdout.take().with_context(|| "Failed to open stdout")?;
-      let stderr = cmd.stderr.take().with_context(|| "Failed to open stderr")?;
-
-      let multi_clone = context.multi.clone();
-      thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines().map_while(Result::ok) {
-          let _ = multi_clone.println(line);
-        }
-      });
-
-      let multi_clone = context.multi.clone();
-      thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
-          let _ = multi_clone.println(line);
-        }
-      });
+      handle_output!(cmd.stdout, context);
+      handle_output!(cmd.stderr, context);
     }
 
     let status = cmd.wait()?;
