@@ -59,3 +59,24 @@ tasks:
             -t ghcr.io/ffimnsr/$name-rs:latest .
         verbose: true
     description: Build the container image
+  pack_2:
+    preconditions:
+      - command: cargo c
+    commands:
+      - container_build:
+          image_name: ghcr.io/ffimnsr/mk-rs
+          context: .
+          tags:
+            - latest
+          sbom: true
+          labels:
+            - org.opencontainers.image.created=MK_NOW
+            - org.opencontainers.image.authors=gh:@ffimnsr
+            - org.opencontainers.image.description=mk-rs
+            - org.opencontainers.image.revision=MK_GIT_REVISION
+            - org.opencontainers.image.source=MK_GIT_REMOTE_ORIGIN
+            - org.opencontainers.image.title=mk-rs
+            - org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs
+            - org.opencontainers.image.version=latest
+        verbose: true
+    description: Build the container image

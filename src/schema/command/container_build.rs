@@ -10,6 +10,7 @@ use std::process::{
 use std::thread;
 
 use anyhow::Context as _;
+use git2::Repository;
 use serde::Deserialize;
 use which::which;
 
@@ -17,7 +18,6 @@ use crate::defaults::default_true;
 use crate::handle_output;
 use crate::schema::TaskContext;
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct ContainerBuildArgs {
   /// The image name to build
@@ -52,7 +52,6 @@ pub struct ContainerBuildArgs {
   pub force_rm: bool,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct ContainerBuild {
   /// The command to run in the container
@@ -86,6 +85,41 @@ impl ContainerBuild {
     let mut cmd = ProcessCommand::new(container_runtime);
     cmd.arg("build").stdout(stdout).stderr(stderr);
 
+    if self.container_build.sbom {
+      cmd.arg("--sbom=true");
+    }
+
+    if self.container_build.no_cache {
+      cmd.arg("--no-cache=true");
+    }
+
+    if self.container_build.force_rm {
+      cmd.arg("--force-rm=true");
+    }
+
+    if let Some(build_args) = &self.container_build.build_args {
+      for arg in build_args {
+        cmd.arg("--build-arg").arg(arg);
+      }
+    }
+
+    if let Some(labels) = &self.container_build.labels {
+      for label in labels {
+        let label = self.get_label(label);
+        cmd.arg("--label").arg(label);
+      }
+    }
+
+    if let Some(tags) = &self.container_build.tags {
+      for tag in tags {
+        let tag = format!("{}:{}", &self.container_build.image_name, tag);
+        cmd.arg("-t").arg(tag);
+      }
+    } else {
+      let tag = format!("{}:latest", &self.container_build.image_name);
+      cmd.arg("-t").arg(tag);
+    }
+
     if let Some(containerfile) = &self.container_build.containerfile {
       cmd.arg("-f").arg(containerfile);
     } else {
@@ -102,41 +136,11 @@ impl ContainerBuild {
       }
     }
 
-    if self.container_build.sbom {
-      cmd.arg("--sbom");
-    }
+    let build_path: &str = &self.container_build.context;
+    cmd.arg(build_path);
 
-    if self.container_build.no_cache {
-      cmd.arg("--no-cache");
-    }
-
-    if self.container_build.force_rm {
-      cmd.arg("--force-rm");
-    }
-
-    if let Some(build_args) = &self.container_build.build_args {
-      for arg in build_args {
-        cmd.arg("--build-arg").arg(arg);
-      }
-    }
-
-    if let Some(labels) = &self.container_build.labels {
-      for label in labels {
-        cmd.arg("--label").arg(label);
-      }
-    }
-
-    if let Some(tags) = &self.container_build.tags {
-      for tag in tags {
-        let tag = format!("{}:{}", &self.container_build.image_name, tag);
-        cmd.arg("-t").arg(tag);
-      }
-    } else {
-      let tag = format!("{}:latest", &self.container_build.image_name);
-      cmd.arg("-t").arg(tag);
-    }
-
-    cmd.arg(&self.container_build.context);
+    let cmd_str = format!("{:?}", cmd);
+    context.multi.println(cmd_str)?;
 
     // Inject environment variables in both container and command
     for (key, value) in context.env_vars.iter() {
@@ -157,5 +161,51 @@ impl ContainerBuild {
     }
 
     Ok(())
+  }
+
+  fn get_label(&self, label_in: &str) -> String {
+    use chrono::prelude::*;
+
+    if let Some((key, value)) = label_in.split_once('=') {
+      match value {
+        "MK_NOW" => {
+          // Create formatted time in +%Y-%m-%dT%H:%M:%S%z format
+          let now: DateTime<Local> = Local::now();
+          let now = now.format("%Y-%m-%dT%H:%M:%S%z").to_string();
+          format!("{}={}", key, now)
+        },
+        "MK_GIT_REVISION" => {
+          let revision = self.get_git_revision().unwrap_or_else(|_| "unknown".to_string());
+          format!("{}={}", key, revision)
+        },
+        "MK_GIT_REMOTE_ORIGIN" => {
+          let remote_url = self
+            .get_git_remote_origin()
+            .unwrap_or_else(|_| "unknown".to_string());
+          format!("{}={}", key, remote_url)
+        },
+        _ => format!("{}={}", key, value),
+      }
+    } else {
+      label_in.to_string()
+    }
+  }
+
+  fn get_git_revision(&self) -> anyhow::Result<String> {
+    let repo = Repository::open(".").context("Failed to open Git repository")?;
+    let head = repo.head().context("Failed to get HEAD reference")?;
+    let commit = head
+      .peel_to_commit()
+      .context("Failed to resolve HEAD to commit")?;
+    Ok(commit.id().to_string())
+  }
+
+  fn get_git_remote_origin(&self) -> anyhow::Result<String> {
+    let repo = Repository::open(".").context("Failed to open Git repository")?;
+    let remote = repo
+      .find_remote("origin")
+      .context("Failed to find 'origin' remote")?;
+    let url = remote.url().context("Failed to get remote URL")?;
+    Ok(url.to_string())
   }
 }
