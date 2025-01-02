@@ -27,7 +27,7 @@ Binary for different OS distribution can be downloaded [here](https://github.com
 
 ### Install using script
 
-`mk` runs on most major platforms. If your platform isn't listed below, please [open an issue][issues].
+`mk` runs on most major platforms. If your platform isn't listed below, please [open an issue](issues).
 
 <details>
   <summary>Linux / WSL / MSYS2 / Cygwin / Git Bash</summary>
