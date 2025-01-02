@@ -324,8 +324,8 @@ jobs:
 
           %install
           mkdir -p %{buildroot}%{_bindir}
-          mkdir -p %{buildroot}%{_docdir}/mk-{{ needs.create-release.outputs.MK_VERSION }}
-          mkdir -p %{buildroot}%{_datadir}/licenses/mk-{{ needs.create-release.outputs.MK_VERSION }}
+          mkdir -p %{buildroot}%{_docdir}/mk-${{ needs.create-release.outputs.MK_VERSION }}
+          mkdir -p %{buildroot}%{_datadir}/licenses/mk-${{ needs.create-release.outputs.MK_VERSION }}
           cp %{_sourcedir}/mk %{buildroot}%{_bindir}/mk
           cp %{_sourcedir}/README.md %{buildroot}%{_docdir}/mk-${{ needs.create-release.outputs.MK_VERSION }}/README.md
           cp %{_sourcedir}/COPYRIGHT %{buildroot}%{_datadir}/licenses/mk-${{ needs.create-release.outputs.MK_VERSION }}/COPYRIGHT
