@@ -174,7 +174,6 @@ tasks:
       - test.env
 ```
 
-
 #### Handling Cyclic Dependencies
 
 Cyclic dependencies occur when a task depends on itself, either directly or indirectly, creating a loop that can cause the system to run indefinitely. To prevent this, the system detects cyclic dependencies and exits immediately with an error message.
@@ -217,6 +216,9 @@ In this example, task_a depends on task_b, task_b depends on task_c, and task_c 
 
 When the system detects a cyclic dependency, it exits immediately with an error message indicating the cycle. This prevents the system from entering an infinite loop.
 
+## Config Schema
+
+The docs can be found [here](./schema.md).
 
 ## Installation
 

@@ -2,27 +2,22 @@ tasks:
   install-hooks:
     commands:
       - command: git config --local core.hooksPath .githooks
-        verbose: true
     description: Install git hooks
   fmt:
     commands:
       - command: cargo fmt --all
-        verbose: true
     description: Format the project
   lint:
     commands:
       - command: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
-        verbose: true
     description: Lint check the project
   check:
     commands:
       - command: cargo c
-        verbose: true
     description: Check the project
   build:
     commands:
       - command: cargo b
-        verbose: true
     description: Build the project
     depends_on:
       - name: check
@@ -32,7 +27,6 @@ tasks:
           - cargo
           - c
         image: docker.io/library/rust:latest
-        verbose: true
     description: Build the project in a container
     depends_on:
       - name: check
@@ -57,7 +51,6 @@ tasks:
             -f Containerfile \
             -t ghcr.io/ffimnsr/$name-rs:$latest_version \
             -t ghcr.io/ffimnsr/$name-rs:latest .
-        verbose: true
     description: Build the container image
   pack_2:
     preconditions:
@@ -78,5 +71,8 @@ tasks:
             - org.opencontainers.image.title=mk-rs
             - org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs
             - org.opencontainers.image.version=latest
-        verbose: true
     description: Build the container image
+  docs:
+    commands:
+      - command: docsify serve docs
+    description: Serve the documentation
