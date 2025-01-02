@@ -37,7 +37,7 @@ main() {
     _tmp_dir="$(mktemp -d)" || err "mktemp: could not create temporary directory"
     cd "${_tmp_dir}" || err "cd: failed to enter directory: ${_tmp_dir}"
 
-    echo ${_tmp_dir}
+    echo "Temporary directory: ${_tmp_dir}"
 
     # Download and extract mk.
     local _package

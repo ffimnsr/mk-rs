@@ -31,22 +31,24 @@ Binary for different OS distribution can be downloaded [here](https://github.com
 
 <details>
   <summary>Linux / WSL / MSYS2 / Cygwin / Git Bash</summary>
-  The recommended way to install mk is via the install script:
 
-
-  ```sh
-  curl -sSfL https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | sh
-  ```
+  > The recommended way to install mk is via the install script:
+  >
+  >
+  > ```sh
+  > curl -sSfL https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | sh
+  > ```
 </details>
 
 <details>
   <summary>BSD / Android</summary>
-  The recommended way to install mk is via the install script:
 
-
-  ```sh
-  curl -sS https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | bash
-  ```
+  > The recommended way to install mk is via the install script:
+  >
+  >
+  > ```sh
+  > curl -sS https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | bash
+  > ```
 </details>
 
 ### From source
