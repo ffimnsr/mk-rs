@@ -13,3 +13,6 @@ insert_final_newline = true
 
 [*.rs]
 indent_size = 2
+
+[*.sh]
+indent_size = 4
