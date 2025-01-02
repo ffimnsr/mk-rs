@@ -12,6 +12,8 @@ Yet another simple task runner.
 
 `mk` is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows.
 
+![preview](./docs/images/preview.png)
+
 ## Features
 
 - **Simple Configuration**: Define your tasks in a straightforward YAML file.
@@ -29,9 +31,10 @@ Yet another simple task runner 🦀
 Usage: mk [OPTIONS] [TASK_NAMES]... [COMMAND]
 
 Commands:
-  run   Run specific tasks
-  list  List all available tasks
-  help  Print this message or the help of the given subcommand(s)
+  run          Run specific tasks
+  list         List all available tasks
+  completions  Generate shell completions
+  help         Print this message or the help of the given subcommand(s)
 
 Arguments:
   [TASK_NAMES]...  The task names to run
@@ -174,7 +177,6 @@ tasks:
       - test.env
 ```
 
-
 #### Handling Cyclic Dependencies
 
 Cyclic dependencies occur when a task depends on itself, either directly or indirectly, creating a loop that can cause the system to run indefinitely. To prevent this, the system detects cyclic dependencies and exits immediately with an error message.
@@ -217,6 +219,9 @@ In this example, task_a depends on task_b, task_b depends on task_c, and task_c 
 
 When the system detects a cyclic dependency, it exits immediately with an error message indicating the cycle. This prevents the system from entering an infinite loop.
 
+## Config Schema
+
+The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 ## Installation
 
@@ -244,7 +249,9 @@ Follow the instruction below to install and use `mk` on your system.
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run
+- [ ] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
+- [ ] Add support for npm scripts
 - [ ] Import and include yaml from local and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
