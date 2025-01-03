@@ -7,6 +7,8 @@
 
 
 > Efficiency is doing things right; effectiveness is doing the right things. This tool helps you do both.
+> One task runner to rule them all.
+
 
 Yet another simple task runner.
 
@@ -271,7 +273,8 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 ## What's on the roadmap?
 
-- [ ] Add platform checks (so can task commands have different runner) like if condition
+- [ ] Add platform checks (so can task commands have different runner) like an if condition
+- [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add secrets env storage that use GPG storage
 - [ ] Add proper documentation
 - [ ] Add support for cargo env

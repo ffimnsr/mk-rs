@@ -7,6 +7,7 @@
 
 
 > Efficiency is doing things right; effectiveness is doing the right things. This tool helps you do both.
+> One task runner to rule them all.
 
 Yet another simple task runner.
 
@@ -287,9 +288,8 @@ The docs can be found [here](./schema.md).
 
 Licensed under either of
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
-  http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license (http://opensource.org/licenses/MIT)
 
 at your option.
 
