@@ -12,12 +12,60 @@ Yet another simple task runner.
 
 `mk` is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows.
 
+![preview](./images/preview.png)
+
 ## Features
 
 - **Simple Configuration**: Define your tasks in a straightforward YAML file.
 - **Flexible Execution**: Run tasks locally, in containers, or as nested tasks.
 - **Error Handling**: Control how errors are handled with `ignore_errors`.
 - **Verbose Output**: Enable verbose output for detailed logs.
+
+## Installation
+
+Binary for different OS distribution can be downloaded [here](https://github.com/ffimnsr/mk-rs/releases). Linux, macOS, and Windows are supported.
+
+### Install using script
+
+`mk` runs on most major platforms. If your platform isn't listed below, please [open an issue](https://github.com/ffimnsr/mk-rs/issues/new).
+
+<details>
+  <summary>Linux / WSL / MSYS2 / Cygwin / Git Bash</summary>
+
+  > The recommended way to install mk is via the install script:
+  >
+  >
+  > ```sh
+  > curl -sSfL https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | sh
+  > ```
+</details>
+
+<details>
+  <summary>BSD / Android</summary>
+
+  > The recommended way to install mk is via the install script:
+  >
+  >
+  > ```sh
+  > curl -sS https://raw.githubusercontent.com/ffimnsr/mk-rs/main/install.sh | bash
+  > ```
+</details>
+
+### From source
+
+If you're into **Rust**, then `mk` can be installed with `cargo`. The minimum supported version of Rust is `1.37.0`. The binaries produce may be bigger than expected as it contains debug symbols.
+
+```bash
+cargo install --locked mk
+```
+
+### Manual installation
+
+Follow the instruction below to install and use `mk` on your system.
+
+1. Download the binary for your OS distribution [here](https://github.com/ffimnsr/mk-rs/releases).
+2. Copy it to your system binary directory (`/usr/local/bin`) or to your userspace binary directory (`$HOME/.local/bin`).
+
 
 ## Usage
 
@@ -219,25 +267,6 @@ When the system detects a cyclic dependency, it exits immediately with an error 
 ## Config Schema
 
 The docs can be found [here](./schema.md).
-
-## Installation
-
-Binary for different OS distribution can be downloaded [here](https://github.com/ffimnsr/mk-rs/releases). Linux, macOS, and Windows are supported.
-
-### From source
-
-If you're into **Rust**, then `mk` can be installed with `cargo`. The minimum supported version of Rust is `1.37.0`. The binaries produce may be bigger than expected as it contains debug symbols.
-
-```bash
-cargo install --locked mk
-```
-
-### Manual installation
-
-Follow the instruction below to install and use `mk` on your system.
-
-1. Download the binary for your OS distribution [here](https://github.com/ffimnsr/mk-rs/releases).
-2. Copy it to your system binary directory (`/usr/local/bin`) or to your userspace binary directory (`$HOME/.local/bin`).
 
 ## What's on the roadmap?
 

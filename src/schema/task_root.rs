@@ -4,22 +4,30 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use super::Task;
+use super::{
+  Task,
+  UseNpm,
+};
 
 /// This struct represents the root of the task schema. It contains all the tasks
 /// that can be executed.
 #[derive(Debug, Default, Deserialize)]
 pub struct TaskRoot {
+  /// The tasks that can be executed
   pub tasks: HashMap<String, Task>,
+
+  /// This allows mk to use npm scripts as tasks
+  #[serde(default)]
+  pub use_npm: Option<UseNpm>,
 }
 
 impl TaskRoot {
   pub fn from_file(file: &str) -> anyhow::Result<Self> {
     let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
     let reader = BufReader::new(file);
-    let task_root = serde_yaml::from_reader(reader)?;
+    let root = serde_yaml::from_reader(reader)?;
 
-    Ok(task_root)
+    Ok(root)
   }
 }
 

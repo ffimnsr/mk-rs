@@ -7,6 +7,7 @@ use super::TaskContext;
 /// the dependent task.
 #[derive(Debug, Default, Deserialize)]
 pub struct TaskDependency {
+  /// The name of the task to depend on
   pub name: String,
 }
 

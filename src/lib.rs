@@ -14,6 +14,9 @@
 /// The defaults module contains the default values for the library
 pub mod defaults;
 
+/// The file module contains the file path handling functions
+pub mod file;
+
 /// The schema module contains the data structures used to represent the tasks
 pub mod schema;
 
@@ -24,4 +27,5 @@ pub mod version;
 #[macro_use]
 pub mod macros;
 
+/// The execution stack module contains the stack used to track the execution of tasks
 pub use schema::ExecutionStack;

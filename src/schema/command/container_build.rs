@@ -42,12 +42,15 @@ pub struct ContainerBuildArgs {
   #[serde(default)]
   pub labels: Option<Vec<String>>,
 
+  /// Generate a Software Bill of Materials (SBOM) for the container image
   #[serde(default)]
   pub sbom: bool,
 
+  /// Do not use cache when building the container
   #[serde(default)]
   pub no_cache: bool,
 
+  /// Always remove intermediate containers
   #[serde(default)]
   pub force_rm: bool,
 }

@@ -1,6 +1,6 @@
 [package]
 name = "mk"
-version = "0.1.13"
+version = "0.1.14"
 authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
 readme = "README.md"
@@ -39,6 +39,7 @@ serde_yaml = "0.9.34"
 thiserror = "2.0.9"
 which = "7.0.1"
 openssl = { version = "0.10", features = ["vendored"] }
+ssh2 = "0.9.4"
 
 [dev-dependencies]
 assert_cmd = "2.0.16"

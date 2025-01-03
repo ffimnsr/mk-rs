@@ -16,6 +16,7 @@ use serde::Deserialize;
 use which::which;
 
 use crate::defaults::default_true;
+use crate::file::ToUtf8 as _;
 use crate::handle_output;
 use crate::schema::TaskContext;
 
@@ -64,7 +65,9 @@ impl ContainerRun {
     cmd.arg("run").arg("--rm").arg("-i").stdout(stdout).stderr(stderr);
 
     let current_dir = env::current_dir()?;
-    cmd.arg("-v").arg(format!("{}:/workdir:z", current_dir.display()));
+    cmd
+      .arg("-v")
+      .arg(format!("{}:/workdir:z", current_dir.to_utf8()?));
     cmd.arg("-w").arg("/workdir");
 
     for mounted_path in self.mounted_paths.clone() {

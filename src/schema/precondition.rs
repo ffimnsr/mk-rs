@@ -21,17 +21,22 @@ use crate::handle_output;
 /// executed.
 #[derive(Debug, Default, Deserialize)]
 pub struct Precondition {
+  /// The command to run
   pub command: String,
 
+  //// The message to display if the command fails
   #[serde(default)]
   pub message: Option<String>,
 
+  /// The shell to use to run the command
   #[serde(default = "default_shell")]
   pub shell: String,
 
+  /// The working directory to run the command in
   #[serde(default)]
   pub work_dir: Option<String>,
 
+  /// Show verbose output
   #[serde(default = "default_true")]
   pub verbose: bool,
 }
