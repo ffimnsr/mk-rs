@@ -100,8 +100,8 @@ impl Task {
         dependency.run(context)?;
         depends_on_pb.inc(1);
       }
-      let message = format!("Dependencies completed in {}.", HumanDuration(started.elapsed()));
 
+      let message = format!("Dependencies completed in {}.", HumanDuration(started.elapsed()));
       if context.is_nested {
         depends_on_pb.finish_and_clear();
       } else {
@@ -123,8 +123,8 @@ impl Task {
         precondition.execute(context)?;
         precondition_pb.inc(1);
       }
-      let message = format!("Preconditions completed in {}.", HumanDuration(started.elapsed()));
 
+      let message = format!("Preconditions completed in {}.", HumanDuration(started.elapsed()));
       if context.is_nested {
         precondition_pb.finish_and_clear();
       } else {
@@ -142,8 +142,8 @@ impl Task {
       command.execute(context)?;
       command_pb.inc(1);
     }
-    let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
 
+    let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
     if context.is_nested {
       command_pb.finish_and_clear();
     } else {
@@ -202,7 +202,10 @@ mod test {
         assert!(!local_run.verbose);
       }
 
-      assert_eq!(task.depends_on[0].name, "task1");
+      if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
+        assert_eq!(args.name, "task1");
+      }
+
       assert_eq!(task.labels.len(), 0);
       assert_eq!(task.description, "This is a task");
       assert_eq!(task.environment.len(), 1);

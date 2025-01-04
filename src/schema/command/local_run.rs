@@ -83,3 +83,28 @@ impl LocalRun {
     Ok(())
   }
 }
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn test_local_run_1() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        command: echo 'Hello, World!'
+        ignore_errors: false
+        verbose: false
+      ";
+      let local_run = serde_yaml::from_str::<LocalRun>(yaml)?;
+
+      assert_eq!(local_run.command, "echo 'Hello, World!'");
+      assert_eq!(local_run.shell, "sh");
+      assert_eq!(local_run.work_dir, None);
+      assert!(!local_run.ignore_errors);
+      assert!(!local_run.verbose);
+
+      Ok(())
+    }
+  }
+}

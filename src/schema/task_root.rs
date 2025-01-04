@@ -29,12 +29,19 @@ impl TaskRoot {
 
     Ok(root)
   }
+
+  pub fn from_hashmap(tasks: HashMap<String, Task>) -> Self {
+    Self { tasks, use_npm: None }
+  }
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::schema::CommandRunner;
+  use crate::schema::{
+    CommandRunner,
+    TaskDependency,
+  };
 
   #[test]
   fn test_task_root_1() -> anyhow::Result<()> {
@@ -84,7 +91,11 @@ mod test {
       panic!("Expected CommandRunner::LocalRun");
     }
 
-    assert_eq!(task_root.tasks["task1"].depends_on[0].name, "task2");
+    if let TaskDependency::TaskDependency(args) = &task_root.tasks["task1"].depends_on[0] {
+      assert_eq!(args.name, "task2");
+    } else {
+      panic!("Expected TaskDependency::TaskDependency");
+    }
     assert_eq!(task_root.tasks["task1"].labels.len(), 0);
     assert_eq!(task_root.tasks["task1"].description, "This is a task");
     assert_eq!(task_root.tasks["task1"].environment.len(), 1);
@@ -100,7 +111,11 @@ mod test {
       panic!("Expected CommandRunner::LocalRun");
     }
 
-    assert_eq!(task_root.tasks["task2"].depends_on[0].name, "task1");
+    if let TaskDependency::TaskDependency(args) = &task_root.tasks["task2"].depends_on[0] {
+      assert_eq!(args.name, "task1");
+    } else {
+      panic!("Expected TaskDependency::TaskDependency");
+    }
     assert_eq!(task_root.tasks["task2"].labels.len(), 0);
     assert_eq!(task_root.tasks["task2"].description, "This is a task");
     assert_eq!(task_root.tasks["task2"].environment.len(), 0);

@@ -83,7 +83,11 @@ impl Precondition {
 
     let status = cmd.wait()?;
     if !status.success() {
-      anyhow::bail!("Command failed - {}", self.command);
+      if let Some(message) = &self.message {
+        anyhow::bail!("Precondition failed - {}", message);
+      } else {
+        anyhow::bail!("Precondition failed - {}", self.command);
+      }
     }
 
     Ok(())

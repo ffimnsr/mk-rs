@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use indicatif::MultiProgress;
+use indicatif::{
+  MultiProgress,
+  ProgressDrawTarget,
+};
 
 use super::{
   ExecutionStack,
@@ -19,6 +22,32 @@ pub struct TaskContext {
 }
 
 impl TaskContext {
+  pub fn empty() -> Self {
+    let mp = MultiProgress::with_draw_target(ProgressDrawTarget::hidden());
+    Self {
+      task_root: Arc::new(TaskRoot::default()),
+      execution_stack: ExecutionStack::default(),
+      multi: Arc::new(mp),
+      env_vars: HashMap::new(),
+      ignore_errors: false,
+      verbose: false,
+      is_nested: false,
+    }
+  }
+
+  pub fn empty_with_root(task_root: Arc<TaskRoot>) -> Self {
+    let mp = MultiProgress::with_draw_target(ProgressDrawTarget::hidden());
+    Self {
+      task_root: task_root.clone(),
+      execution_stack: ExecutionStack::default(),
+      multi: Arc::new(mp),
+      env_vars: HashMap::new(),
+      ignore_errors: false,
+      verbose: false,
+      is_nested: false,
+    }
+  }
+
   pub fn new(task_root: Arc<TaskRoot>, execution_stack: ExecutionStack) -> Self {
     Self {
       task_root: task_root.clone(),

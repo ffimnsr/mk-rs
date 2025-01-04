@@ -1,12 +1,9 @@
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::Deserialize;
 
 use crate::defaults::default_true;
 use crate::schema::TaskContext;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct TaskRun {
   /// The name of the task to run
   pub task: String,
