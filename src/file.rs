@@ -11,7 +11,7 @@ impl ToUtf8 for OsStr {
   fn to_utf8(&self) -> anyhow::Result<&str> {
     self
       .to_str()
-      .ok_or_else(|| anyhow::anyhow!("unable to convert `{self:?}` to UTF-8 string"))
+      .ok_or_else(|| anyhow::anyhow!("Unable to convert `{self:?}` to UTF-8 string"))
   }
 }
 

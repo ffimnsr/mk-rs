@@ -7,6 +7,7 @@ use indicatif::{
 use rand::Rng as _;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::BufRead as _;
 use std::time::{
   Duration,
   Instant,
@@ -17,12 +18,17 @@ use std::{
 };
 
 use super::{
+  is_shell_command,
   CommandRunner,
   Precondition,
   TaskContext,
   TaskDependency,
 };
-use crate::defaults::default_true;
+use crate::defaults::{
+  default_shell,
+  default_verbose,
+};
+use crate::run_shell_command;
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
@@ -56,13 +62,17 @@ pub struct Task {
   #[serde(default)]
   pub env_file: Vec<String>,
 
+  /// The shell to use when running the task
+  #[serde(default)]
+  pub shell: Option<String>,
+
   /// Ignore errors if the task fails
   #[serde(default)]
-  pub ignore_errors: bool,
+  pub ignore_errors: Option<bool>,
 
   /// Show verbose output
-  #[serde(default = "default_true")]
-  pub verbose: bool,
+  #[serde(default)]
+  pub verbose: Option<bool>,
 }
 
 impl Task {
@@ -72,14 +82,25 @@ impl Task {
     let started = Instant::now();
     let tick_interval = Duration::from_millis(80);
 
+    if let Some(shell) = &self.shell {
+      let shell: &str = shell;
+      context.set_shell(shell);
+    }
+
+    if let Some(ignore_errors) = &self.ignore_errors {
+      context.set_ignore_errors(*ignore_errors);
+    }
+
+    if let Some(verbose) = &self.verbose {
+      context.set_verbose(*verbose);
+    }
+
     // Load environment variables from the task environment and env files field
-    let defined_env = self.environment.clone();
+    let defined_env = self.load_env()?;
     let additional_env = self.load_env_file()?;
 
     context.extend_env_vars(defined_env);
     context.extend_env_vars(additional_env);
-    context.set_ignore_errors(self.ignore_errors);
-    context.set_verbose(self.verbose);
 
     let mut rng = rand::thread_rng();
     // Spinners can be found here:
@@ -153,6 +174,16 @@ impl Task {
     Ok(())
   }
 
+  fn load_env(&self) -> anyhow::Result<HashMap<String, String>> {
+    let mut local_env: HashMap<String, String> = HashMap::new();
+    for (key, value) in &self.environment {
+      let value = self.get_env_value(value)?;
+      local_env.insert(key.clone(), value);
+    }
+
+    Ok(local_env)
+  }
+
   fn load_env_file(&self) -> anyhow::Result<HashMap<String, String>> {
     let mut local_env: HashMap<String, String> = HashMap::new();
     for env_file in &self.env_file {
@@ -167,6 +198,25 @@ impl Task {
     }
 
     Ok(local_env)
+  }
+
+  fn get_env_value(&self, value_in: &str) -> anyhow::Result<String> {
+    if is_shell_command(value_in)? {
+      let verbose = self.verbose();
+      let shell: &str = &self.shell();
+      let output = run_shell_command!(value_in, shell, verbose);
+      Ok(output)
+    } else {
+      Ok(value_in.to_string())
+    }
+  }
+
+  fn shell(&self) -> String {
+    self.shell.clone().unwrap_or(default_shell())
+  }
+
+  fn verbose(&self) -> bool {
+    self.verbose.unwrap_or(default_verbose())
   }
 }
 
@@ -198,8 +248,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.shell, "sh");
-        assert!(!local_run.ignore_errors);
-        assert!(!local_run.verbose);
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
       }
 
       if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
@@ -235,8 +285,8 @@ mod test {
         assert_eq!(local_run.command, "echo 'Hello, World!'");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.shell, "sh");
-        assert!(!local_run.ignore_errors);
-        assert!(!local_run.verbose);
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
       }
 
       assert_eq!(task.description, "This is a task");
@@ -263,8 +313,8 @@ mod test {
         assert_eq!(local_run.command, "echo 'Hello, World!'");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.shell, "sh");
-        assert!(!local_run.ignore_errors);
-        assert!(local_run.verbose);
+        assert_eq!(local_run.ignore_errors, None);
+        assert_eq!(local_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -296,8 +346,8 @@ mod test {
         assert_eq!(container_run.container_command[1], "Hello, World!");
         assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
         assert_eq!(container_run.mounted_paths, Vec::<String>::new());
-        assert!(!container_run.ignore_errors);
-        assert!(container_run.verbose);
+        assert_eq!(container_run.ignore_errors, None);
+        assert_eq!(container_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -332,8 +382,8 @@ mod test {
         assert_eq!(container_run.container_command[1], "Hello, World!");
         assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
         assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert!(!container_run.ignore_errors);
-        assert!(container_run.verbose);
+        assert_eq!(container_run.ignore_errors, None);
+        assert_eq!(container_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -369,8 +419,8 @@ mod test {
         assert_eq!(container_run.container_command[1], "Hello, World!");
         assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
         assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert!(container_run.ignore_errors);
-        assert!(container_run.verbose);
+        assert_eq!(container_run.ignore_errors, Some(true));
+        assert_eq!(container_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -403,8 +453,8 @@ mod test {
         assert_eq!(container_run.container_command[1], "Hello, World!");
         assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
         assert_eq!(container_run.mounted_paths, Vec::<String>::new());
-        assert!(!container_run.ignore_errors);
-        assert!(!container_run.verbose);
+        assert_eq!(container_run.ignore_errors, None);
+        assert_eq!(container_run.verbose, Some(false));
       }
 
       assert_eq!(task.description.len(), 0);
@@ -429,8 +479,8 @@ mod test {
 
       if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
         assert_eq!(task_run.task, "task1");
-        assert!(!task_run.ignore_errors);
-        assert!(task_run.verbose);
+        assert_eq!(task_run.ignore_errors, None);
+        assert_eq!(task_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);
@@ -456,8 +506,8 @@ mod test {
 
       if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
         assert_eq!(task_run.task, "task1");
-        assert!(!task_run.ignore_errors);
-        assert!(task_run.verbose);
+        assert_eq!(task_run.ignore_errors, None);
+        assert_eq!(task_run.verbose, Some(true));
       }
 
       assert_eq!(task.description.len(), 0);
@@ -483,8 +533,8 @@ mod test {
 
       if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
         assert_eq!(task_run.task, "task1");
-        assert!(task_run.ignore_errors);
-        assert!(task_run.verbose);
+        assert_eq!(task_run.ignore_errors, Some(true));
+        assert_eq!(task_run.verbose, None);
       }
 
       assert_eq!(task.description.len(), 0);

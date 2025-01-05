@@ -5,7 +5,9 @@ use std::fs::File;
 use std::io::BufReader;
 
 use super::{
+  Include,
   Task,
+  UseCargo,
   UseNpm,
 };
 
@@ -19,6 +21,14 @@ pub struct TaskRoot {
   /// This allows mk to use npm scripts as tasks
   #[serde(default)]
   pub use_npm: Option<UseNpm>,
+
+  /// This allows mk to use cargo commands as tasks
+  #[serde(default)]
+  pub use_cargo: Option<UseCargo>,
+
+  /// Includes additional files to be merged into the current file
+  #[serde(default)]
+  pub include: Option<Vec<Include>>,
 }
 
 impl TaskRoot {
@@ -31,7 +41,12 @@ impl TaskRoot {
   }
 
   pub fn from_hashmap(tasks: HashMap<String, Task>) -> Self {
-    Self { tasks, use_npm: None }
+    Self {
+      tasks,
+      use_npm: None,
+      use_cargo: None,
+      include: None,
+    }
   }
 }
 
@@ -85,8 +100,8 @@ mod test {
       assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
       assert_eq!(local_run.work_dir, None);
       assert_eq!(local_run.shell, "sh");
-      assert!(!local_run.ignore_errors);
-      assert!(!local_run.verbose);
+      assert_eq!(local_run.ignore_errors, Some(false));
+      assert_eq!(local_run.verbose, Some(false));
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -105,8 +120,8 @@ mod test {
       assert_eq!(local_run.command, "echo \"Hello, World 2!\"");
       assert_eq!(local_run.work_dir, None);
       assert_eq!(local_run.shell, "sh");
-      assert!(!local_run.ignore_errors);
-      assert!(!local_run.verbose);
+      assert_eq!(local_run.ignore_errors, Some(false));
+      assert_eq!(local_run.verbose, Some(false));
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }
@@ -125,8 +140,8 @@ mod test {
       assert_eq!(local_run.command, "echo \"Hello, World 3!\"");
       assert_eq!(local_run.work_dir, None);
       assert_eq!(local_run.shell, "sh");
-      assert!(!local_run.ignore_errors);
-      assert!(!local_run.verbose);
+      assert_eq!(local_run.ignore_errors, Some(false));
+      assert_eq!(local_run.verbose, Some(false));
     } else {
       panic!("Expected CommandRunner::LocalRun");
     }

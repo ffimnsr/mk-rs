@@ -44,8 +44,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
-        assert!(!local_run.ignore_errors);
-        assert!(!local_run.verbose);
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -66,8 +66,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
-        assert!(!local_run.ignore_errors);
-        assert!(local_run.verbose);
+        assert_eq!(local_run.ignore_errors, None);
+        assert_eq!(local_run.verbose, None);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -88,8 +88,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
-        assert!(local_run.ignore_errors);
-        assert!(local_run.verbose);
+        assert_eq!(local_run.ignore_errors, Some(true));
+        assert_eq!(local_run.verbose, None);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -110,8 +110,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
-        assert!(!local_run.ignore_errors);
-        assert!(!local_run.verbose);
+        assert_eq!(local_run.ignore_errors, None);
+        assert_eq!(local_run.verbose, Some(false));
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }
@@ -132,8 +132,8 @@ mod test {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
         assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, Some("/tmp".into()));
-        assert!(!local_run.ignore_errors);
-        assert!(local_run.verbose);
+        assert_eq!(local_run.ignore_errors, None);
+        assert_eq!(local_run.verbose, None);
       } else {
         panic!("Expected CommandRunner::LocalRun");
       }

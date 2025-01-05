@@ -15,7 +15,10 @@ use anyhow::Context as _;
 use serde::Deserialize;
 use which::which;
 
-use crate::defaults::default_true;
+use crate::defaults::{
+  default_ignore_errors,
+  default_verbose,
+};
 use crate::file::ToUtf8 as _;
 use crate::handle_output;
 use crate::schema::TaskContext;
@@ -34,11 +37,11 @@ pub struct ContainerRun {
 
   /// Ignore errors if the command fails
   #[serde(default)]
-  pub ignore_errors: bool,
+  pub ignore_errors: Option<bool>,
 
   /// Show verbose output
-  #[serde(default = "default_true")]
-  pub verbose: bool,
+  #[serde(default)]
+  pub verbose: Option<bool>,
 }
 
 impl ContainerRun {
@@ -46,16 +49,11 @@ impl ContainerRun {
     assert!(!self.image.is_empty());
     assert!(!self.container_command.is_empty());
 
-    let stdout = if self.verbose {
-      Stdio::piped()
-    } else {
-      Stdio::null()
-    };
-    let stderr = if self.verbose {
-      Stdio::piped()
-    } else {
-      Stdio::null()
-    };
+    let ignore_errors = self.ignore_errors(context);
+    let verbose = self.verbose(context);
+
+    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
 
     let container_runtime = which("docker")
       .or_else(|_| which("podman"))
@@ -85,16 +83,27 @@ impl ContainerRun {
     log::trace!("Running command: {:?}", cmd);
 
     let mut cmd = cmd.spawn()?;
-    if self.verbose {
+    if verbose {
       handle_output!(cmd.stdout, context);
       handle_output!(cmd.stderr, context);
     }
 
     let status = cmd.wait()?;
-    if !status.success() && !self.ignore_errors {
+    if !status.success() && !ignore_errors {
       anyhow::bail!("Command failed - {}", self.container_command.join(" "));
     }
 
     Ok(())
+  }
+
+  fn ignore_errors(&self, context: &TaskContext) -> bool {
+    self
+      .ignore_errors
+      .or(context.ignore_errors)
+      .unwrap_or(default_ignore_errors())
+  }
+
+  fn verbose(&self, context: &TaskContext) -> bool {
+    self.verbose.or(context.verbose).unwrap_or(default_verbose())
   }
 }

@@ -176,8 +176,8 @@ mod test {
 
     let root = Arc::new(TaskRoot::from_hashmap(hm));
     let task_dependency = serde_yaml::from_str::<TaskDependencyArgs>(yaml)?;
-    let a = task_dependency.execute(&TaskContext::empty_with_root(root));
-    assert!(a.is_ok());
+    let result = task_dependency.execute(&TaskContext::empty_with_root(root));
+    assert!(result.is_ok());
 
     Ok(())
   }

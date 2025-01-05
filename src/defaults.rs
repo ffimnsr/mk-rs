@@ -12,12 +12,23 @@ pub fn default_shell() -> String {
 /// Default value for `verbose` field
 ///
 /// ```
-/// # use mk_lib::defaults::default_true;
-/// let a = default_true();
+/// # use mk_lib::defaults::default_verbose;
+/// let a = default_verbose();
 /// assert!(a);
 /// ```
-pub fn default_true() -> bool {
+pub fn default_verbose() -> bool {
   true
+}
+
+/// Default value for `verbose` field
+///
+/// ```
+/// # use mk_lib::defaults::default_ignore_errors;
+/// let a = default_ignore_errors();
+/// assert!(!a);
+/// ```
+pub fn default_ignore_errors() -> bool {
+  false
 }
 
 /// Default value for `use_npm` -> `package_manager` field

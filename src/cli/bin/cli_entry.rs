@@ -48,8 +48,8 @@ struct Args {
   //
   // Usually, this would call `mk list --plain` or `mk list --json` to capture
   // the available tasks and use them as completions.
-  #[arg(help = "The task names to run", value_hint = clap::ValueHint::Other)]
-  task_names: Vec<String>,
+  #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
+  task_name: Option<String>,
 
   #[command(subcommand)]
   command: Option<Command>,
@@ -60,8 +60,8 @@ struct Args {
 enum Command {
   #[command(aliases = ["r"], about = "Run specific tasks")]
   Run {
-    #[arg(help = "The task names to run", value_hint = clap::ValueHint::Other)]
-    task_names: Vec<String>,
+    #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
+    task_name: String,
   },
   #[command(aliases = ["ls"], about = "List all available tasks")]
   List {
@@ -105,8 +105,8 @@ impl CliEntry {
   /// Run the CLI entry
   pub fn run(&self) -> anyhow::Result<()> {
     match &self.args.command {
-      Some(Command::Run { task_names }) => {
-        self.run_tasks(task_names)?;
+      Some(Command::Run { task_name }) => {
+        self.run_task(task_name)?;
       },
       Some(Command::List { plain, json }) => {
         self.print_available_tasks(*plain, *json)?;
@@ -115,8 +115,8 @@ impl CliEntry {
         self.write_completions(shell)?;
       },
       None => {
-        if !self.args.task_names.is_empty() {
-          self.run_tasks(&self.args.task_names)?;
+        if let Some(task_name) = &self.args.task_name {
+          self.run_task(task_name)?;
         } else {
           anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
         }
@@ -127,36 +127,38 @@ impl CliEntry {
   }
 
   /// Run the specified tasks
-  fn run_tasks(&self, task_names: &[String]) -> anyhow::Result<()> {
-    for task_name in task_names {
-      let task = self
-        .task_root
-        .tasks
-        .get(task_name)
-        .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+  fn run_task(&self, task_name: &str) -> anyhow::Result<()> {
+    assert!(!task_name.is_empty());
 
-      log::trace!("Task: {:?}", task);
+    let task = self
+      .task_root
+      .tasks
+      .get(task_name)
+      .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
 
-      // Scope the lock to the task execution
-      {
-        let mut stack = self
-          .execution_stack
-          .lock()
-          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
-        stack.insert(task_name.clone());
-      }
+    log::trace!("Task: {:?}", task);
 
-      let mut context = TaskContext::new(self.task_root.clone(), self.execution_stack.clone());
-      task.run(&mut context)?;
+    // Scope the lock to the task execution
+    {
+      let mut stack = self
+        .execution_stack
+        .lock()
+        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
 
-      // Don't carry over the execution stack to the next task
-      {
-        let mut stack = self
-          .execution_stack
-          .lock()
-          .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
-        stack.clear();
-      }
+      stack.insert(task_name.to_string());
+    }
+
+    let mut context = TaskContext::new(self.task_root.clone(), self.execution_stack.clone());
+    task.run(&mut context)?;
+
+    // Don't carry over the execution stack to the next task
+    {
+      let mut stack = self
+        .execution_stack
+        .lock()
+        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
+
+      stack.clear();
     }
 
     Ok(())

@@ -13,3 +13,46 @@ macro_rules! handle_output {
     });
   };
 }
+
+#[macro_export]
+macro_rules! run_shell_command {
+  ($value:expr, $shell:expr, $verbose:expr) => {{
+    let arg = $value.trim_start_matches("$(").trim_end_matches(")");
+    let stdout = if $verbose {
+      std::process::Stdio::piped()
+    } else {
+      std::process::Stdio::null()
+    };
+
+    let mut cmd = std::process::Command::new($shell);
+    let mut child = cmd.arg("-c").arg(arg).stdout(stdout).spawn()?;
+    let stdout = child
+      .stdout
+      .take()
+      .ok_or_else(|| anyhow::anyhow!("Failed to open stdout"))?;
+    let buf = std::io::BufReader::new(stdout);
+    let output = buf
+      .lines()
+      .next()
+      .ok_or_else(|| anyhow::anyhow!("Failed to read stdout"))??;
+    output
+  }};
+}
+
+#[macro_export]
+macro_rules! get_template_command_value {
+  ($value:expr, $context:expr) => {{
+    let value = $value.trim_start_matches("${{").trim_end_matches("}}").trim();
+    let value = if value.starts_with("env.") {
+      let value = value.trim_start_matches("env.");
+      let value = $context
+        .env_vars
+        .get(value)
+        .ok_or_else(|| anyhow::anyhow!("Failed to find environment variable"))?;
+      value
+    } else {
+      value
+    };
+    value.to_string()
+  }};
+}

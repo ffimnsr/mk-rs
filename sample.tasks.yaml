@@ -84,3 +84,11 @@ tasks:
     commands:
       - command: bash
         verbose: true
+  task8:
+    commands:
+      - command: echo "I'm on macOS"
+        verbose: true
+        test: test $(uname) = 'Darwin'
+      - command: echo "I'm on Linux"
+        verbose: true
+        test: test $(uname) = 'Linux'

@@ -6,6 +6,12 @@ use indicatif::{
   ProgressDrawTarget,
 };
 
+use crate::defaults::{
+  default_ignore_errors,
+  default_shell,
+  default_verbose,
+};
+
 use super::{
   ExecutionStack,
   TaskRoot,
@@ -16,8 +22,9 @@ pub struct TaskContext {
   pub execution_stack: ExecutionStack,
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
-  pub ignore_errors: bool,
-  pub verbose: bool,
+  pub shell: Option<String>,
+  pub ignore_errors: Option<bool>,
+  pub verbose: Option<bool>,
   pub is_nested: bool,
 }
 
@@ -29,8 +36,9 @@ impl TaskContext {
       execution_stack: ExecutionStack::default(),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
-      ignore_errors: false,
-      verbose: false,
+      shell: None,
+      ignore_errors: None,
+      verbose: None,
       is_nested: false,
     }
   }
@@ -42,8 +50,9 @@ impl TaskContext {
       execution_stack: ExecutionStack::default(),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
-      ignore_errors: false,
-      verbose: false,
+      shell: None,
+      ignore_errors: None,
+      verbose: None,
       is_nested: false,
     }
   }
@@ -54,8 +63,9 @@ impl TaskContext {
       execution_stack,
       multi: Arc::new(MultiProgress::new()),
       env_vars: HashMap::new(),
-      ignore_errors: false,
-      verbose: false,
+      shell: None,
+      ignore_errors: None,
+      verbose: None,
       is_nested: false,
     }
   }
@@ -66,6 +76,7 @@ impl TaskContext {
       execution_stack: context.execution_stack.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      shell: context.shell.clone(),
       ignore_errors: context.ignore_errors,
       verbose: context.verbose,
       is_nested: true,
@@ -78,8 +89,9 @@ impl TaskContext {
       execution_stack: context.execution_stack.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
-      ignore_errors,
-      verbose,
+      shell: context.shell.clone(),
+      ignore_errors: Some(ignore_errors),
+      verbose: Some(verbose),
       is_nested: true,
     }
   }
@@ -91,11 +103,27 @@ impl TaskContext {
     self.env_vars.extend(iter);
   }
 
+  pub fn set_shell(&mut self, shell: &str) {
+    self.shell = Some(shell.to_string());
+  }
+
   pub fn set_ignore_errors(&mut self, ignore_errors: bool) {
-    self.ignore_errors = ignore_errors;
+    self.ignore_errors = Some(ignore_errors);
   }
 
   pub fn set_verbose(&mut self, verbose: bool) {
-    self.verbose = verbose;
+    self.verbose = Some(verbose);
+  }
+
+  pub fn shell(&self) -> String {
+    self.shell.clone().unwrap_or(default_shell())
+  }
+
+  pub fn ignore_errors(&self) -> bool {
+    self.ignore_errors.unwrap_or(default_ignore_errors())
+  }
+
+  pub fn verbose(&self) -> bool {
+    self.verbose.unwrap_or(default_verbose())
   }
 }

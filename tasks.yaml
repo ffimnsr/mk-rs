@@ -51,6 +51,7 @@ tasks:
             -f Containerfile \
             -t ghcr.io/ffimnsr/$name-rs:$latest_version \
             -t ghcr.io/ffimnsr/$name-rs:latest .
+        test: command -v podman
     description: Build the container image
   pack_2:
     preconditions:
@@ -61,17 +62,20 @@ tasks:
           context: .
           tags:
             - latest
-          sbom: true
+            - ${{ env.VERSION }}
           labels:
             - org.opencontainers.image.created=MK_NOW
             - org.opencontainers.image.authors=gh:@ffimnsr
-            - org.opencontainers.image.description=mk-rs
+            - org.opencontainers.image.description=${{ env.DESCRIPTION }}
             - org.opencontainers.image.revision=MK_GIT_REVISION
             - org.opencontainers.image.source=MK_GIT_REMOTE_ORIGIN
             - org.opencontainers.image.title=mk-rs
             - org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs
-            - org.opencontainers.image.version=latest
+            - org.opencontainers.image.version=${{ env.VERSION }}
     description: Build the container image
+    environment:
+      VERSION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+      DESCRIPTION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].description')
   docs:
     commands:
       - command: docsify serve docs

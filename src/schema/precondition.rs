@@ -13,7 +13,7 @@ use std::thread;
 use super::TaskContext;
 use crate::defaults::{
   default_shell,
-  default_true,
+  default_verbose,
 };
 use crate::handle_output;
 
@@ -37,8 +37,8 @@ pub struct Precondition {
   pub work_dir: Option<String>,
 
   /// Show verbose output
-  #[serde(default = "default_true")]
-  pub verbose: bool,
+  #[serde(default)]
+  pub verbose: Option<bool>,
 }
 
 impl Precondition {
@@ -46,16 +46,10 @@ impl Precondition {
     assert!(!self.command.is_empty());
     assert!(!self.shell.is_empty());
 
-    let stdout = if self.verbose {
-      Stdio::piped()
-    } else {
-      Stdio::null()
-    };
-    let stderr = if self.verbose {
-      Stdio::piped()
-    } else {
-      Stdio::null()
-    };
+    let verbose = self.verbose(context);
+
+    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
 
     let shell = &self.shell;
     let mut cmd = ProcessCommand::new(shell);
@@ -76,7 +70,7 @@ impl Precondition {
 
     let mut cmd = cmd.spawn()?;
 
-    if self.verbose {
+    if verbose {
       handle_output!(cmd.stdout, context);
       handle_output!(cmd.stderr, context);
     }
@@ -91,6 +85,10 @@ impl Precondition {
     }
 
     Ok(())
+  }
+
+  fn verbose(&self, context: &TaskContext) -> bool {
+    self.verbose.or(context.verbose).unwrap_or(default_verbose())
   }
 }
 
@@ -111,7 +109,7 @@ mod test {
       assert_eq!(precondition.message, Some("This is a message".into()));
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(precondition.verbose);
+      assert_eq!(precondition.verbose, None);
 
       Ok(())
     }
@@ -129,7 +127,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(precondition.verbose);
+      assert_eq!(precondition.verbose, None);
 
       Ok(())
     }
@@ -148,7 +146,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(precondition.verbose);
+      assert_eq!(precondition.verbose, None);
 
       Ok(())
     }
@@ -167,7 +165,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, Some("/tmp".into()));
-      assert!(precondition.verbose);
+      assert_eq!(precondition.verbose, None);
 
       Ok(())
     }
@@ -186,7 +184,7 @@ mod test {
       assert_eq!(precondition.message, None);
       assert_eq!(precondition.shell, "sh");
       assert_eq!(precondition.work_dir, None);
-      assert!(precondition.verbose);
+      assert_eq!(precondition.verbose, Some(true));
 
       Ok(())
     }

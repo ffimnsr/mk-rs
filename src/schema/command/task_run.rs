@@ -1,6 +1,9 @@
 use serde::Deserialize;
 
-use crate::defaults::default_true;
+use crate::defaults::{
+  default_ignore_errors,
+  default_verbose,
+};
 use crate::schema::TaskContext;
 
 #[derive(Debug, Deserialize)]
@@ -10,16 +13,19 @@ pub struct TaskRun {
 
   /// Ignore errors if the task commands fail
   #[serde(default)]
-  pub ignore_errors: bool,
+  pub ignore_errors: Option<bool>,
 
   /// Show verbose output
-  #[serde(default = "default_true")]
-  pub verbose: bool,
+  #[serde(default)]
+  pub verbose: Option<bool>,
 }
 
 impl TaskRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
     assert!(!self.task.is_empty());
+
+    let ignore_errors = self.ignore_errors(context);
+    let verbose = self.verbose(context);
 
     let task = context
       .task_root
@@ -42,9 +48,20 @@ impl TaskRun {
       stack.insert(self.task.clone());
     }
 
-    let mut context = TaskContext::from_context_with_args(context, self.ignore_errors, self.verbose);
+    let mut context = TaskContext::from_context_with_args(context, ignore_errors, verbose);
     task.run(&mut context)?;
 
     Ok(())
+  }
+
+  fn ignore_errors(&self, context: &TaskContext) -> bool {
+    self
+      .ignore_errors
+      .or(context.ignore_errors)
+      .unwrap_or(default_ignore_errors())
+  }
+
+  fn verbose(&self, context: &TaskContext) -> bool {
+    self.verbose.or(context.verbose).unwrap_or(default_verbose())
   }
 }

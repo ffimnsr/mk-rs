@@ -1,12 +1,7 @@
-use std::fs::File;
-use std::io::Write as _;
-
-use anyhow::Context;
 use assert_cmd::Command;
-use tempfile::{
-  tempdir,
-  TempDir,
-};
+use assert_fs::TempDir;
+
+mod common;
 
 #[test]
 fn test_sanity() {
@@ -17,8 +12,16 @@ fn test_sanity() {
 fn test_mk_1() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-h").assert();
-
-  assert.success();
+  assert
+    .success()
+    .stdout(predicates::str::contains("Yet another simple task runner"))
+    .stdout(predicates::str::contains("run"))
+    .stdout(predicates::str::contains("list"))
+    .stdout(predicates::str::contains("completions"))
+    .stdout(predicates::str::contains("help"))
+    .stdout(predicates::str::contains("--config"))
+    .stdout(predicates::str::contains("--help"))
+    .stdout(predicates::str::contains("--version"));
   Ok(())
 }
 
@@ -36,12 +39,11 @@ fn test_mk_2() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_3() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
-  let assert = cmd.arg("ls").assert();
-  assert
-    .success()
-    .stdout(predicates::str::contains("build-in-container"))
-    .stdout(predicates::str::contains("check"));
+  let assert = cmd.arg("-c").arg(&config_file_path).arg("ls").assert();
+  assert.success().stdout(predicates::str::contains("hello"));
   Ok(())
 }
 
@@ -49,22 +51,45 @@ fn test_mk_3() -> anyhow::Result<()> {
 fn test_mk_4() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("help").assert();
-  assert.success();
+  assert
+    .success()
+    .stdout(predicates::str::contains("Yet another simple task runner"))
+    .stdout(predicates::str::contains("run"))
+    .stdout(predicates::str::contains("list"))
+    .stdout(predicates::str::contains("completions"))
+    .stdout(predicates::str::contains("help"))
+    .stdout(predicates::str::contains("--config"))
+    .stdout(predicates::str::contains("--help"))
+    .stdout(predicates::str::contains("--version"));
   Ok(())
 }
 
 #[test]
 fn test_mk_5() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
-  let assert = cmd.arg("run").assert();
+  let assert = cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("hello")
+    .assert();
   assert.success();
   Ok(())
 }
 
 #[test]
 fn test_mk_6() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
-  let assert = cmd.arg("r").assert();
+  let assert = cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("r")
+    .arg("hello")
+    .assert();
   assert.success();
   Ok(())
 }
@@ -84,41 +109,17 @@ fn test_mk_7() -> anyhow::Result<()> {
 fn test_mk_8() -> anyhow::Result<()> {
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-c").arg("hello.yaml").assert();
-  assert.failure().code(1);
-
-  // TODO: Fix this test or fix error message in code
-  // On linux this is "No such file or directory"
-  // On windows this is "The system cannot find the file specified"
-  // .stderr(predicates::str::contains("No such file or directory"));
+  assert
+    .failure()
+    .code(1)
+    .stderr(predicates::str::contains("Failed to open file"));
   Ok(())
-}
-
-// Helper function to create a hello.yaml file
-// Temp directory is referenced as when it goes out of scope, it will be deleted
-fn setup_hello_yaml(temp_dir: &TempDir) -> anyhow::Result<String> {
-  let config_file = temp_dir.path().join("hello.yaml");
-  let mut config = File::create(config_file.clone())?;
-  let yaml_config = "
-    tasks:
-      hello:
-        commands:
-          - command: echo \"Hello, world!\"
-            verbose: true
-        description: This is a task
-  ";
-
-  writeln!(config, "{}", yaml_config)?;
-  let config_file_path: &str = config_file
-    .to_str()
-    .with_context(|| "Failed to convert path to string")?;
-
-  Ok(config_file_path.to_string())
 }
 
 #[test]
 fn test_mk_9() -> anyhow::Result<()> {
-  let temp_dir = tempdir()?;
-  let config_file_path = setup_hello_yaml(&temp_dir)?;
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello").assert();
   assert.success();
@@ -127,12 +128,53 @@ fn test_mk_9() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_10() -> anyhow::Result<()> {
-  let temp_dir = tempdir()?;
-  let config_file_path = setup_hello_yaml(&temp_dir)?;
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
   let mut cmd = Command::cargo_bin("mk")?;
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello0").assert();
   assert
     .failure()
     .stderr(predicates::str::contains("Task not found"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_11() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
+  let mut cmd = Command::cargo_bin("mk")?;
+  let assert = cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("test")
+    .assert();
+  assert.failure();
+  Ok(())
+}
+
+#[test]
+fn test_mk_12() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
+  let mut cmd = Command::cargo_bin("mk")?;
+  let assert = cmd.arg("-c").arg(&config_file_path).arg("run").assert();
+  assert.failure();
+  Ok(())
+}
+
+#[test]
+fn test_mk_13() -> anyhow::Result<()> {
+  let mut cmd = Command::cargo_bin("mk")?;
+  let assert = cmd.arg("run").assert();
+  assert.failure();
+  Ok(())
+}
+
+#[test]
+fn test_mk_14() -> anyhow::Result<()> {
+  let mut cmd = Command::cargo_bin("mk")?;
+  let assert = cmd.arg("r").assert();
+  assert.failure();
   Ok(())
 }
