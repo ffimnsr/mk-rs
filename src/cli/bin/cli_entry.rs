@@ -13,22 +13,20 @@ use clap::{
 };
 use clap_complete::Shell;
 use console::style;
-use lazy_static::lazy_static;
 use mk_lib::schema::{
   ExecutionStack,
   TaskContext,
   TaskRoot,
 };
 use mk_lib::version::get_version_digits;
+use once_cell::sync::Lazy;
 use prettytable::format::consts;
 use prettytable::{
   row,
   Table,
 };
 
-lazy_static! {
-  static ref VERSION: String = get_version_digits();
-}
+static VERSION: Lazy<String> = Lazy::new(|| get_version_digits());
 
 /// The CLI arguments
 #[derive(Debug, Parser)]
