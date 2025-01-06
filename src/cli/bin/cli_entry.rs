@@ -26,7 +26,7 @@ use prettytable::{
   Table,
 };
 
-static VERSION: Lazy<String> = Lazy::new(|| get_version_digits());
+static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 
 /// The CLI arguments
 #[derive(Debug, Parser)]
