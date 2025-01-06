@@ -8,6 +8,7 @@ RUN cargo new mk-app
 WORKDIR /usr/src/mk-app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY crates ./crates
 
 RUN cargo build --verbose --release --target x86_64-unknown-linux-musl
 
