@@ -96,61 +96,73 @@ mod test {
 
     assert_eq!(task_root.tasks.len(), 3);
 
-    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task1"].commands[0] {
-      assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
-      assert_eq!(local_run.work_dir, None);
-      assert_eq!(local_run.shell, "sh");
-      assert_eq!(local_run.ignore_errors, Some(false));
-      assert_eq!(local_run.verbose, Some(false));
+    if let Task::Task(task) = &task_root.tasks["task1"] {
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
+      } else {
+        panic!("Expected CommandRunner::LocalRun");
+      }
+
+      if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
+        assert_eq!(args.name, "task2");
+      } else {
+        panic!("Expected TaskDependency::TaskDependency");
+      }
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.description, "This is a task");
+      assert_eq!(task.environment.len(), 1);
+      assert_eq!(task.env_file.len(), 1);
     } else {
-      panic!("Expected CommandRunner::LocalRun");
+      panic!("Expected Task::Task");
     }
 
-    if let TaskDependency::TaskDependency(args) = &task_root.tasks["task1"].depends_on[0] {
-      assert_eq!(args.name, "task2");
-    } else {
-      panic!("Expected TaskDependency::TaskDependency");
-    }
-    assert_eq!(task_root.tasks["task1"].labels.len(), 0);
-    assert_eq!(task_root.tasks["task1"].description, "This is a task");
-    assert_eq!(task_root.tasks["task1"].environment.len(), 1);
-    assert_eq!(task_root.tasks["task1"].env_file.len(), 1);
+    if let Task::Task(task) = &task_root.tasks["task2"] {
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo \"Hello, World 2!\"");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
+      } else {
+        panic!("Expected CommandRunner::LocalRun");
+      }
 
-    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task2"].commands[0] {
-      assert_eq!(local_run.command, "echo \"Hello, World 2!\"");
-      assert_eq!(local_run.work_dir, None);
-      assert_eq!(local_run.shell, "sh");
-      assert_eq!(local_run.ignore_errors, Some(false));
-      assert_eq!(local_run.verbose, Some(false));
+      if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
+        assert_eq!(args.name, "task1");
+      } else {
+        panic!("Expected TaskDependency::TaskDependency");
+      }
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.description, "This is a task");
+      assert_eq!(task.environment.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
     } else {
-      panic!("Expected CommandRunner::LocalRun");
-    }
-
-    if let TaskDependency::TaskDependency(args) = &task_root.tasks["task2"].depends_on[0] {
-      assert_eq!(args.name, "task1");
-    } else {
-      panic!("Expected TaskDependency::TaskDependency");
-    }
-    assert_eq!(task_root.tasks["task2"].labels.len(), 0);
-    assert_eq!(task_root.tasks["task2"].description, "This is a task");
-    assert_eq!(task_root.tasks["task2"].environment.len(), 0);
-    assert_eq!(task_root.tasks["task2"].env_file.len(), 0);
-
-    if let CommandRunner::LocalRun(local_run) = &task_root.tasks["task3"].commands[0] {
-      assert_eq!(local_run.command, "echo \"Hello, World 3!\"");
-      assert_eq!(local_run.work_dir, None);
-      assert_eq!(local_run.shell, "sh");
-      assert_eq!(local_run.ignore_errors, Some(false));
-      assert_eq!(local_run.verbose, Some(false));
-    } else {
-      panic!("Expected CommandRunner::LocalRun");
+      panic!("Expected Task::Task");
     }
 
-    assert_eq!(task_root.tasks["task3"].depends_on.len(), 0);
-    assert_eq!(task_root.tasks["task3"].labels.len(), 0);
-    assert_eq!(task_root.tasks["task3"].description.len(), 0);
-    assert_eq!(task_root.tasks["task3"].environment.len(), 0);
-    assert_eq!(task_root.tasks["task3"].env_file.len(), 0);
+    if let Task::Task(task) = &task_root.tasks["task3"] {
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo \"Hello, World 3!\"");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert_eq!(local_run.ignore_errors, Some(false));
+        assert_eq!(local_run.verbose, Some(false));
+      } else {
+        panic!("Expected CommandRunner::LocalRun");
+      }
+
+      assert_eq!(task.depends_on.len(), 0);
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.description.len(), 0);
+      assert_eq!(task.environment.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+    } else {
+      panic!("Expected Task::Task");
+    }
 
     Ok(())
   }

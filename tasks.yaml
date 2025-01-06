@@ -80,3 +80,4 @@ tasks:
     commands:
       - command: docsify serve docs
     description: Serve the documentation
+  docs_2: docsify serve docs

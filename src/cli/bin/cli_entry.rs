@@ -14,9 +14,7 @@ use clap::{
 use clap_complete::Shell;
 use console::style;
 use mk_lib::schema::{
-  ExecutionStack,
-  TaskContext,
-  TaskRoot,
+  ExecutionStack, Task, TaskContext, TaskRoot
 };
 use mk_lib::version::get_version_digits;
 use once_cell::sync::Lazy;
@@ -170,10 +168,17 @@ impl CliEntry {
         .tasks
         .iter()
         .map(|(name, task)| {
-          serde_json::json!({
-            "name": name,
-            "description": task.description,
-          })
+          if let Task::Task(task) = task {
+            serde_json::json!({
+              "name": name,
+              "description": task.description,
+            })
+          } else {
+            serde_json::json!({
+              "name": name,
+              "description": "No description provided",
+            })
+          }
         })
         .collect();
       println!("{}", serde_json::to_string_pretty(&tasks)?);
@@ -190,7 +195,11 @@ impl CliEntry {
       table.set_format(*consts::FORMAT_CLEAN);
 
       for (task_name, task) in &self.task_root.tasks {
-        table.add_row(row![b->&task_name, Fg->&task.description]);
+        if let Task::Task(task) = task {
+          table.add_row(row![b->&task_name, Fg->&task.description]);
+        } else {
+          table.add_row(row![b->&task_name, Fg->"No description provided"]);
+        }
       }
 
       table.printstd();

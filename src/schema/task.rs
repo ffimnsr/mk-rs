@@ -7,7 +7,14 @@ use indicatif::{
 use rand::Rng as _;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::io::BufRead as _;
+use std::io::{
+  BufRead as _,
+  BufReader,
+};
+use std::process::{
+  Command as ProcessCommand,
+  Stdio,
+};
 use std::time::{
   Duration,
   Instant,
@@ -28,13 +35,16 @@ use crate::defaults::{
   default_shell,
   default_verbose,
 };
-use crate::run_shell_command;
+use crate::{
+  handle_output,
+  run_shell_command,
+};
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
 /// must be met before the task can be executed.
 #[derive(Debug, Default, Deserialize)]
-pub struct Task {
+pub struct TaskArgs {
   /// The commands to run
   pub commands: Vec<CommandRunner>,
 
@@ -75,7 +85,50 @@ pub struct Task {
   pub verbose: Option<bool>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Task {
+  String(String),
+  Task(TaskArgs),
+}
+
 impl Task {
+  pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
+    match self {
+      Task::String(command) => self.execute(context, command),
+      Task::Task(task) => task.run(context),
+    }
+  }
+
+  fn execute(&self, context: &TaskContext, command: &str) -> anyhow::Result<()> {
+    assert!(!command.is_empty());
+
+    let ignore_errors = context.ignore_errors();
+    let verbose = context.verbose();
+    let shell: &str = &context.shell();
+
+    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+
+    let mut cmd = ProcessCommand::new(shell);
+    cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
+
+    let mut cmd = cmd.spawn()?;
+    if verbose {
+      handle_output!(cmd.stdout, context);
+      handle_output!(cmd.stderr, context);
+    }
+
+    let status = cmd.wait()?;
+    if !status.success() && !ignore_errors {
+      anyhow::bail!("Command failed - {}", command);
+    }
+
+    Ok(())
+  }
+}
+
+impl TaskArgs {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     assert!(!self.commands.is_empty());
 
@@ -244,22 +297,26 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
-        assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
-        assert_eq!(local_run.ignore_errors, Some(false));
-        assert_eq!(local_run.verbose, Some(false));
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+          assert_eq!(local_run.command, "echo \"Hello, World!\"");
+          assert_eq!(local_run.work_dir, None);
+          assert_eq!(local_run.shell, "sh");
+          assert_eq!(local_run.ignore_errors, Some(false));
+          assert_eq!(local_run.verbose, Some(false));
+        }
 
-      if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
-        assert_eq!(args.name, "task1");
-      }
+        if let TaskDependency::TaskDependency(args) = &task.depends_on[0] {
+          assert_eq!(args.name, "task1");
+        }
 
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.description, "This is a task");
-      assert_eq!(task.environment.len(), 1);
-      assert_eq!(task.env_file.len(), 2);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.description, "This is a task");
+        assert_eq!(task.environment.len(), 1);
+        assert_eq!(task.env_file.len(), 2);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -281,19 +338,23 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
-        assert_eq!(local_run.command, "echo 'Hello, World!'");
-        assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
-        assert_eq!(local_run.ignore_errors, Some(false));
-        assert_eq!(local_run.verbose, Some(false));
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+          assert_eq!(local_run.command, "echo 'Hello, World!'");
+          assert_eq!(local_run.work_dir, None);
+          assert_eq!(local_run.shell, "sh");
+          assert_eq!(local_run.ignore_errors, Some(false));
+          assert_eq!(local_run.verbose, Some(false));
+        }
 
-      assert_eq!(task.description, "This is a task");
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 2);
+        assert_eq!(task.description, "This is a task");
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 2);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -309,19 +370,23 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
-        assert_eq!(local_run.command, "echo 'Hello, World!'");
-        assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
-        assert_eq!(local_run.ignore_errors, None);
-        assert_eq!(local_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+          assert_eq!(local_run.command, "echo 'Hello, World!'");
+          assert_eq!(local_run.work_dir, None);
+          assert_eq!(local_run.shell, "sh");
+          assert_eq!(local_run.ignore_errors, None);
+          assert_eq!(local_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -340,21 +405,25 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
-        assert_eq!(container_run.container_command.len(), 2);
-        assert_eq!(container_run.container_command[0], "echo");
-        assert_eq!(container_run.container_command[1], "Hello, World!");
-        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
-        assert_eq!(container_run.mounted_paths, Vec::<String>::new());
-        assert_eq!(container_run.ignore_errors, None);
-        assert_eq!(container_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+          assert_eq!(container_run.container_command.len(), 2);
+          assert_eq!(container_run.container_command[0], "echo");
+          assert_eq!(container_run.container_command[1], "Hello, World!");
+          assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+          assert_eq!(container_run.mounted_paths, Vec::<String>::new());
+          assert_eq!(container_run.ignore_errors, None);
+          assert_eq!(container_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -376,21 +445,25 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
-        assert_eq!(container_run.container_command.len(), 2);
-        assert_eq!(container_run.container_command[0], "echo");
-        assert_eq!(container_run.container_command[1], "Hello, World!");
-        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
-        assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert_eq!(container_run.ignore_errors, None);
-        assert_eq!(container_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+          assert_eq!(container_run.container_command.len(), 2);
+          assert_eq!(container_run.container_command[0], "echo");
+          assert_eq!(container_run.container_command[1], "Hello, World!");
+          assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+          assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
+          assert_eq!(container_run.ignore_errors, None);
+          assert_eq!(container_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -413,21 +486,25 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
-        assert_eq!(container_run.container_command.len(), 2);
-        assert_eq!(container_run.container_command[0], "echo");
-        assert_eq!(container_run.container_command[1], "Hello, World!");
-        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
-        assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
-        assert_eq!(container_run.ignore_errors, Some(true));
-        assert_eq!(container_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+          assert_eq!(container_run.container_command.len(), 2);
+          assert_eq!(container_run.container_command[0], "echo");
+          assert_eq!(container_run.container_command[1], "Hello, World!");
+          assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+          assert_eq!(container_run.mounted_paths, vec!["/tmp", "/var/tmp"]);
+          assert_eq!(container_run.ignore_errors, Some(true));
+          assert_eq!(container_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -447,21 +524,25 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
-        assert_eq!(container_run.container_command.len(), 2);
-        assert_eq!(container_run.container_command[0], "echo");
-        assert_eq!(container_run.container_command[1], "Hello, World!");
-        assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
-        assert_eq!(container_run.mounted_paths, Vec::<String>::new());
-        assert_eq!(container_run.ignore_errors, None);
-        assert_eq!(container_run.verbose, Some(false));
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::ContainerRun(container_run) = &task.commands[0] {
+          assert_eq!(container_run.container_command.len(), 2);
+          assert_eq!(container_run.container_command[0], "echo");
+          assert_eq!(container_run.container_command[1], "Hello, World!");
+          assert_eq!(container_run.image, "docker.io/library/hello-world:latest");
+          assert_eq!(container_run.mounted_paths, Vec::<String>::new());
+          assert_eq!(container_run.ignore_errors, None);
+          assert_eq!(container_run.verbose, Some(false));
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -477,17 +558,21 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
-        assert_eq!(task_run.task, "task1");
-        assert_eq!(task_run.ignore_errors, None);
-        assert_eq!(task_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+          assert_eq!(task_run.task, "task1");
+          assert_eq!(task_run.ignore_errors, None);
+          assert_eq!(task_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -504,17 +589,21 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
-        assert_eq!(task_run.task, "task1");
-        assert_eq!(task_run.ignore_errors, None);
-        assert_eq!(task_run.verbose, Some(true));
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+          assert_eq!(task_run.task, "task1");
+          assert_eq!(task_run.ignore_errors, None);
+          assert_eq!(task_run.verbose, Some(true));
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
@@ -531,17 +620,21 @@ mod test {
 
       let task = serde_yaml::from_str::<Task>(yaml)?;
 
-      if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
-        assert_eq!(task_run.task, "task1");
-        assert_eq!(task_run.ignore_errors, Some(true));
-        assert_eq!(task_run.verbose, None);
-      }
+      if let Task::Task(task) = &task {
+        if let CommandRunner::TaskRun(task_run) = &task.commands[0] {
+          assert_eq!(task_run.task, "task1");
+          assert_eq!(task_run.ignore_errors, Some(true));
+          assert_eq!(task_run.verbose, None);
+        }
 
-      assert_eq!(task.description.len(), 0);
-      assert_eq!(task.depends_on.len(), 0);
-      assert_eq!(task.labels.len(), 0);
-      assert_eq!(task.env_file.len(), 0);
-      assert_eq!(task.environment.len(), 0);
+        assert_eq!(task.description.len(), 0);
+        assert_eq!(task.depends_on.len(), 0);
+        assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.env_file.len(), 0);
+        assert_eq!(task.environment.len(), 0);
+      } else {
+        panic!("Expected Task::Task");
+      }
 
       Ok(())
     }
