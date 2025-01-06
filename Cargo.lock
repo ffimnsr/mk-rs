@@ -909,7 +909,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "mk"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -922,19 +922,45 @@ dependencies = [
  "git2",
  "indicatif",
  "log",
+ "mk_ext_prettytable",
+ "mk_ext_serde_yaml",
  "once_cell",
  "openssl",
  "predicates",
- "prettytable-rs",
  "rand",
  "regex",
  "serde",
  "serde_json",
- "serde_yaml",
  "snapbox",
  "ssh2",
  "trycmd",
  "which",
+]
+
+[[package]]
+name = "mk_ext_prettytable"
+version = "0.11.0"
+dependencies = [
+ "csv",
+ "encode_unicode",
+ "is-terminal",
+ "once_cell",
+ "term",
+ "unicode-width",
+]
+
+[[package]]
+name = "mk_ext_serde_yaml"
+version = "0.10.0"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "indoc",
+ "itoa",
+ "ryu",
+ "serde",
+ "serde_derive",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -1100,18 +1126,6 @@ checksum = "72dd2d6d381dfb73a193c7fca536518d7caee39fc8503f74e7dc0be0531b425c"
 dependencies = [
  "predicates-core",
  "termtree",
-]
-
-[[package]]
-name = "prettytable-rs"
-version = "0.11.0"
-dependencies = [
- "csv",
- "encode_unicode",
- "is-terminal",
- "once_cell",
- "term",
- "unicode-width",
 ]
 
 [[package]]
@@ -1319,20 +1333,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87607cb1398ed59d48732e575a4c28a7a8ebf2454b964fe3f224f2afc07909e1"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.10.0"
-dependencies = [
- "anyhow",
- "indexmap",
- "indoc",
- "itoa",
- "ryu",
- "serde",
- "serde_derive",
- "unsafe-libyaml",
 ]
 
 [[package]]

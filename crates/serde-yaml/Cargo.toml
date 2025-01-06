@@ -1,7 +1,10 @@
 [package]
-name = "serde_yaml"
+name = "mk_ext_serde_yaml"
 version = "0.10.0"
-authors = ["David Tolnay <dtolnay@gmail.com>"]
+authors = [
+  "David Tolnay <dtolnay@gmail.com>",
+  "Edward Fitz Abucay <gh:@ffimnsr>",
+]
 categories = ["encoding", "parser-implementations"]
 description = "YAML data format for Serde"
 documentation = "https://docs.rs/serde_yaml/"
@@ -23,6 +26,7 @@ indoc = "2.0"
 serde_derive = "1.0.195"
 
 [lib]
+name = "serde_yaml"
 doc-scrape-examples = false
 
 [package.metadata.docs.rs]

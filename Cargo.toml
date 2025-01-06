@@ -1,6 +1,6 @@
 [package]
 name = "mk"
-version = "0.1.16"
+version = "0.1.17"
 authors = ["Edward Fitz Abucay <gh:@ffimnsr>"]
 edition = "2021"
 readme = "README.md"
@@ -42,11 +42,11 @@ env_logger = "0.11.6"
 git2 = { version = "0.19.0", default-features = false }
 indicatif = "0.17.9"
 log = "0.4.22"
-prettytable-rs = { version = "0.11.0", path = "crates/prettytable-rs", default-features = false, features = ["win_crlf"] }
+mk_ext_prettytable = { version = "0.11.0", path = "crates/prettytable-rs", default-features = false, features = ["win_crlf"] }
+mk_ext_serde_yaml = { version = "0.10.0", path = "crates/serde-yaml" }
 rand = "0.8.5"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
-serde_yaml = { version = "0.10.0", path = "crates/serde-yaml" }
 which = "7.0.1"
 openssl = { version = "0.10", features = ["vendored"] }
 ssh2 = "0.9.4"
