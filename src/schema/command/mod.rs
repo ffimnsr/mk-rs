@@ -1,3 +1,17 @@
+use std::io::{
+  BufRead as _,
+  BufReader,
+};
+use std::process::{
+  Command as ProcessCommand,
+  Stdio,
+};
+
+use std::thread;
+
+use crate::handle_output;
+use anyhow::Context;
+
 use super::TaskContext;
 use serde::Deserialize;
 
@@ -13,6 +27,7 @@ pub enum CommandRunner {
   ContainerRun(container_run::ContainerRun),
   LocalRun(local_run::LocalRun),
   TaskRun(task_run::TaskRun),
+  CommandRun(String),
 }
 
 impl CommandRunner {
@@ -22,7 +37,40 @@ impl CommandRunner {
       CommandRunner::ContainerRun(container_run) => container_run.execute(context),
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
+      CommandRunner::CommandRun(command) => self.execute_command(context, command),
     }
+  }
+
+  fn execute_command(&self, context: &TaskContext, command: &str) -> anyhow::Result<()> {
+    assert!(!command.is_empty());
+
+    let ignore_errors = context.ignore_errors();
+    let verbose = context.verbose();
+    let shell: &str = &context.shell();
+
+    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+
+    let mut cmd = ProcessCommand::new(shell);
+    cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
+
+    // Inject environment variables
+    for (key, value) in context.env_vars.iter() {
+      cmd.env(key, value);
+    }
+
+    let mut cmd = cmd.spawn()?;
+    if verbose {
+      handle_output!(cmd.stdout, context);
+      handle_output!(cmd.stderr, context);
+    }
+
+    let status = cmd.wait()?;
+    if !status.success() && !ignore_errors {
+      anyhow::bail!("Command failed - {}", command);
+    }
+
+    Ok(())
   }
 }
 

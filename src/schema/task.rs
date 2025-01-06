@@ -89,14 +89,14 @@ pub struct TaskArgs {
 #[serde(untagged)]
 pub enum Task {
   String(String),
-  Task(TaskArgs),
+  Task(Box<TaskArgs>),
 }
 
 impl Task {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     match self {
       Task::String(command) => self.execute(context, command),
-      Task::Task(task) => task.run(context),
+      Task::Task(args) => args.run(context),
     }
   }
 

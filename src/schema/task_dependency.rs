@@ -15,7 +15,7 @@ pub struct TaskDependencyArgs {
 #[serde(untagged)]
 pub enum TaskDependency {
   String(String),
-  TaskDependency(TaskDependencyArgs),
+  TaskDependency(Box<TaskDependencyArgs>),
 }
 
 impl TaskDependency {

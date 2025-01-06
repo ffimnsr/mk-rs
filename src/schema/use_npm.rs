@@ -15,7 +15,7 @@ pub struct UseNpmArgs {
 #[serde(untagged)]
 pub enum UseNpm {
   Bool(bool),
-  UseNpm(UseNpmArgs),
+  UseNpm(Box<UseNpmArgs>),
 }
 
 impl UseNpm {

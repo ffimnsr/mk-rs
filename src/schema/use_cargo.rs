@@ -15,7 +15,7 @@ pub struct UseCargoArgs {
 #[serde(untagged)]
 pub enum UseCargo {
   Bool(bool),
-  UseCargo(UseCargoArgs),
+  UseCargo(Box<UseCargoArgs>),
 }
 
 impl UseCargo {

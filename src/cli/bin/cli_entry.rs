@@ -14,7 +14,10 @@ use clap::{
 use clap_complete::Shell;
 use console::style;
 use mk_lib::schema::{
-  ExecutionStack, Task, TaskContext, TaskRoot
+  ExecutionStack,
+  Task,
+  TaskContext,
+  TaskRoot,
 };
 use mk_lib::version::get_version_digits;
 use once_cell::sync::Lazy;

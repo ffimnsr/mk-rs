@@ -12,7 +12,7 @@ pub struct IncludeArgs {
 #[serde(untagged)]
 pub enum Include {
   String(String),
-  Include(IncludeArgs),
+  Include(Box<IncludeArgs>),
 }
 
 impl Include {
