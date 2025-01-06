@@ -1,0 +1,28 @@
+# This example demonstrates how to build a Rust project in a container using mk command.
+# The `package` task builds a container image for the project.
+# To run this example, use the following command:
+# $ mk package
+tasks:
+  package:
+    preconditions:
+      - command: git diff-index --quiet --exit-code HEAD --
+      - command: cargo c
+    commands:
+      - command: |
+          latest_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          podman build \
+            --sbom=true \
+            --label org.opencontainers.image.created=$(date +%Y-%m-%dT%H:%M:%S%z) \
+            --label org.opencontainers.image.authors=gh:@ffimnsr \
+            --label org.opencontainers.image.description="$name $latest_version" \
+            --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+            --label org.opencontainers.image.source=$(git remote get-url origin) \
+            --label org.opencontainers.image.title=$name \
+            --label org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs \
+            --label org.opencontainers.image.version=$latest_version \
+            -f Containerfile \
+            -t ghcr.io/ffimnsr/$name-rs:$latest_version \
+            -t ghcr.io/ffimnsr/$name-rs:latest .
+        test: command -v podman
+    description: Build the container image

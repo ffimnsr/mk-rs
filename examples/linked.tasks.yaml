@@ -1,0 +1,26 @@
+# This example demonstrates how to link tasks together.
+# The `greet` task depends on the `greet_pre` and `greet_post` tasks.
+# To run this example, use the following command:
+# $ mk greet
+tasks:
+  greet:
+    depends_on:
+      - greet_pre
+    commands:
+      - command: echo $MESSAGE
+      - task: greet_post
+    environment:
+      MESSAGE: "2. Hello, world!"
+    description: Greet the world
+  greet_pre:
+    commands:
+      - command: echo $MESSAGE
+    environment:
+      MESSAGE: "1. Hello, world!"
+    description: Pre greet the world
+  greet_post:
+    commands:
+      - command: echo $MESSAGE
+    environment:
+      MESSAGE: "3. Hello, world!"
+    description: Post greet the world

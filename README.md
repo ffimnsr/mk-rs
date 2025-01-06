@@ -273,6 +273,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 ## What's on the roadmap?
 
+- [ ] Add lua script as config file
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add secrets env storage that use GPG storage
 - [ ] Add proper documentation
@@ -281,7 +282,8 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
 - [ ] Add support for npm scripts
-- [ ] Import and include yaml from local and remote sources
+- [ ] Add fuzzer scripts for code fuzzing
+- [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
 - [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands

@@ -1,0 +1,23 @@
+# This is an example of a build project in a container.
+# The `build_1` task builds the project in a container, the current directory is mounted as in work dir.
+# The `build_2` task builds the project in a container, this adds new mounted path in /project dir.
+# To run this example, use the following command:
+# $ mk build_1
+# $ mk build_2
+tasks:
+  build_1:
+    commands:
+      - container_command:
+          - cargo
+          - c
+        image: docker.io/library/rust:latest
+    description: Build the project in a container
+  build_2:
+    commands:
+      - container_command:
+          - cargo
+          - c
+        image: docker.io/library/rust:latest
+        mounted_paths:
+          - /path/to/project:/project:ro,z
+    description: Build the project in a container

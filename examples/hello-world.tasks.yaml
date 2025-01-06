@@ -1,0 +1,7 @@
+tasks:
+  greet:
+    commands:
+      - command: echo $MESSAGE
+    environment:
+      MESSAGE: "Hello, world!"
+    description: Greet the world

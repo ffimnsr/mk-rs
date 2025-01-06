@@ -1,0 +1,17 @@
+# This example demonstrates how to ignore errors in a task.
+# The `fail_1` task fails and is ignored on command scope.
+# The `fail_2` task fails and is ignored on task scope.
+# To run this example, use the following command:
+# $ mk fail_1
+# $ mk fail_2
+tasks:
+  fail_1:
+    commands:
+      - command: 'false'
+        ignore_errors: true
+    description: Force fail 1
+  fail_2:
+    commands:
+      - command: 'false'
+    description: Force fail 1
+    ignore_errors: true

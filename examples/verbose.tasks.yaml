@@ -1,0 +1,17 @@
+# This example demonstrates how to ignore errors in a task.
+# The `verbose_1` task echoes greet but does not output in command scope.
+# The `verbose_2` task echoes greet but does not output in task scope.
+# To run this example, use the following command:
+# $ mk verbose_1
+# $ mk verbose_2
+tasks:
+  verbose_1:
+    commands:
+      - command: echo "Hello, world 1!"
+        verbose: false
+    description: Verbose 1
+  verbose_2:
+    commands:
+      - command: echo "Hello, world!"
+    description: Verbose 2
+    verbose: false

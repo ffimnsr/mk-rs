@@ -1,0 +1,29 @@
+# This example demonstrates how to build a Rust project in a container using mk yaml.
+# The `package` task builds a container image for the project.
+# The `VERSION` and `DESCRIPTION` environment variables are set using the `cargo metadata` command.
+# To run this example, use the following command:
+# $ mk package
+tasks:
+  package:
+    preconditions:
+      - command: cargo c
+    commands:
+      - container_build:
+          image_name: ghcr.io/ffimnsr/mk-rs
+          context: .
+          tags:
+            - latest
+            - ${{ env.VERSION }}
+          labels:
+            - org.opencontainers.image.created=MK_NOW
+            - org.opencontainers.image.authors=gh:@ffimnsr
+            - org.opencontainers.image.description=${{ env.DESCRIPTION }}
+            - org.opencontainers.image.revision=MK_GIT_REVISION
+            - org.opencontainers.image.source=MK_GIT_REMOTE_ORIGIN
+            - org.opencontainers.image.title=mk-rs
+            - org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs
+            - org.opencontainers.image.version=${{ env.VERSION }}
+    description: Build the container image
+    environment:
+      VERSION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+      DESCRIPTION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].description')
