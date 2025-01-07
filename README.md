@@ -121,13 +121,13 @@ install:
 clean: clean-build clean-pyc
 
 clean-build:
-    rm -rf build dist alive_progress.egg-info
+    rm -rf build dist test.egg-info
 
 clean-pyc:
     find . -type f -name *.pyc -delete
 
 lint:
-    ruff check alive_progress --line-length 100
+    ruff check test --line-length 100
 
 build: lint clean
     python setup.py sdist bdist_wheel
@@ -161,9 +161,9 @@ tasks:
       - task: clean-build
       - task: clean-pyc
   clean-build: |
-    rm -rf build dist alive_progress.egg-info
+    rm -rf build dist test.egg-info
   clean-pyc: find . -type f -name *.pyc -delete
-  lint: ruff check alive_progress --line-length 100
+  lint: ruff check test --line-length 100
   build:
     depends_on:
       - lint
