@@ -35,8 +35,13 @@ impl TaskRoot {
   pub fn from_file(file: &str) -> anyhow::Result<Self> {
     let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
     let reader = BufReader::new(file);
-    let root = serde_yaml::from_reader(reader)?;
 
+    // Deserialize the YAML file into a serde_yaml::Value to be able to merge
+    // anchors and aliases
+    let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
+    value.apply_merge()?;
+
+    let root = serde_yaml::from_value(value)?;
     Ok(root)
   }
 

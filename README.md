@@ -313,6 +313,27 @@ tasks:
       - test.env
 ```
 
+#### Support for anchors and aliases
+
+The tasks.yaml file currently supports YAML anchors and aliases, allowing you to avoid repetition.
+Here's a sample configuration:
+
+```yaml
+x-sample: &task-precondition
+  preconditions:
+    - command: echo "Precondition 1"
+    - command: echo "Precondition 2"
+
+tasks:
+  task_a:
+    <<: *task-precondition
+    commands:
+      - command: echo "I'm on macOS"
+        test: test $(uname) = 'Darwin'
+      - command: echo "I'm on Linux"
+        test: test $(uname) = 'Linux'
+```
+
 #### Handling Cyclic Dependencies
 
 Cyclic dependencies occur when a task depends on itself, either directly or indirectly, creating a loop that can cause the system to run indefinitely. To prevent this, the system detects cyclic dependencies and exits immediately with an error message.

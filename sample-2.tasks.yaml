@@ -1,11 +1,5 @@
-x-sample: &task-precondition
-  preconditions:
-    - command: echo "Precondition 1"
-    - command: echo "Precondition 2"
-
 tasks:
   task1:
-    <<: *task-precondition
     depends_on:
       - name: task4
     commands:
@@ -91,7 +85,6 @@ tasks:
       - command: bash
         verbose: true
   task8:
-    <<: *task-precondition
     commands:
       - command: echo "I'm on macOS"
         verbose: true
