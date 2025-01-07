@@ -9,11 +9,11 @@ mod use_cargo;
 mod use_npm;
 
 use std::collections::HashSet;
+use std::process::Stdio;
 use std::sync::{
   Arc,
   Mutex,
 };
-use std::process::Stdio;
 
 pub type ExecutionStack = Arc<Mutex<HashSet<String>>>;
 

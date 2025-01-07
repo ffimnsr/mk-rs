@@ -137,8 +137,8 @@ mod test {
     {
       let context = TaskContext::empty();
       assert_eq!(context.shell(), "sh");
-      assert_eq!(context.ignore_errors(), false);
-      assert_eq!(context.verbose(), true);
+      assert!(!context.ignore_errors());
+      assert!(context.verbose());
     }
 
     Ok(())
@@ -171,7 +171,7 @@ mod test {
     {
       let mut context = TaskContext::empty();
       context.set_ignore_errors(true);
-      assert_eq!(context.ignore_errors(), true);
+      assert!(context.ignore_errors());
     }
 
     Ok(())
@@ -182,7 +182,7 @@ mod test {
     {
       let mut context = TaskContext::empty();
       context.set_verbose(true);
-      assert_eq!(context.verbose(), true);
+      assert!(context.verbose());
     }
 
     Ok(())

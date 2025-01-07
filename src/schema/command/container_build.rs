@@ -304,14 +304,8 @@ mod test {
     assert_eq!(container_build.verbose, None);
     assert_eq!(container_build.container_build.image_name, "my-image");
     assert_eq!(container_build.container_build.context, ".");
-    assert_eq!(
-      container_build.container_build.tags,
-      None,
-    );
-    assert_eq!(
-      container_build.container_build.labels,
-      None,
-    );
+    assert_eq!(container_build.container_build.tags, None,);
+    assert_eq!(container_build.container_build.labels, None,);
     assert!(!container_build.container_build.sbom);
     assert!(!container_build.container_build.no_cache);
     assert!(!container_build.container_build.force_rm);
@@ -327,16 +321,13 @@ mod test {
     let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
 
     assert_eq!(container_build.verbose, None);
-    assert_eq!(container_build.container_build.image_name, "docker.io/my-image/my-image");
+    assert_eq!(
+      container_build.container_build.image_name,
+      "docker.io/my-image/my-image"
+    );
     assert_eq!(container_build.container_build.context, "/hello/world");
-    assert_eq!(
-      container_build.container_build.tags,
-      None,
-    );
-    assert_eq!(
-      container_build.container_build.labels,
-      None,
-    );
+    assert_eq!(container_build.container_build.tags, None,);
+    assert_eq!(container_build.container_build.labels, None,);
     assert!(!container_build.container_build.sbom);
     assert!(!container_build.container_build.no_cache);
     assert!(!container_build.container_build.force_rm);
