@@ -2,14 +2,12 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::process::{
-  Command as ProcessCommand,
-  Stdio,
-};
+use std::process::Command as ProcessCommand;
 
 use std::thread;
 
 use crate::handle_output;
+use crate::schema::get_output_handler;
 use anyhow::Context;
 
 use super::TaskContext;
@@ -48,8 +46,8 @@ impl CommandRunner {
     let verbose = context.verbose();
     let shell: &str = &context.shell();
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     let mut cmd = ProcessCommand::new(shell);
     cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
@@ -184,6 +182,23 @@ mod test {
         assert_eq!(local_run.verbose, None);
       } else {
         panic!("Expected CommandRunner::LocalRun");
+      }
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_command_6() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        echo 'Hello, World!'
+      ";
+      let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
+      if let CommandRunner::CommandRun(command) = command {
+        assert_eq!(command, "echo 'Hello, World!'");
+      } else {
+        panic!("Expected CommandRunner::CommandRun");
       }
 
       Ok(())

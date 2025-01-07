@@ -3,10 +3,7 @@ use std::io::{
   BufReader,
 };
 use std::path::Path;
-use std::process::{
-  Command as ProcessCommand,
-  Stdio,
-};
+use std::process::Command as ProcessCommand;
 use std::thread;
 
 use anyhow::Context as _;
@@ -19,6 +16,7 @@ use crate::defaults::{
   default_verbose,
 };
 use crate::schema::{
+  get_output_handler,
   is_shell_command,
   is_template_command,
   TaskContext,
@@ -83,8 +81,8 @@ impl ContainerBuild {
 
     let verbose = self.verbose.or(context.verbose).unwrap_or(default_verbose());
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     let container_runtime = which("docker")
       .or_else(|_| which("podman"))
@@ -292,5 +290,55 @@ mod test {
     assert!(container_build.container_build.sbom);
     assert!(container_build.container_build.no_cache);
     assert!(container_build.container_build.force_rm);
+  }
+
+  #[test]
+  fn test_container_build_2() {
+    let yaml = r#"
+      container_build:
+        image_name: my-image
+        context: .
+    "#;
+    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
+
+    assert_eq!(container_build.verbose, None);
+    assert_eq!(container_build.container_build.image_name, "my-image");
+    assert_eq!(container_build.container_build.context, ".");
+    assert_eq!(
+      container_build.container_build.tags,
+      None,
+    );
+    assert_eq!(
+      container_build.container_build.labels,
+      None,
+    );
+    assert!(!container_build.container_build.sbom);
+    assert!(!container_build.container_build.no_cache);
+    assert!(!container_build.container_build.force_rm);
+  }
+
+  #[test]
+  fn test_container_build_3() {
+    let yaml = r#"
+      container_build:
+        image_name: docker.io/my-image/my-image
+        context: /hello/world
+    "#;
+    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
+
+    assert_eq!(container_build.verbose, None);
+    assert_eq!(container_build.container_build.image_name, "docker.io/my-image/my-image");
+    assert_eq!(container_build.container_build.context, "/hello/world");
+    assert_eq!(
+      container_build.container_build.tags,
+      None,
+    );
+    assert_eq!(
+      container_build.container_build.labels,
+      None,
+    );
+    assert!(!container_build.container_build.sbom);
+    assert!(!container_build.container_build.no_cache);
+    assert!(!container_build.container_build.force_rm);
   }
 }

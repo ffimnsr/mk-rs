@@ -2,10 +2,7 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::process::{
-  Command as ProcessCommand,
-  Stdio,
-};
+use std::process::Command as ProcessCommand;
 use std::thread;
 
 use anyhow::Context as _;
@@ -17,7 +14,10 @@ use crate::defaults::{
   default_verbose,
 };
 use crate::handle_output;
-use crate::schema::TaskContext;
+use crate::schema::{
+  get_output_handler,
+  TaskContext,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct LocalRun {
@@ -59,8 +59,8 @@ impl LocalRun {
       return Ok(());
     }
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     let mut cmd = ProcessCommand::new(&self.shell);
     cmd.arg("-c").arg(&self.command).stdout(stdout).stderr(stderr);
@@ -91,8 +91,8 @@ impl LocalRun {
   fn test(&self, context: &TaskContext) -> anyhow::Result<()> {
     let verbose = self.verbose(context);
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     if let Some(test) = &self.test {
       let mut cmd = ProcessCommand::new(&self.shell);

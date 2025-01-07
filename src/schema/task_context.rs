@@ -127,3 +127,64 @@ impl TaskContext {
     self.verbose.unwrap_or(default_verbose())
   }
 }
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn test_task_context_1() -> anyhow::Result<()> {
+    {
+      let context = TaskContext::empty();
+      assert_eq!(context.shell(), "sh");
+      assert_eq!(context.ignore_errors(), false);
+      assert_eq!(context.verbose(), true);
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_context_2() -> anyhow::Result<()> {
+    {
+      let mut context = TaskContext::empty();
+      context.set_shell("bash");
+      assert_eq!(context.shell(), "bash");
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_context_3() -> anyhow::Result<()> {
+    {
+      let mut context = TaskContext::empty();
+      context.extend_env_vars(vec![("key".to_string(), "value".to_string())]);
+      assert_eq!(context.env_vars.get("key"), Some(&"value".to_string()));
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_context_4() -> anyhow::Result<()> {
+    {
+      let mut context = TaskContext::empty();
+      context.set_ignore_errors(true);
+      assert_eq!(context.ignore_errors(), true);
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_context_5() -> anyhow::Result<()> {
+    {
+      let mut context = TaskContext::empty();
+      context.set_verbose(true);
+      assert_eq!(context.verbose(), true);
+    }
+
+    Ok(())
+  }
+}

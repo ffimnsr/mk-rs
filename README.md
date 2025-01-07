@@ -76,7 +76,7 @@ Follow the instruction below to install and use `mk` on your system.
 ```bash
 Yet another simple task runner 🦀
 
-Usage: mk [OPTIONS] [TASK_NAMES]... [COMMAND]
+Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
   run          Run specific tasks
@@ -85,7 +85,7 @@ Commands:
   help         Print this message or the help of the given subcommand(s)
 
 Arguments:
-  [TASK_NAMES]...  The task names to run
+  [TASK_NAME]  The task name to run
 
 Options:
   -c, --config <CONFIG>  Config file to source [default: tasks.yaml]
@@ -105,7 +105,95 @@ mk run <task_name>
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
 
-### Sample taskfile yaml
+### Makefile and task.yaml comparison
+
+Below is the Makefile:
+
+```makefile
+cov := "--cov=test --cov-branch --cov-report=term-missing"
+
+all:
+    @just --list
+
+install:
+    pip install -r requirements/dev.txt -r requirements/test.txt -e .
+
+clean: clean-build clean-pyc
+
+clean-build:
+    rm -rf build dist alive_progress.egg-info
+
+clean-pyc:
+    find . -type f -name *.pyc -delete
+
+lint:
+    ruff check alive_progress --line-length 100
+
+build: lint clean
+    python setup.py sdist bdist_wheel
+
+release: build && tag
+    twine upload dist/*
+
+tag:
+    #!/usr/bin/env zsh
+    tag=$(python -c 'import test; print("v" + test.__version__)')
+    git tag -a $tag -m "Details: https://github.com/sample/sample.git"
+    git push origin $tag
+
+test:
+    pytest {{ cov }}
+
+ptw:
+    ptw -- {{ cov }}
+
+cov-report:
+    coverage report -m
+```
+
+And here's the rewritten tasks.yaml file, converted from the original Makefile above:
+
+```yaml
+tasks:
+  install: pip install -r requirements/dev.txt -r requirements/test.txt -e .
+  clean:
+    commands:
+      - task: clean-build
+      - task: clean-pyc
+  clean-build: |
+    rm -rf build dist alive_progress.egg-info
+  clean-pyc: find . -type f -name *.pyc -delete
+  lint: ruff check alive_progress --line-length 100
+  build:
+    depends_on:
+      - lint
+      - clean
+    commands:
+      - python setup.py sdist bdist_wheel
+  release:
+    depends_on:
+      - build
+      - tag
+    commands:
+      - twine upload dist/*
+  tag:
+    commands:
+      - command: |
+          tag=$(python -c 'import test; print("v" + test.__version__)')
+          git tag -a $tag -m "Details: https://github.com/sample/sample.git"
+          git push origin $tag
+        shell: zsh
+  test: pytest --cov=test --cov-branch --cov-report=term-missing
+  ptw: ptw -- --cov=test --cov-branch --cov-report=term-missing
+  cov-report: coverage html
+```
+
+By transforming our 40-line Makefile into a streamlined 30-line tasks.yaml file, we can achieve a cleaner and more efficient setup.
+This new format is not only more editor-friendly but also supports code folding for better readability.
+
+As you can see, most of the fields are optional and can be omitted. You only need to modify them when deeper configuration is required.
+
+### Sample real-world task yaml
 
 Let's create a sample yaml file called `tasks.yaml`.
 

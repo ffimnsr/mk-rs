@@ -13,6 +13,7 @@ use std::sync::{
   Arc,
   Mutex,
 };
+use std::process::Stdio;
 
 pub type ExecutionStack = Arc<Mutex<HashSet<String>>>;
 
@@ -38,4 +39,12 @@ pub fn is_template_command(value: &str) -> anyhow::Result<bool> {
 
   let re = Regex::new(r"^\$\{\{.+\}\}$")?;
   Ok(re.is_match(value))
+}
+
+pub fn get_output_handler(verbose: bool) -> Stdio {
+  if verbose {
+    Stdio::piped()
+  } else {
+    Stdio::null()
+  }
 }

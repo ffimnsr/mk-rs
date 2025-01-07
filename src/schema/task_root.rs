@@ -166,4 +166,98 @@ mod test {
 
     Ok(())
   }
+
+  #[test]
+  fn test_task_root_2() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        task1:
+          commands:
+            - command: echo \"Hello, World 1!\"
+        task2:
+          commands:
+            - echo \"Hello, World 2!\"
+        task3: echo \"Hello, World 3!\"
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+
+    assert_eq!(task_root.tasks.len(), 3);
+
+    if let Task::Task(task) = &task_root.tasks["task1"] {
+      if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
+        assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
+        assert_eq!(local_run.work_dir, None);
+        assert_eq!(local_run.shell, "sh");
+        assert_eq!(local_run.ignore_errors, None);
+        assert_eq!(local_run.verbose, None);
+      } else {
+        panic!("Expected CommandRunner::LocalRun");
+      }
+
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.description, "");
+      assert_eq!(task.environment.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+    } else {
+      panic!("Expected Task::Task");
+    }
+
+    if let Task::Task(task) = &task_root.tasks["task2"] {
+      if let CommandRunner::CommandRun(command) = &task.commands[0] {
+        assert_eq!(command, "echo \"Hello, World 2!\"");
+      } else {
+        panic!("Expected CommandRunner::CommandRun");
+      }
+
+      assert_eq!(task.labels.len(), 0);
+      assert_eq!(task.description, "");
+      assert_eq!(task.environment.len(), 0);
+      assert_eq!(task.env_file.len(), 0);
+    } else {
+      panic!("Expected Task::Task");
+    }
+
+    if let Task::String(command) = &task_root.tasks["task3"] {
+      assert_eq!(command, "echo \"Hello, World 3!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_3() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        task1: echo \"Hello, World 1!\"
+        task2: echo \"Hello, World 2!\"
+        task3: echo \"Hello, World 3!\"
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+
+    assert_eq!(task_root.tasks.len(), 3);
+
+    if let Task::String(command) = &task_root.tasks["task1"] {
+      assert_eq!(command, "echo \"Hello, World 1!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    if let Task::String(command) = &task_root.tasks["task2"] {
+      assert_eq!(command, "echo \"Hello, World 2!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    if let Task::String(command) = &task_root.tasks["task3"] {
+      assert_eq!(command, "echo \"Hello, World 3!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    Ok(())
+  }
 }

@@ -11,10 +11,7 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::process::{
-  Command as ProcessCommand,
-  Stdio,
-};
+use std::process::Command as ProcessCommand;
 use std::time::{
   Duration,
   Instant,
@@ -35,6 +32,7 @@ use crate::defaults::{
   default_shell,
   default_verbose,
 };
+use crate::schema::get_output_handler;
 use crate::{
   handle_output,
   run_shell_command,
@@ -107,11 +105,16 @@ impl Task {
     let verbose = context.verbose();
     let shell: &str = &context.shell();
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     let mut cmd = ProcessCommand::new(shell);
     cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
+
+    // Inject environment variables
+    for (key, value) in context.env_vars.iter() {
+      cmd.env(key, value);
+    }
 
     let mut cmd = cmd.spawn()?;
     if verbose {
@@ -634,6 +637,44 @@ mod test {
         assert_eq!(task.environment.len(), 0);
       } else {
         panic!("Expected Task::Task");
+      }
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_11() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        echo 'Hello, World!'
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let Task::String(task) = &task {
+        assert_eq!(task, "echo 'Hello, World!'");
+      } else {
+        panic!("Expected Task::String");
+      }
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_12() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        'true'
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let Task::String(task) = &task {
+        assert_eq!(task, "true");
+      } else {
+        panic!("Expected Task::String");
       }
 
       Ok(())

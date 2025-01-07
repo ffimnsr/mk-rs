@@ -2,10 +2,7 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::process::{
-  Command as ProcessCommand,
-  Stdio,
-};
+use std::process::Command as ProcessCommand;
 use std::{
   env,
   thread,
@@ -21,7 +18,10 @@ use crate::defaults::{
 };
 use crate::file::ToUtf8 as _;
 use crate::handle_output;
-use crate::schema::TaskContext;
+use crate::schema::{
+  get_output_handler,
+  TaskContext,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ContainerRun {
@@ -52,8 +52,8 @@ impl ContainerRun {
     let ignore_errors = self.ignore_errors(context);
     let verbose = self.verbose(context);
 
-    let stdout = if verbose { Stdio::piped() } else { Stdio::null() };
-    let stderr = if verbose { Stdio::piped() } else { Stdio::null() };
+    let stdout = get_output_handler(verbose);
+    let stderr = get_output_handler(verbose);
 
     let container_runtime = which("docker")
       .or_else(|_| which("podman"))
