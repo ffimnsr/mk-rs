@@ -79,9 +79,10 @@ Yet another simple task runner 🦀
 Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
-  run          Run specific tasks
-  list         List all available tasks
-  completions  Generate shell completions
+  run          Run specific tasks [aliases: r]
+  list         List all available tasks [aliases: ls]
+  completions  Generate shell completions [aliases: comp]
+  secrets      Access stored secrets [aliases: s]
   help         Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -376,6 +377,40 @@ In this example, task_a depends on task_b, task_b depends on task_c, and task_c 
 
 When the system detects a cyclic dependency, it exits immediately with an error message indicating the cycle. This prevents the system from entering an infinite loop.
 
+## Secret Vault
+
+To generate secrets, first create a private key:
+
+```bash
+mk secrets key gen
+```
+
+The key will be saved in the default directory `~/.config/mk/priv`. This can be changed if needed.
+
+Next, initialize a secret vault:
+
+```bash
+mk secrets vault init
+```
+
+To store secrets (for example, saving a dotenv file in the vault):
+
+```bash
+cat .env | mk secrets vault set app/development/jobserver
+```
+
+To display secrets:
+
+```bash
+mk secrets vault show app/development/jobserver
+```
+
+To export secrets back to a dotenv file:
+
+```bash
+mk secrets vault export app/development/jobserver
+```
+
 ## Config Schema
 
 The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
@@ -384,7 +419,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 - [ ] Add lua script as config file
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
-- [ ] Add secrets env storage that use GPG storage
+- [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run

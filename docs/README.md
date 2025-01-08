@@ -75,15 +75,17 @@ Follow the instruction below to install and use `mk` on your system.
 ```bash
 Yet another simple task runner 🦀
 
-Usage: mk [OPTIONS] [TASK_NAMES]... [COMMAND]
+Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
-  run   Run specific tasks
-  list  List all available tasks
-  help  Print this message or the help of the given subcommand(s)
+  run          Run specific tasks [aliases: r]
+  list         List all available tasks [aliases: ls]
+  completions  Generate shell completions [aliases: comp]
+  secrets      Access stored secrets [aliases: s]
+  help         Print this message or the help of the given subcommand(s)
 
 Arguments:
-  [TASK_NAMES]...  The task names to run
+  [TASK_NAME]  The task name to run
 
 Options:
   -c, --config <CONFIG>  Config file to source [default: tasks.yaml]
@@ -103,7 +105,95 @@ mk run <task_name>
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
 
-### Sample taskfile yaml
+### Makefile and task.yaml comparison
+
+Below is the Makefile:
+
+```makefile
+cov := "--cov=test --cov-branch --cov-report=term-missing"
+
+all:
+    @just --list
+
+install:
+    pip install -r requirements/dev.txt -r requirements/test.txt -e .
+
+clean: clean-build clean-pyc
+
+clean-build:
+    rm -rf build dist test.egg-info
+
+clean-pyc:
+    find . -type f -name *.pyc -delete
+
+lint:
+    ruff check test --line-length 100
+
+build: lint clean
+    python setup.py sdist bdist_wheel
+
+release: build && tag
+    twine upload dist/*
+
+tag:
+    #!/usr/bin/env zsh
+    tag=$(python -c 'import test; print("v" + test.__version__)')
+    git tag -a $tag -m "Details: https://github.com/sample/sample.git"
+    git push origin $tag
+
+test:
+    pytest {{ cov }}
+
+ptw:
+    ptw -- {{ cov }}
+
+cov-report:
+    coverage report -m
+```
+
+And here's the rewritten tasks.yaml file, converted from the original Makefile above:
+
+```yaml
+tasks:
+  install: pip install -r requirements/dev.txt -r requirements/test.txt -e .
+  clean:
+    commands:
+      - task: clean-build
+      - task: clean-pyc
+  clean-build: |
+    rm -rf build dist test.egg-info
+  clean-pyc: find . -type f -name *.pyc -delete
+  lint: ruff check test --line-length 100
+  build:
+    depends_on:
+      - lint
+      - clean
+    commands:
+      - python setup.py sdist bdist_wheel
+  release:
+    depends_on:
+      - build
+      - tag
+    commands:
+      - twine upload dist/*
+  tag:
+    commands:
+      - command: |
+          tag=$(python -c 'import test; print("v" + test.__version__)')
+          git tag -a $tag -m "Details: https://github.com/sample/sample.git"
+          git push origin $tag
+        shell: zsh
+  test: pytest --cov=test --cov-branch --cov-report=term-missing
+  ptw: ptw -- --cov=test --cov-branch --cov-report=term-missing
+  cov-report: coverage html
+```
+
+By transforming our 40-line Makefile into a streamlined 30-line tasks.yaml file, we can achieve a cleaner and more efficient setup.
+This new format is not only more editor-friendly but also supports code folding for better readability.
+
+As you can see, most of the fields are optional and can be omitted. You only need to modify them when deeper configuration is required.
+
+### Sample real-world task yaml
 
 Let's create a sample yaml file called `tasks.yaml`.
 
@@ -223,6 +313,27 @@ tasks:
       - test.env
 ```
 
+#### Support for anchors and aliases
+
+The tasks.yaml file currently supports YAML anchors and aliases, allowing you to avoid repetition.
+Here's a sample configuration:
+
+```yaml
+x-sample: &task-precondition
+  preconditions:
+    - command: echo "Precondition 1"
+    - command: echo "Precondition 2"
+
+tasks:
+  task_a:
+    <<: *task-precondition
+    commands:
+      - command: echo "I'm on macOS"
+        test: test $(uname) = 'Darwin'
+      - command: echo "I'm on Linux"
+        test: test $(uname) = 'Linux'
+```
+
 #### Handling Cyclic Dependencies
 
 Cyclic dependencies occur when a task depends on itself, either directly or indirectly, creating a loop that can cause the system to run indefinitely. To prevent this, the system detects cyclic dependencies and exits immediately with an error message.
@@ -265,19 +376,57 @@ In this example, task_a depends on task_b, task_b depends on task_c, and task_c 
 
 When the system detects a cyclic dependency, it exits immediately with an error message indicating the cycle. This prevents the system from entering an infinite loop.
 
+## Secret Vault
+
+To generate secrets, first create a private key:
+
+```bash
+mk secrets key gen
+```
+
+The key will be saved in the default directory `~/.config/mk/priv`. This can be changed if needed.
+
+Next, initialize a secret vault:
+
+```bash
+mk secrets vault init
+```
+
+To store secrets (for example, saving a dotenv file in the vault):
+
+```bash
+cat .env | mk secrets vault set app/development/jobserver
+```
+
+To display secrets:
+
+```bash
+mk secrets vault show app/development/jobserver
+```
+
+To export secrets back to a dotenv file:
+
+```bash
+mk secrets vault export app/development/jobserver
+```
+
 ## Config Schema
 
 The docs can be found [here](./schema.md).
 
 ## What's on the roadmap?
 
-- [ ] Add platform checks (so can task commands have different runner) like if condition
-- [ ] Add secrets env storage that use GPG storage
+- [ ] Add lua script as config file
+- [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
+- [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run
+- [ ] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
-- [ ] Import and include yaml from local and remote sources
+- [ ] Add support for npm scripts
+- [ ] Add fuzzer scripts for code fuzzing
+- [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
 - [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
