@@ -26,6 +26,7 @@ use prettytable::{
   row,
   Table,
 };
+use crate::secrets::Secrets;
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 
@@ -57,12 +58,12 @@ struct Args {
 /// The available subcommands
 #[derive(Debug, Subcommand)]
 enum Command {
-  #[command(aliases = ["r"], about = "Run specific tasks")]
+  #[command(visible_aliases = ["r"], arg_required_else_help = true, about = "Run specific tasks")]
   Run {
-    #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
+    #[arg(required = true, help = "The task name to run", value_hint = clap::ValueHint::Other)]
     task_name: String,
   },
-  #[command(aliases = ["ls"], about = "List all available tasks")]
+  #[command(visible_aliases = ["ls"], about = "List all available tasks")]
   List {
     #[arg(short, long, help = "Show list that does not include headers")]
     plain: bool,
@@ -70,15 +71,17 @@ enum Command {
     #[arg(short, long, help = "Show list in JSON format", conflicts_with = "plain")]
     json: bool,
   },
-  #[command(about = "Generate shell completions")]
+  #[command(visible_aliases = ["comp"], about = "Generate shell completions")]
   Completions {
-    #[arg(help = "The shell to generate completions for")]
+    #[arg(required = true, help = "The shell to generate completions for")]
     shell: String,
   },
+  #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
+  Secrets(Secrets),
 }
 
 /// The CLI entry
-pub struct CliEntry {
+pub(super) struct CliEntry {
   args: Args,
   task_root: Arc<TaskRoot>,
   execution_stack: ExecutionStack,
@@ -112,6 +115,9 @@ impl CliEntry {
       },
       Some(Command::Completions { shell }) => {
         self.write_completions(shell)?;
+      },
+      Some(Command::Secrets(secrets)) => {
+        secrets.execute()?;
       },
       None => {
         if let Some(task_name) = &self.args.task_name {
