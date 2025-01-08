@@ -1,7 +1,17 @@
-use std::{fs::{self, File}, io::Write as _, path::Path};
+use std::fs::{
+  self,
+  File,
+};
+use std::io::Write as _;
+use std::path::Path;
 
 use clap::Args;
-use pgp::{ArmorOptions, KeyType, SecretKeyParamsBuilder};
+use mk_lib::file::ToUtf8;
+use pgp::{
+  ArmorOptions,
+  KeyType,
+  SecretKeyParamsBuilder,
+};
 use rand::thread_rng;
 
 use crate::secrets::context::Context;
@@ -32,16 +42,20 @@ impl GenerateKey {
     assert!(!location.is_empty(), "Location must be provided");
     assert!(!name.is_empty(), "Key name must be provided");
 
-    let file_path: &str = &format!("{location}/{name}.key");
-
     // Create the directory if it does not exist
-    if !Path::new(location).exists() {
+    let location = Path::new(location);
+    if !location.exists() {
       fs::create_dir_all(location)?;
     }
 
+    let filename_with_ext: &str = &format!("{name}.key");
     // Check if the file already exists
-    if Path::new(file_path).exists() && !self.force {
-      return Err(anyhow::anyhow!("File {file_path} already exists. Aborting."));
+    let file_path = location.join(filename_with_ext);
+    if file_path.exists() && !self.force {
+      return Err(anyhow::anyhow!(
+        "File {} already exists. Aborting.",
+        file_path.to_utf8()?
+      ));
     }
 
     let primary_user_id = format!("Me <{name}@mk.local>");
@@ -59,10 +73,10 @@ impl GenerateKey {
     let signed_private_key = private_key.sign(&mut thread_rng(), String::new)?;
 
     // Save the armored private key to a file
-    let mut file = File::create(file_path)?;
+    let mut file = File::create(file_path.clone())?;
     signed_private_key.to_armored_writer(&mut file, ArmorOptions::default())?;
     file.flush()?;
-    println!("Private key saved to {}", file_path);
+    println!("Key saved to {}", file_path.to_utf8()?);
 
     Ok(())
   }

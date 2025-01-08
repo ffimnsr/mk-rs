@@ -2,7 +2,11 @@ use std::fs::{
   self,
   File,
 };
-use std::io::Write as _;
+use std::io::{
+  self,
+  Read as _,
+  Write as _,
+};
 use std::path::Path;
 
 use clap::Args;
@@ -29,7 +33,7 @@ pub struct StoreSecret {
   path: String,
 
   #[arg(help = "The secret value")]
-  value: String,
+  value: Option<String>,
 
   #[arg(short, long, help = "The path to the secret vault")]
   vault_location: Option<String>,
@@ -39,12 +43,33 @@ pub struct StoreSecret {
 
   #[arg(short, long, help = "The key name")]
   key_name: Option<String>,
+
+  /// If the secret already exists, it will be overwritten
+  #[arg(short, long, help = "Force overwrite the secret")]
+  force: bool,
 }
 
 impl StoreSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
-    let value: &str = &self.value.clone();
+    let value: &str = &match &self.value {
+      Some(value) => value.clone(),
+      None => {
+        if atty::is(atty::Stream::Stdin) {
+          return Err(anyhow::anyhow!("No value provided"));
+        }
+
+        let mut buffer = String::new();
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        match handle.read_to_string(&mut buffer) {
+          Ok(0) => return Err(anyhow::anyhow!("No value provided")),
+          Ok(_) => buffer.trim().to_string(),
+          Err(e) => return Err(anyhow::anyhow!("Failed to read from stdin: {}", e)),
+        }
+      },
+    };
+
     let vault_location: &str = &self
       .vault_location
       .clone()
@@ -66,8 +91,16 @@ impl StoreSecret {
 
     let secret_path = Path::new(vault_location).join(path);
     let data_path = secret_path.clone().join("data.asc");
-    if secret_path.exists() && secret_path.is_dir() && data_path.exists() && data_path.is_file() {
-      println!("Secret already exists at {}", secret_path.to_utf8()?);
+    if secret_path.exists()
+      && secret_path.is_dir()
+      && data_path.exists()
+      && data_path.is_file()
+      && !self.force
+    {
+      println!(
+        "Secret already exists at path {path} in {}",
+        secret_path.to_utf8()?
+      );
     } else {
       fs::create_dir_all(secret_path.clone())?;
 
@@ -86,6 +119,7 @@ impl StoreSecret {
       let encrypted_message =
         message.encrypt_to_keys_seipdv1(&mut thread_rng(), SymmetricKeyAlgorithm::AES128, &[&pubkey])?;
 
+      // Save the encrypted message to a file
       let mut writer = File::create(data_path)?;
       encrypted_message.to_armored_writer(&mut writer, ArmorOptions::default())?;
       writer.flush()?;

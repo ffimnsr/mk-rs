@@ -86,7 +86,7 @@ fn verify_key(keys_location: &str, key_name: &str) -> anyhow::Result<()> {
     anyhow::bail!("The keys location does not exist");
   }
 
-  let key_name = format!("{key_name}.key", );
+  let key_name = format!("{key_name}.key",);
   let key_path = keys_path.join(key_name);
   if !key_path.exists() || !key_path.is_file() {
     anyhow::bail!("The key does not exist");

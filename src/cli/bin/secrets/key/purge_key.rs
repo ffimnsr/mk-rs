@@ -26,10 +26,10 @@ impl PurgeKey {
     assert!(!location.is_empty(), "Location must be provided");
     assert!(!name.is_empty(), "Key name must be provided");
 
-    let file_path: &str = &format!("{location}/{name}.key");
-    let path = Path::new(file_path);
-    if path.exists() {
-      fs::remove_file(path)?;
+    let filename_with_ext: &str = &format!("{name}.key");
+    let file_path = Path::new(location).join(filename_with_ext);
+    if file_path.exists() {
+      fs::remove_file(file_path)?;
       println!("Key {name} deleted successfully.");
     } else {
       println!("Key {name} does not exist.");

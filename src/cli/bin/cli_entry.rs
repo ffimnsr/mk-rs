@@ -5,6 +5,7 @@ use std::sync::{
   Mutex,
 };
 
+use crate::secrets::Secrets;
 use anyhow::Ok;
 use clap::{
   CommandFactory,
@@ -26,7 +27,6 @@ use prettytable::{
   row,
   Table,
 };
-use crate::secrets::Secrets;
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 

@@ -1,7 +1,10 @@
 use clap::Args;
 
 use crate::secrets::context::Context;
-use crate::secrets::vault::{verify_key, verify_vault};
+use crate::secrets::vault::{
+  verify_key,
+  verify_vault,
+};
 
 #[derive(Debug, Args)]
 pub struct ExportSecrets {
@@ -21,8 +24,14 @@ pub struct ExportSecrets {
 impl ExportSecrets {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
-    let vault_location: &str = &self.vault_location.clone().unwrap_or_else(|| context.vault_location());
-    let keys_location: &str = &self.keys_location.clone().unwrap_or_else(|| context.keys_location());
+    let vault_location: &str = &self
+      .vault_location
+      .clone()
+      .unwrap_or_else(|| context.vault_location());
+    let keys_location: &str = &self
+      .keys_location
+      .clone()
+      .unwrap_or_else(|| context.keys_location());
     let key_name: &str = &self.key_name.clone().unwrap_or_else(|| context.key_name());
 
     assert!(!path.is_empty(), "Path or prefix must be provided");
@@ -32,7 +41,6 @@ impl ExportSecrets {
 
     verify_vault(vault_location)?;
     verify_key(keys_location, key_name)?;
-
 
     // TODO
     Ok(())

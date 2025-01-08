@@ -37,9 +37,9 @@ impl ExportKey {
     assert!(!name.is_empty(), "Key name must be provided");
     assert!(!output.is_empty(), "Output file must be provided");
 
-    let file_path: &str = &format!("{location}/{name}.key");
-    let path = Path::new(file_path);
+    let filename_with_ext: &str = &format!("{name}.key");
 
+    let path = Path::new(location).join(filename_with_ext);
     if path.exists() {
       // We opt to parse it rather than copy it directly to verify if it is a valid key
       let mut secret_key_string = File::open(path)?;
@@ -50,6 +50,8 @@ impl ExportKey {
       let mut file = File::open(output)?;
       signed_secret_key.to_armored_writer(&mut file, ArmorOptions::default())?;
       file.flush()?;
+
+      println!("Key {name} exported to {output}.");
     } else {
       println!("Key {name} does not exist.");
     }

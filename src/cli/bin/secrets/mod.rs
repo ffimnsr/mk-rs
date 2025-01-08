@@ -7,6 +7,7 @@ use key::KEY_LOCATION_HELP;
 
 mod context;
 mod key;
+mod utils;
 mod vault;
 
 /// The struct that represents the secrets command

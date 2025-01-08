@@ -1,7 +1,21 @@
-use std::fs;
+use std::fs::{
+  self,
+  File,
+};
 use std::path::Path;
 
 use clap::Args;
+use console::style;
+use pgp::types::PublicKeyTrait;
+use pgp::{
+  Deserializable as _,
+  SignedSecretKey,
+};
+use prettytable::format::consts;
+use prettytable::{
+  row,
+  Table,
+};
 
 use crate::secrets::context::Context;
 
@@ -35,9 +49,32 @@ impl ListKeys {
         })
         .collect::<Vec<_>>();
 
-      for entry in entries {
-        println!("{}", entry);
+      if entries.is_empty() {
+        println!("No keys found in location");
+        return Ok(());
       }
+
+      let mut table = Table::new();
+      table.set_format(*consts::FORMAT_CLEAN);
+      table.set_titles(row![Fbb->"Name", Fbb->"Key ID", Fbb->"Fingerprint"]);
+      for entry in entries {
+        let key_name: &str = &entry.clone();
+        let filename_with_ext = format!("{key_name}.key");
+        let key_path = Path::new(location).join(filename_with_ext);
+        let mut secret_key_string = File::open(key_path)?;
+        let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
+        signed_secret_key.verify()?;
+
+        let key_id = hex::encode(signed_secret_key.key_id());
+        let fingerprint = hex::encode(signed_secret_key.fingerprint().as_bytes());
+
+        table.add_row(row![b->&key_name, Fg->&key_id, Fg->&fingerprint]);
+      }
+      let msg = style("Available keys:").bold().cyan();
+      println!();
+      println!("{msg}");
+      println!();
+      table.printstd();
     } else {
       println!("Location does not exist or is not a directory");
     }
