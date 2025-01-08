@@ -46,7 +46,7 @@ enum SecretsCommand {
   InitVault(vault::InitVault),
 
   /// Export a secret store
-  #[command(visible_aliases = ["export", "e"], about = "Export a secrets to dotenv file")]
+  #[command(visible_aliases = ["export", "e"], about = "Export secrets to file")]
   ExportSecrets(vault::ExportSecrets),
 }
 

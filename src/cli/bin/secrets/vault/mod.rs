@@ -45,7 +45,7 @@ enum VaultCommand {
   #[command(
     visible_aliases = ["export", "e"],
     arg_required_else_help = true,
-    about = "Export a secrets to dotenv file"
+    about = "Export secrets to a file"
   )]
   ExportSecrets(ExportSecrets),
 }

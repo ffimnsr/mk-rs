@@ -1,4 +1,17 @@
+use std::fs::{
+  self,
+  File,
+};
+use std::io::Write as _;
+use std::path::Path;
+
+use anyhow::Context as _;
 use clap::Args;
+use pgp::{
+  Deserializable as _,
+  Message,
+  SignedSecretKey,
+};
 
 use crate::secrets::context::Context;
 use crate::secrets::vault::{
@@ -11,10 +24,13 @@ pub struct ExportSecrets {
   #[arg(help = "The secret identifier or prefix to export")]
   path: String,
 
+  #[arg(short, long, help = "The output file")]
+  output: Option<String>,
+
   #[arg(short, long, help = "The path to the secret vault")]
   vault_location: Option<String>,
 
-  #[arg(short, long, help = "The keys location")]
+  #[arg(long, help = "The keys location")]
   keys_location: Option<String>,
 
   #[arg(short, long, help = "The key name")]
@@ -42,7 +58,67 @@ impl ExportSecrets {
     verify_vault(vault_location)?;
     verify_key(keys_location, key_name)?;
 
-    // TODO
+    // Open the secret key file
+    let key_name_with_ext = format!("{key_name}.key");
+    let key_path = Path::new(keys_location).join(key_name_with_ext);
+    let mut secret_key_string = File::open(key_path)?;
+    let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
+    signed_secret_key.verify()?;
+
+    let secret_path = Path::new(vault_location).join(path);
+    let mut values = Vec::new();
+
+    if secret_path.exists() && secret_path.is_dir() {
+      // Check for file and subdirectories
+      let entries = fs::read_dir(secret_path.clone())?
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+
+      // Check for data files in the subdirectories
+      for entry in entries {
+        let data_path = if entry.path().is_dir() {
+          entry.path().join("data.asc")
+        } else {
+          entry.path()
+        };
+
+        // Read the data file
+        if data_path.exists() && data_path.is_file() {
+          let mut data_file = File::open(data_path)?;
+          let (message, _) = Message::from_armor_single(&mut data_file)?;
+          let (decrypted_message, _) = message.decrypt(String::new, &[&signed_secret_key])?;
+          let value = decrypted_message
+            .get_literal()
+            .ok_or_else(|| anyhow::anyhow!("Secret value is not a literal"))?
+            .to_string()
+            .context("Failed to read secret value")?;
+
+          values.push(value);
+        }
+      }
+
+      if values.is_empty() {
+        println!("No secrets found for path: {}", path);
+      } else {
+        // Write the values to the output file if provided
+        // Otherwise, print the values to stdout which can be redirected
+        // to a file
+        if let Some(output) = &self.output {
+          let mut output_file = File::create(output)?;
+          for value in values {
+            writeln!(output_file, "{}", value)?;
+          }
+          output_file.flush()?;
+        } else {
+          for value in values {
+            println!("{}", value);
+          }
+        }
+      }
+    } else {
+      println!("Path does not exist or is not a directory");
+    }
+
     Ok(())
   }
 }

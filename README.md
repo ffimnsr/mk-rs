@@ -408,7 +408,11 @@ mk secrets vault show app/development/jobserver
 To export secrets back to a dotenv file:
 
 ```bash
-mk secrets vault export app/development/jobserver
+mk secrets vault export --output .env app/development/jobserver
+
+...or...
+
+mk secrets vault export app/development/jobserver > .env
 ```
 
 ## Config Schema
