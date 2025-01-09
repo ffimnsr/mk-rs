@@ -3,9 +3,7 @@ use std::fs::{
   File,
 };
 use std::io::{
-  self,
-  Read as _,
-  Write as _,
+  self, IsTerminal, Read as _, Write as _
 };
 use std::path::Path;
 
@@ -55,12 +53,12 @@ impl StoreSecret {
     let value: &str = &match &self.value {
       Some(value) => value.clone(),
       None => {
-        if atty::is(atty::Stream::Stdin) {
+        let stdin = io::stdin();
+        if stdin.is_terminal() {
           return Err(anyhow::anyhow!("No value provided"));
         }
 
         let mut buffer = String::new();
-        let stdin = io::stdin();
         let mut handle = stdin.lock();
         match handle.read_to_string(&mut buffer) {
           Ok(0) => return Err(anyhow::anyhow!("No value provided")),
