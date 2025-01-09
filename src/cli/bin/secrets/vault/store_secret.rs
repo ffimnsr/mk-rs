@@ -3,7 +3,10 @@ use std::fs::{
   File,
 };
 use std::io::{
-  self, IsTerminal, Read as _, Write as _
+  self,
+  IsTerminal,
+  Read as _,
+  Write as _,
 };
 use std::path::Path;
 
