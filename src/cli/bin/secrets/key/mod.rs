@@ -56,7 +56,11 @@ enum KeyCommand {
 }
 
 impl Key {
-  pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
+  pub fn execute(&self, context: &mut Context) -> anyhow::Result<()> {
+    if let Some(location) = &self.location {
+      context.set_keys_location(location);
+    }
+
     match &self.command {
       Some(command) => command.run(context),
       None => Err(anyhow::anyhow!("No subcommand provided")),

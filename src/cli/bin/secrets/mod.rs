@@ -30,11 +30,11 @@ pub struct Secrets {
 #[derive(Debug, Subcommand)]
 enum SecretsCommand {
   /// Access private keys using this subcommand
-  #[command(arg_required_else_help = true, about = "Access private keys")]
+  #[command(visible_aliases = ["k"], arg_required_else_help = true, about = "Access private keys")]
   Key(key::Key),
 
   /// Access secret stores using this subcommand
-  #[command(arg_required_else_help = true, about = "Access secret vault")]
+  #[command(visible_aliases = ["v"], arg_required_else_help = true, about = "Access secret vault")]
   Vault(vault::Vault),
 
   /// List private keys
@@ -62,8 +62,8 @@ impl Secrets {
     }
 
     match &self.command {
-      Some(SecretsCommand::Key(key)) => key.execute(&context),
-      Some(SecretsCommand::Vault(vault)) => vault.execute(&context),
+      Some(SecretsCommand::Key(key)) => key.execute(&mut context),
+      Some(SecretsCommand::Vault(vault)) => vault.execute(&mut context),
       Some(SecretsCommand::ListKeys(list_keys)) => list_keys.execute(&context),
       Some(SecretsCommand::InitVault(init_store)) => init_store.execute(&context),
       Some(SecretsCommand::ExportSecrets(export_secrets)) => export_secrets.execute(&context),

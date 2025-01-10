@@ -38,6 +38,7 @@ impl GenerateKey {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let location: &str = &self.location.clone().unwrap_or_else(|| context.keys_location());
     let name: &str = &self.name.clone().unwrap_or_else(|| context.key_name());
+    println!("Generating key {} at {}", name, location);
 
     assert!(!location.is_empty(), "Location must be provided");
     assert!(!name.is_empty(), "Key name must be provided");

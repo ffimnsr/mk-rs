@@ -51,7 +51,11 @@ enum VaultCommand {
 }
 
 impl Vault {
-  pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
+  pub fn execute(&self, context: &mut Context) -> anyhow::Result<()> {
+    if let Some(vault_location) = &self.vault_location {
+      context.set_vault_location(vault_location);
+    }
+
     match &self.command {
       Some(command) => command.run(context),
       None => Err(anyhow::anyhow!("No subcommand provided")),
