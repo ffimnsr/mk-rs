@@ -83,7 +83,7 @@ enum Command {
     json: bool,
   },
   #[command(visible_aliases = ["comp"], about = "Generate shell completions")]
-  Completions {
+  Completion {
     #[arg(required = true, help = "The shell to generate completions for")]
     shell: String,
   },
@@ -129,7 +129,7 @@ impl CliEntry {
       Some(Command::List { plain, json }) => {
         self.print_available_tasks(*plain, *json)?;
       },
-      Some(Command::Completions { shell }) => {
+      Some(Command::Completion { shell }) => {
         self.write_completions(shell)?;
       },
       Some(Command::Secrets(secrets)) => {

@@ -1,6 +1,7 @@
 use anyhow::Context;
+use hashbrown::HashMap;
 use serde::Deserialize;
-use std::collections::HashMap;
+
 use std::fs::File;
 use std::io::BufReader;
 
@@ -41,7 +42,21 @@ impl TaskRoot {
     let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
     value.apply_merge()?;
 
-    let root = serde_yaml::from_value(value)?;
+    let mk_commands = ["run", "list", "completion", "secrets", "help"];
+    let mut root: TaskRoot = serde_yaml::from_value(value)?;
+
+    // Rename tasks that have the same name as mk commands
+    root.tasks = rename_tasks(root.tasks, "task", &mk_commands, &HashMap::new());
+
+    if let Some(npm) = &root.use_npm {
+      let npm_tasks = npm.capture()?;
+
+      // Rename tasks that have the same name as mk commands and existing tasks
+      let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &mk_commands, &root.tasks);
+
+      root.tasks.extend(renamed_npm_tasks);
+    }
+
     Ok(root)
   }
 
@@ -53,6 +68,26 @@ impl TaskRoot {
       include: None,
     }
   }
+}
+
+fn rename_tasks(
+  tasks: HashMap<String, Task>,
+  prefix: &str,
+  mk_commands: &[&str],
+  existing_tasks: &HashMap<String, Task>,
+) -> HashMap<String, Task> {
+  let mut new_tasks = HashMap::new();
+  for (task_name, task) in tasks.into_iter() {
+    let new_task_name =
+      if mk_commands.contains(&task_name.as_str()) || existing_tasks.contains_key(&task_name) {
+        format!("{}_{}", prefix, task_name)
+      } else {
+        task_name
+      };
+
+    new_tasks.insert(new_task_name, task);
+  }
+  new_tasks
 }
 
 #[cfg(test)]

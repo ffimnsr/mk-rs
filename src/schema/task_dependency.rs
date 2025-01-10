@@ -92,7 +92,7 @@ impl TaskDependencyArgs {
 
 #[cfg(test)]
 mod test {
-  use std::collections::HashMap;
+  use hashbrown::HashMap;
   use std::sync::Arc;
 
   use crate::schema::{

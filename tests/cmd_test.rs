@@ -53,10 +53,11 @@ fn test_mk_4() -> anyhow::Result<()> {
   let assert = cmd.arg("help").assert();
   assert
     .success()
-    .stdout(predicates::str::contains("Yet another simple task runner"))
+    .stdout(predicates::str::contains("mk is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently"))
     .stdout(predicates::str::contains("run"))
     .stdout(predicates::str::contains("list"))
-    .stdout(predicates::str::contains("completions"))
+    .stdout(predicates::str::contains("completion"))
+    .stdout(predicates::str::contains("secrets"))
     .stdout(predicates::str::contains("help"))
     .stdout(predicates::str::contains("--config"))
     .stdout(predicates::str::contains("--help"))
@@ -112,7 +113,7 @@ fn test_mk_8() -> anyhow::Result<()> {
   assert
     .failure()
     .code(1)
-    .stderr(predicates::str::contains("Failed to open file"));
+    .stderr(predicates::str::contains("Config file does not exist"));
   Ok(())
 }
 

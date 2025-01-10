@@ -1,4 +1,5 @@
 use anyhow::Context;
+use hashbrown::HashMap;
 use indicatif::{
   HumanDuration,
   ProgressBar,
@@ -6,7 +7,7 @@ use indicatif::{
 };
 use rand::Rng as _;
 use serde::Deserialize;
-use std::collections::HashMap;
+
 use std::io::{
   BufRead as _,
   BufReader,

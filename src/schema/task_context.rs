@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
+use hashbrown::HashMap;
 use indicatif::{
   MultiProgress,
   ProgressDrawTarget,

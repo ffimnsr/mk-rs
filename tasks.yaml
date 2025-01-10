@@ -3,6 +3,10 @@ tasks:
     commands:
       - command: git config --local core.hooksPath .githooks
     description: Install git hooks
+  run:
+    commands:
+      - command: cargo r
+    description: Run the project
   fmt:
     commands:
       - command: cargo fmt --all
