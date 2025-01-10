@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{
   Arc,
@@ -8,6 +9,7 @@ use std::sync::{
 use crate::secrets::Secrets;
 use anyhow::Ok;
 use clap::{
+  crate_authors,
   CommandFactory,
   Parser,
   Subcommand,
@@ -35,10 +37,19 @@ static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 #[command(
   version = VERSION.as_str(),
   about,
-  long_about = None
+  long_about = "mk is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows.",
+  arg_required_else_help = true,
+  author = crate_authors!("\n"),
+  propagate_version = true,
 )]
 struct Args {
-  #[arg(short, long, help = "Config file to source", default_value = "tasks.yaml")]
+  #[arg(
+    short,
+    long,
+    help = "Config file to source",
+    env = "MK_CONFIG",
+    default_value = "tasks.yaml"
+  )]
   config: String,
 
   // Waiting for the dynamic completion to be implemented
@@ -94,6 +105,11 @@ impl CliEntry {
     log::trace!("Config: {}", args.config);
 
     assert!(!args.config.is_empty());
+
+    let config = Path::new(&args.config);
+    if !config.exists() {
+      anyhow::bail!("Config file does not exist");
+    }
 
     let task_root = Arc::new(TaskRoot::from_file(&args.config)?);
     let execution_stack = Arc::new(Mutex::new(HashSet::new()));
