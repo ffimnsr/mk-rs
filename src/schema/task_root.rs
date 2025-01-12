@@ -1,9 +1,16 @@
 use anyhow::Context;
 use hashbrown::HashMap;
+use mlua::{
+  Lua,
+  LuaSerdeExt,
+};
 use serde::Deserialize;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{
+  BufReader,
+  Read as _,
+};
 use std::path::Path;
 
 use super::{
@@ -12,6 +19,24 @@ use super::{
   UseCargo,
   UseNpm,
 };
+
+const MK_COMMANDS: [&str; 5] = ["run", "list", "completion", "secrets", "help"];
+
+macro_rules! process_tasks {
+  ($root:expr, $mk_commands:expr) => {
+      // Rename tasks that have the same name as mk commands
+      $root.tasks = rename_tasks($root.tasks, "task", &$mk_commands, &HashMap::new());
+
+      if let Some(npm) = &$root.use_npm {
+          let npm_tasks = npm.capture()?;
+
+          // Rename tasks that have the same name as mk commands and existing tasks
+          let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &$mk_commands, &$root.tasks);
+
+          $root.tasks.extend(renamed_npm_tasks);
+      }
+  };
+}
 
 /// This struct represents the root of the task schema. It contains all the tasks
 /// that can be executed.
@@ -42,9 +67,9 @@ impl TaskRoot {
       .context("Failed to get file extension")?;
 
     match file_extension {
-      "yaml" | "yml" => load_file(file, file_extension),
-      "lua" => anyhow::bail!("Lua files are not supported yet"),
-      "json" => anyhow::bail!("JSON files are not supported yet"),
+      "yaml" | "yml" => load_yaml_file(file),
+      "lua" => load_lua_file(file),
+      "json" => load_json_file(file),
       "json5" => anyhow::bail!("JSON5 files are not supported yet"),
       "toml" => anyhow::bail!("TOML files are not supported yet"),
       "makefile" | "mk" => anyhow::bail!("Makefiles are not supported yet"),
@@ -62,7 +87,7 @@ impl TaskRoot {
   }
 }
 
-fn load_file(file: &str, _file_extension: &str) -> anyhow::Result<TaskRoot> {
+fn load_yaml_file(file: &str) -> anyhow::Result<TaskRoot> {
   let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
   let reader = BufReader::new(file);
 
@@ -74,18 +99,39 @@ fn load_file(file: &str, _file_extension: &str) -> anyhow::Result<TaskRoot> {
   // Deserialize the serde_yaml::Value into a TaskRoot
   let mut root: TaskRoot = serde_yaml::from_value(value)?;
 
-  // Rename tasks that have the same name as mk commands
-  let mk_commands = ["run", "list", "completion", "secrets", "help"];
-  root.tasks = rename_tasks(root.tasks, "task", &mk_commands, &HashMap::new());
+  process_tasks!(root, MK_COMMANDS);
 
-  if let Some(npm) = &root.use_npm {
-    let npm_tasks = npm.capture()?;
+  Ok(root)
+}
 
-    // Rename tasks that have the same name as mk commands and existing tasks
-    let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &mk_commands, &root.tasks);
+fn load_json_file(file: &str) -> anyhow::Result<TaskRoot> {
+  let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
+  let reader = BufReader::new(file);
 
-    root.tasks.extend(renamed_npm_tasks);
-  }
+  // Deserialize the YAML file into a serde_yaml::Value to be able to merge
+  // anchors and aliases
+  let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
+  value.apply_merge()?;
+
+  // Deserialize the serde_yaml::Value into a TaskRoot
+  let mut root: TaskRoot = serde_yaml::from_value(value)?;
+
+  process_tasks!(root, MK_COMMANDS);
+
+  Ok(root)
+}
+
+fn load_lua_file(file: &str) -> anyhow::Result<TaskRoot> {
+  let mut file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
+  let mut contents = String::new();
+  file.read_to_string(&mut contents)?;
+
+  let lua = Lua::new();
+
+  let value = lua.load(&contents).eval()?;
+  let mut root: TaskRoot = lua.from_value(value)?;
+
+  process_tasks!(root, MK_COMMANDS);
 
   Ok(root)
 }
