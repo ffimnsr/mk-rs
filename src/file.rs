@@ -20,3 +20,22 @@ impl ToUtf8 for Path {
     self.as_os_str().to_utf8()
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_os_str_to_utf8() -> anyhow::Result<()> {
+    let os_str = OsStr::new("hello");
+    assert_eq!(os_str.to_utf8()?, "hello");
+    Ok(())
+  }
+
+  #[test]
+  fn test_path_to_utf8() -> anyhow::Result<()> {
+    let path = Path::new("hello");
+    assert_eq!(path.to_utf8()?, "hello");
+    Ok(())
+  }
+}

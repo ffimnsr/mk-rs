@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/crates/l/mk?style=flat-square)](https://github.com/ffimnsr/mk-rs/blob/master/LICENSE-APACHE)
 [![Github Workflow Status](https://img.shields.io/github/actions/workflow/status/ffimnsr/mk-rs/ci.yml?style=flat-square)](https://github.com/ffimnsr/mk-rs/blob/master/.github/workflows/ci.yml)
 
-
 > Efficiency is doing things right; effectiveness is doing the right things. This tool helps you do both.
 > One task runner to rule them all.
 

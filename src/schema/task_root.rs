@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use std::fs::File;
 use std::io::BufReader;
+use std::path::Path;
 
 use super::{
   Include,
@@ -34,30 +35,16 @@ pub struct TaskRoot {
 
 impl TaskRoot {
   pub fn from_file(file: &str) -> anyhow::Result<Self> {
-    let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
-    let reader = BufReader::new(file);
+    let file_path = Path::new(file);
+    let file_extension = file_path
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .context("Failed to get file extension")?;
 
-    // Deserialize the YAML file into a serde_yaml::Value to be able to merge
-    // anchors and aliases
-    let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
-    value.apply_merge()?;
-
-    let mk_commands = ["run", "list", "completion", "secrets", "help"];
-    let mut root: TaskRoot = serde_yaml::from_value(value)?;
-
-    // Rename tasks that have the same name as mk commands
-    root.tasks = rename_tasks(root.tasks, "task", &mk_commands, &HashMap::new());
-
-    if let Some(npm) = &root.use_npm {
-      let npm_tasks = npm.capture()?;
-
-      // Rename tasks that have the same name as mk commands and existing tasks
-      let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &mk_commands, &root.tasks);
-
-      root.tasks.extend(renamed_npm_tasks);
+    match file_extension {
+      "yaml" | "yml" => load_file(file, file_extension),
+      _ => anyhow::bail!("Unsupported file extension - {}", file_extension),
     }
-
-    Ok(root)
   }
 
   pub fn from_hashmap(tasks: HashMap<String, Task>) -> Self {
@@ -68,6 +55,33 @@ impl TaskRoot {
       include: None,
     }
   }
+}
+
+fn load_file(file: &str, _file_extension: &str) -> anyhow::Result<TaskRoot> {
+  let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
+  let reader = BufReader::new(file);
+
+  // Deserialize the YAML file into a serde_yaml::Value to be able to merge
+  // anchors and aliases
+  let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
+  value.apply_merge()?;
+
+  let mut root: TaskRoot = serde_yaml::from_value(value)?;
+
+  // Rename tasks that have the same name as mk commands
+  let mk_commands = ["run", "list", "completion", "secrets", "help"];
+  root.tasks = rename_tasks(root.tasks, "task", &mk_commands, &HashMap::new());
+
+  if let Some(npm) = &root.use_npm {
+    let npm_tasks = npm.capture()?;
+
+    // Rename tasks that have the same name as mk commands and existing tasks
+    let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &mk_commands, &root.tasks);
+
+    root.tasks.extend(renamed_npm_tasks);
+  }
+
+  Ok(root)
 }
 
 fn rename_tasks(

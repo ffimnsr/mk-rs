@@ -85,3 +85,43 @@ tasks:
       - command: docsify serve docs
     description: Serve the documentation
   docs_2: docsify serve docs
+  install_codecov_tools:
+    commands:
+      - cargo install --locked grcov
+      - rustup component add llvm-tools-preview
+    description: Install code coverage tools
+  gen_test_cov:
+    commands:
+      - cargo t
+    environment:
+      CARGO_INCREMENTAL: '0'
+      RUSTFLAGS: -C instrument-coverage -C codegen-units=1 -C opt-level=0 -C link-dead-code -C overflow-checks=off
+      LLVM_PROFILE_FILE: ./target/debug/coverage/cargo-test-%p-%m.profraw
+    description: Run tests with coverage
+  cov_to_html:
+    commands:
+      - rm -rf target/coverage/html
+      - |
+        grcov ./target/debug/coverage/ \
+          --binary-path ./target/debug/ \
+          -s . \
+          -t html \
+          --branch \
+          --ignore-not-existing \
+          --keep-only 'src/*' \
+          -o target/coverage/html
+      - open coverage/html/index.html
+    description: Generate HTML coverage report
+  cov_to_lcov:
+    commands:
+      - rm -rf target/coverage/tests.lcov
+      - |
+        grcov ./target/debug/coverage/ \
+          --binary-path ./target/debug/ \
+          -s . \
+          -t lcov \
+          --branch \
+          --ignore-not-existing \
+          --keep-only 'src/*' \
+          -o target/coverage/tests.lcov
+    description: Generate lcov coverage report
