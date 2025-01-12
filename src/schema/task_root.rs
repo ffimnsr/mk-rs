@@ -43,6 +43,11 @@ impl TaskRoot {
 
     match file_extension {
       "yaml" | "yml" => load_file(file, file_extension),
+      "lua" => anyhow::bail!("Lua files are not supported yet"),
+      "json" => anyhow::bail!("JSON files are not supported yet"),
+      "json5" => anyhow::bail!("JSON5 files are not supported yet"),
+      "toml" => anyhow::bail!("TOML files are not supported yet"),
+      "makefile" | "mk" => anyhow::bail!("Makefiles are not supported yet"),
       _ => anyhow::bail!("Unsupported file extension - {}", file_extension),
     }
   }
@@ -66,6 +71,7 @@ fn load_file(file: &str, _file_extension: &str) -> anyhow::Result<TaskRoot> {
   let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
   value.apply_merge()?;
 
+  // Deserialize the serde_yaml::Value into a TaskRoot
   let mut root: TaskRoot = serde_yaml::from_value(value)?;
 
   // Rename tasks that have the same name as mk commands

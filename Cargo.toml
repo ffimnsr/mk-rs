@@ -55,6 +55,7 @@ once_cell = "1.20.2"
 pgp = "0.14.2"
 hex = "0.4.3"
 hashbrown = { version = "0.15.2", features = ["serde"] }
+mlua = { version = "0.10.2", features = ["lua54", "serialize", "anyhow", "vendored"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.16"
