@@ -24,17 +24,17 @@ const MK_COMMANDS: [&str; 5] = ["run", "list", "completion", "secrets", "help"];
 
 macro_rules! process_tasks {
   ($root:expr, $mk_commands:expr) => {
-      // Rename tasks that have the same name as mk commands
-      $root.tasks = rename_tasks($root.tasks, "task", &$mk_commands, &HashMap::new());
+    // Rename tasks that have the same name as mk commands
+    $root.tasks = rename_tasks($root.tasks, "task", &$mk_commands, &HashMap::new());
 
-      if let Some(npm) = &$root.use_npm {
-          let npm_tasks = npm.capture()?;
+    if let Some(npm) = &$root.use_npm {
+      let npm_tasks = npm.capture()?;
 
-          // Rename tasks that have the same name as mk commands and existing tasks
-          let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &$mk_commands, &$root.tasks);
+      // Rename tasks that have the same name as mk commands and existing tasks
+      let renamed_npm_tasks = rename_tasks(npm_tasks, "npm", &$mk_commands, &$root.tasks);
 
-          $root.tasks.extend(renamed_npm_tasks);
-      }
+      $root.tasks.extend(renamed_npm_tasks);
+    }
   };
 }
 
