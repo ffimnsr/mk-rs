@@ -70,8 +70,8 @@ impl TaskRoot {
       "yaml" | "yml" => load_yaml_file(file),
       "lua" => load_lua_file(file),
       "json" => load_json_file(file),
+      "toml" => load_toml_file(file),
       "json5" => anyhow::bail!("JSON5 files are not supported yet"),
-      "toml" => anyhow::bail!("TOML files are not supported yet"),
       "makefile" | "mk" => anyhow::bail!("Makefiles are not supported yet"),
       _ => anyhow::bail!("Unsupported file extension - {}", file_extension),
     }
@@ -104,17 +104,25 @@ fn load_yaml_file(file: &str) -> anyhow::Result<TaskRoot> {
   Ok(root)
 }
 
+fn load_toml_file(file: &str) -> anyhow::Result<TaskRoot> {
+  let mut file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
+  let mut contents = String::new();
+  file.read_to_string(&mut contents)?;
+
+  // Deserialize the TOML file into a TaskRoot
+  let mut root: TaskRoot = toml::from_str(&contents)?;
+
+  process_tasks!(root, MK_COMMANDS);
+
+  Ok(root)
+}
+
 fn load_json_file(file: &str) -> anyhow::Result<TaskRoot> {
   let file = File::open(file).with_context(|| format!("Failed to open file - {}", file))?;
   let reader = BufReader::new(file);
 
-  // Deserialize the YAML file into a serde_yaml::Value to be able to merge
-  // anchors and aliases
-  let mut value: serde_yaml::Value = serde_yaml::from_reader(reader)?;
-  value.apply_merge()?;
-
-  // Deserialize the serde_yaml::Value into a TaskRoot
-  let mut root: TaskRoot = serde_yaml::from_value(value)?;
+  // Deserialize the JSON file into a TaskRoot
+  let mut root: TaskRoot = serde_json::from_reader(reader)?;
 
   process_tasks!(root, MK_COMMANDS);
 
@@ -126,12 +134,23 @@ fn load_lua_file(file: &str) -> anyhow::Result<TaskRoot> {
   let mut contents = String::new();
   file.read_to_string(&mut contents)?;
 
-  let lua = Lua::new();
-
-  let value = lua.load(&contents).eval()?;
-  let mut root: TaskRoot = lua.from_value(value)?;
+  // Deserialize the Lua value into a TaskRoot
+  let mut root: TaskRoot = get_lua_table(&contents)?;
 
   process_tasks!(root, MK_COMMANDS);
+
+  Ok(root)
+}
+
+fn get_lua_table(contents: &str) -> anyhow::Result<TaskRoot> {
+  // Create a new Lua instance
+  let lua = Lua::new();
+
+  // Load the Lua file and evaluate it
+  let value = lua.load(contents).eval()?;
+
+  // Deserialize the Lua value into a TaskRoot
+  let root = lua.from_value(value)?;
 
   Ok(root)
 }
@@ -343,6 +362,43 @@ mod test {
     ";
 
     let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+
+    assert_eq!(task_root.tasks.len(), 3);
+
+    if let Task::String(command) = &task_root.tasks["task1"] {
+      assert_eq!(command, "echo \"Hello, World 1!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    if let Task::String(command) = &task_root.tasks["task2"] {
+      assert_eq!(command, "echo \"Hello, World 2!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    if let Task::String(command) = &task_root.tasks["task3"] {
+      assert_eq!(command, "echo \"Hello, World 3!\"");
+    } else {
+      panic!("Expected Task::String");
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_4() -> anyhow::Result<()> {
+    let lua = "
+      {
+        tasks = {
+          task1 = 'echo \"Hello, World 1!\"',
+          task2 = 'echo \"Hello, World 2!\"',
+          task3 = 'echo \"Hello, World 3!\"',
+        }
+      }
+    ";
+
+    let task_root = get_lua_table(lua)?;
 
     assert_eq!(task_root.tasks.len(), 3);
 

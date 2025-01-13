@@ -34,6 +34,7 @@ use crate::defaults::{
   default_verbose,
 };
 use crate::schema::get_output_handler;
+use crate::utils::deserialize_environment;
 use crate::{
   handle_output,
   run_shell_command,
@@ -64,7 +65,7 @@ pub struct TaskArgs {
   pub description: String,
 
   /// The environment variables to set before running the task
-  #[serde(default)]
+  #[serde(default, deserialize_with = "deserialize_environment")]
   pub environment: HashMap<String, String>,
 
   /// The environment files to load before running the task
@@ -676,6 +677,33 @@ mod test {
         assert_eq!(task, "true");
       } else {
         panic!("Expected Task::String");
+      }
+
+      Ok(())
+    }
+  }
+
+  #[test]
+  fn test_task_13() -> anyhow::Result<()> {
+    {
+      let yaml = "
+        commands: []
+        environment:
+          FOO: bar
+          BAR: foo
+          KEY: 42
+          PIS: 3.14
+      ";
+
+      let task = serde_yaml::from_str::<Task>(yaml)?;
+
+      if let Task::Task(task) = &task {
+        assert_eq!(task.environment.len(), 4);
+        assert_eq!(task.environment.get("FOO").unwrap(), "bar");
+        assert_eq!(task.environment.get("BAR").unwrap(), "foo");
+        assert_eq!(task.environment.get("KEY").unwrap(), "42");
+      } else {
+        panic!("Expected Task::Task");
       }
 
       Ok(())

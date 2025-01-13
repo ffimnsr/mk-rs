@@ -4,7 +4,15 @@
 
 | Name | Type | Default Value | Required | Description |
 | --- | --- | --- | --- | --- |
-| tasks | Task[] | - | true | Contains list of tasks. |
+| tasks | [String / Task][] | - | true | Contains list of tasks. |
+| use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
+
+### UseNpm
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| package_manager | String | - | false | The package manager to use (.e.g pnpm, npm, yarn). |
+| work_dir | String | - | false | The working directory to run the command in. |
 
 ### Task
 
@@ -12,17 +20,27 @@
 | --- | --- | --- | --- | --- |
 | commands | CommandRunner[] | - | true | The commands to run. |
 | preconditions | Precondition[] | [] | false | The preconditions that must be met before the task can be executed. |
-| depends_on | TaskDependency[] | [] | false | The tasks that must be executed before this task can be executed. |
-| labels | HashMap | {} | false | The labels for the task. |
+| depends_on | [String / TaskDependency][] | [] | false | The tasks that must be executed before this task can be executed. |
+| labels | HashMap<String, String> | {} | false | The labels for the task. |
 | description | String | \<empty-string\> | false | The description of the task. |
-| environment | HashMap | {} | false | The environment variables to set before running the task. |
+| environment | HashMap<String, String> | {} | false | The environment variables to set before running the task. |
 | env_file | String[] | [] | false | The environment files to load before running the task. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | false | false | Show verbose output. |
 
 #### CommandRunner
 
-The command runner can either be a `LocalRun`, `ContainerRun`, `ContainerBuild`, and `TaskRun`.
+The command runner can either be a `CommandRun`, `LocalRun`, `ContainerRun`, `ContainerBuild`, and `TaskRun`.
+
+##### CommandRun
+
+Run the command string without any customatization:
+
+```yaml
+tasks:
+  commands:
+    - echo "foobar"
+```
 
 ##### LocalRun
 

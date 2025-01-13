@@ -109,7 +109,7 @@ tasks:
           --branch \
           --ignore-not-existing \
           --keep-only 'src/*' \
-          -o target/coverage/html
+          -o coverage/html
       - open coverage/html/index.html
     description: Generate HTML coverage report
   cov_to_lcov:
@@ -123,5 +123,5 @@ tasks:
           --branch \
           --ignore-not-existing \
           --keep-only 'src/*' \
-          -o target/coverage/tests.lcov
+          -o coverage/tests.lcov
     description: Generate lcov coverage report

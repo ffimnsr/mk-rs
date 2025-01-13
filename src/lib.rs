@@ -27,5 +27,8 @@ pub mod version;
 #[macro_use]
 pub mod macros;
 
+/// The utils module contains the utility functions used in the library
+pub mod utils;
+
 /// The execution stack module contains the stack used to track the execution of tasks
 pub use schema::ExecutionStack;

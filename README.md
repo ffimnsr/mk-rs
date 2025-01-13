@@ -22,6 +22,16 @@ Yet another simple task runner.
 - **Error Handling**: Control how errors are handled with `ignore_errors`.
 - **Verbose Output**: Enable verbose output for detailed logs.
 
+## Configuration format support
+
+Other supported file type configurations format:
+
+- JSON
+- TOML
+- Lua
+
+See example folder for sample configuration file.
+
 ## Installation
 
 Binary for different OS distribution can be downloaded [here](https://github.com/ffimnsr/mk-rs/releases). Linux, macOS, and Windows are supported.
@@ -420,16 +430,18 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 ## What's on the roadmap?
 
-- [ ] Add lua script as config file
+- [ ] Add global context for environment and output
+- [ ] Add interactive for commands that can accept stdin
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run
 - [ ] Add fuzzy finder for tasks
-- [ ] Add unit tests and benchmarks
+- [ ] Add more unit tests and benchmarks
 - [ ] Add support for npm scripts
 - [ ] Add fuzzer scripts for code fuzzing
+- [ ] Complete the code coverage
 - [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels

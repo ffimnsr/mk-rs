@@ -251,10 +251,12 @@ impl ContainerBuild {
 
 #[cfg(test)]
 mod test {
+  use anyhow::Ok;
+
   use super::*;
 
   #[test]
-  fn test_container_build_1() {
+  fn test_container_build_1() -> anyhow::Result<()> {
     let yaml = r#"
       container_build:
         image_name: my-image
@@ -270,7 +272,7 @@ mod test {
         force_rm: true
       verbose: false
     "#;
-    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
+    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml)?;
 
     assert_eq!(container_build.verbose, Some(false));
     assert_eq!(container_build.container_build.image_name, "my-image");
@@ -290,16 +292,17 @@ mod test {
     assert!(container_build.container_build.sbom);
     assert!(container_build.container_build.no_cache);
     assert!(container_build.container_build.force_rm);
+    Ok(())
   }
 
   #[test]
-  fn test_container_build_2() {
+  fn test_container_build_2() -> anyhow::Result<()> {
     let yaml = r#"
       container_build:
         image_name: my-image
         context: .
     "#;
-    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
+    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml)?;
 
     assert_eq!(container_build.verbose, None);
     assert_eq!(container_build.container_build.image_name, "my-image");
@@ -309,16 +312,18 @@ mod test {
     assert!(!container_build.container_build.sbom);
     assert!(!container_build.container_build.no_cache);
     assert!(!container_build.container_build.force_rm);
+
+    Ok(())
   }
 
   #[test]
-  fn test_container_build_3() {
+  fn test_container_build_3() -> anyhow::Result<()> {
     let yaml = r#"
       container_build:
         image_name: docker.io/my-image/my-image
         context: /hello/world
     "#;
-    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml).unwrap();
+    let container_build = serde_yaml::from_str::<ContainerBuild>(yaml)?;
 
     assert_eq!(container_build.verbose, None);
     assert_eq!(
@@ -331,5 +336,7 @@ mod test {
     assert!(!container_build.container_build.sbom);
     assert!(!container_build.container_build.no_cache);
     assert!(!container_build.container_build.force_rm);
+
+    Ok(())
   }
 }
