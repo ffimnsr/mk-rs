@@ -431,7 +431,9 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 ## What's on the roadmap?
 
 - [ ] Add global context for environment and output
-- [ ] Add interactive for commands that can accept stdin
+- [ ] Add support for makefile, markdown and org-mode as task config format
+- [ ] Add `update` subcommand so, command can check for update and also update itself
+- [ ] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
