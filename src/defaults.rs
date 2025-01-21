@@ -41,3 +41,36 @@ pub fn default_ignore_errors() -> bool {
 pub fn default_node_package_manager() -> String {
   "npm".to_string()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_default_ignore_errors() {
+    let result = default_ignore_errors();
+    assert!(!result);
+  }
+
+  #[test]
+  fn test_default_node_package_manager() {
+    let result = default_node_package_manager();
+    assert_eq!(result, "npm");
+    assert_eq!(result.len(), 3);
+    assert!(result.is_ascii());
+  }
+
+  #[test]
+  fn test_default_shell() {
+    let result = default_shell();
+    assert_eq!(result, "sh");
+    assert_eq!(result.len(), 2);
+    assert!(result.is_ascii());
+  }
+
+  #[test]
+  fn test_default_verbose() {
+    let result = default_verbose();
+    assert!(result);
+  }
+}
