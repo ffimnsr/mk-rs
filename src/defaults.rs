@@ -1,12 +1,15 @@
+use crate::schema::Shell;
+
 /// Default value for `shell` field
 ///
 /// ```
 /// # use mk_lib::defaults::default_shell;
+/// # use mk_lib::schema::Shell;
 /// let a = default_shell();
-/// assert_eq!(a, "sh");
+/// assert_eq!(a, Shell::String("sh".to_string()));
 /// ```
-pub fn default_shell() -> String {
-  "sh".to_string()
+pub fn default_shell() -> Shell {
+  Shell::String("sh".to_string())
 }
 
 /// Default value for `verbose` field
@@ -63,9 +66,8 @@ mod tests {
   #[test]
   fn test_default_shell() {
     let result = default_shell();
-    assert_eq!(result, "sh");
-    assert_eq!(result.len(), 2);
-    assert!(result.is_ascii());
+    assert_eq!(result.cmd(), "sh".to_string());
+    assert_eq!(result.args().len(), 1);
   }
 
   #[test]

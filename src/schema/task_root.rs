@@ -225,7 +225,6 @@ mod test {
       if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
         assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
         assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.ignore_errors, Some(false));
         assert_eq!(local_run.verbose, Some(false));
       } else {
@@ -249,7 +248,6 @@ mod test {
       if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
         assert_eq!(local_run.command, "echo \"Hello, World 2!\"");
         assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.ignore_errors, Some(false));
         assert_eq!(local_run.verbose, Some(false));
       } else {
@@ -273,7 +271,6 @@ mod test {
       if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
         assert_eq!(local_run.command, "echo \"Hello, World 3!\"");
         assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.ignore_errors, Some(false));
         assert_eq!(local_run.verbose, Some(false));
       } else {
@@ -313,7 +310,6 @@ mod test {
       if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
         assert_eq!(local_run.command, "echo \"Hello, World 1!\"");
         assert_eq!(local_run.work_dir, None);
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.ignore_errors, None);
         assert_eq!(local_run.verbose, None);
       } else {

@@ -8,11 +8,7 @@ use indicatif::{
 use rand::Rng as _;
 use serde::Deserialize;
 
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
-use std::process::Command as ProcessCommand;
+use std::io::BufRead as _;
 use std::time::{
   Duration,
   Instant,
@@ -26,19 +22,13 @@ use super::{
   is_shell_command,
   CommandRunner,
   Precondition,
+  Shell,
   TaskContext,
   TaskDependency,
 };
-use crate::defaults::{
-  default_shell,
-  default_verbose,
-};
-use crate::schema::get_output_handler;
+use crate::defaults::default_verbose;
+use crate::run_shell_command;
 use crate::utils::deserialize_environment;
-use crate::{
-  handle_output,
-  run_shell_command,
-};
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
@@ -74,7 +64,7 @@ pub struct TaskArgs {
 
   /// The shell to use when running the task
   #[serde(default)]
-  pub shell: Option<String>,
+  pub shell: Option<Shell>,
 
   /// Ignore errors if the task fails
   #[serde(default)]
@@ -100,36 +90,14 @@ impl Task {
     }
   }
 
-  fn execute(&self, context: &TaskContext, command: &str) -> anyhow::Result<()> {
+  fn execute(&self, context: &mut TaskContext, command: &str) -> anyhow::Result<()> {
     assert!(!command.is_empty());
 
-    let ignore_errors = context.ignore_errors();
-    let verbose = context.verbose();
-    let shell: &str = &context.shell();
-
-    let stdout = get_output_handler(verbose);
-    let stderr = get_output_handler(verbose);
-
-    let mut cmd = ProcessCommand::new(shell);
-    cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
-
-    // Inject environment variables
-    for (key, value) in context.env_vars.iter() {
-      cmd.env(key, value);
+    TaskArgs {
+      commands: vec![CommandRunner::CommandRun(command.to_string())],
+      ..Default::default()
     }
-
-    let mut cmd = cmd.spawn()?;
-    if verbose {
-      handle_output!(cmd.stdout, context);
-      handle_output!(cmd.stderr, context);
-    }
-
-    let status = cmd.wait()?;
-    if !status.success() && !ignore_errors {
-      anyhow::bail!("Command failed - {}", command);
-    }
-
-    Ok(())
+    .run(context)
   }
 }
 
@@ -141,7 +109,6 @@ impl TaskArgs {
     let tick_interval = Duration::from_millis(80);
 
     if let Some(shell) = &self.shell {
-      let shell: &str = shell;
       context.set_shell(shell);
     }
 
@@ -154,7 +121,7 @@ impl TaskArgs {
     }
 
     // Load environment variables from the task environment and env files field
-    let defined_env = self.load_env()?;
+    let defined_env = self.load_env(context)?;
     let additional_env = self.load_env_file()?;
 
     context.extend_env_vars(defined_env);
@@ -232,10 +199,10 @@ impl TaskArgs {
     Ok(())
   }
 
-  fn load_env(&self) -> anyhow::Result<HashMap<String, String>> {
+  fn load_env(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
     let mut local_env: HashMap<String, String> = HashMap::new();
     for (key, value) in &self.environment {
-      let value = self.get_env_value(value)?;
+      let value = self.get_env_value(context, value)?;
       local_env.insert(key.clone(), value);
     }
 
@@ -258,19 +225,19 @@ impl TaskArgs {
     Ok(local_env)
   }
 
-  fn get_env_value(&self, value_in: &str) -> anyhow::Result<String> {
+  fn get_env_value(&self, context: &TaskContext, value_in: &str) -> anyhow::Result<String> {
     if is_shell_command(value_in)? {
       let verbose = self.verbose();
-      let shell: &str = &self.shell();
-      let output = run_shell_command!(value_in, shell, verbose);
+      let mut cmd = self
+        .shell
+        .as_ref()
+        .map(|shell| shell.proc())
+        .unwrap_or_else(|| context.shell().proc());
+      let output = run_shell_command!(value_in, cmd, verbose);
       Ok(output)
     } else {
       Ok(value_in.to_string())
     }
-  }
-
-  fn shell(&self) -> String {
-    self.shell.clone().unwrap_or(default_shell())
   }
 
   fn verbose(&self) -> bool {
@@ -306,7 +273,6 @@ mod test {
         if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
           assert_eq!(local_run.command, "echo \"Hello, World!\"");
           assert_eq!(local_run.work_dir, None);
-          assert_eq!(local_run.shell, "sh");
           assert_eq!(local_run.ignore_errors, Some(false));
           assert_eq!(local_run.verbose, Some(false));
         }
@@ -347,7 +313,6 @@ mod test {
         if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
           assert_eq!(local_run.command, "echo 'Hello, World!'");
           assert_eq!(local_run.work_dir, None);
-          assert_eq!(local_run.shell, "sh");
           assert_eq!(local_run.ignore_errors, Some(false));
           assert_eq!(local_run.verbose, Some(false));
         }
@@ -379,7 +344,6 @@ mod test {
         if let CommandRunner::LocalRun(local_run) = &task.commands[0] {
           assert_eq!(local_run.command, "echo 'Hello, World!'");
           assert_eq!(local_run.work_dir, None);
-          assert_eq!(local_run.shell, "sh");
           assert_eq!(local_run.ignore_errors, None);
           assert_eq!(local_run.verbose, None);
         }

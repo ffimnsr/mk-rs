@@ -2,8 +2,6 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::process::Command as ProcessCommand;
-
 use std::thread;
 
 use crate::handle_output;
@@ -44,13 +42,13 @@ impl CommandRunner {
 
     let ignore_errors = context.ignore_errors();
     let verbose = context.verbose();
-    let shell: &str = &context.shell();
+    let shell = context.shell();
 
     let stdout = get_output_handler(verbose);
     let stderr = get_output_handler(verbose);
 
-    let mut cmd = ProcessCommand::new(shell);
-    cmd.arg("-c").arg(command).stdout(stdout).stderr(stderr);
+    let mut cmd = shell.proc();
+    cmd.arg(command).stdout(stdout).stderr(stderr);
 
     // Inject environment variables
     for (key, value) in context.env_vars.iter() {
@@ -88,7 +86,6 @@ mod test {
 
       if let CommandRunner::LocalRun(local_run) = command {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.ignore_errors, Some(false));
         assert_eq!(local_run.verbose, Some(false));
@@ -110,7 +107,6 @@ mod test {
 
       if let CommandRunner::LocalRun(local_run) = command {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.ignore_errors, None);
         assert_eq!(local_run.verbose, None);
@@ -132,7 +128,6 @@ mod test {
       let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun(local_run) = command {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.ignore_errors, Some(true));
         assert_eq!(local_run.verbose, None);
@@ -154,7 +149,6 @@ mod test {
       let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun(local_run) = command {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, None);
         assert_eq!(local_run.ignore_errors, None);
         assert_eq!(local_run.verbose, Some(false));
@@ -176,7 +170,6 @@ mod test {
       let command = serde_yaml::from_str::<CommandRunner>(yaml)?;
       if let CommandRunner::LocalRun(local_run) = command {
         assert_eq!(local_run.command, "echo \"Hello, World!\"");
-        assert_eq!(local_run.shell, "sh");
         assert_eq!(local_run.work_dir, Some("/tmp".into()));
         assert_eq!(local_run.ignore_errors, None);
         assert_eq!(local_run.verbose, None);

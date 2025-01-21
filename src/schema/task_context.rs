@@ -14,15 +14,19 @@ use crate::defaults::{
 
 use super::{
   ExecutionStack,
+  Shell,
   TaskRoot,
 };
 
+/// Used to pass information to tasks
+/// This use arc to allow for sharing of data between tasks
+/// and allow parallel runs of tasks
 pub struct TaskContext {
   pub task_root: Arc<TaskRoot>,
   pub execution_stack: ExecutionStack,
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
-  pub shell: Option<String>,
+  pub shell: Option<Arc<Shell>>,
   pub ignore_errors: Option<bool>,
   pub verbose: Option<bool>,
   pub is_nested: bool,
@@ -103,8 +107,9 @@ impl TaskContext {
     self.env_vars.extend(iter);
   }
 
-  pub fn set_shell(&mut self, shell: &str) {
-    self.shell = Some(shell.to_string());
+  pub fn set_shell(&mut self, shell: &Shell) {
+    let shell = Arc::new(Shell::from_shell(shell));
+    self.shell = Some(shell);
   }
 
   pub fn set_ignore_errors(&mut self, ignore_errors: bool) {
@@ -115,8 +120,8 @@ impl TaskContext {
     self.verbose = Some(verbose);
   }
 
-  pub fn shell(&self) -> String {
-    self.shell.clone().unwrap_or(default_shell())
+  pub fn shell(&self) -> Arc<Shell> {
+    self.shell.clone().unwrap_or_else(|| Arc::new(default_shell()))
   }
 
   pub fn ignore_errors(&self) -> bool {
@@ -136,7 +141,7 @@ mod test {
   fn test_task_context_1() -> anyhow::Result<()> {
     {
       let context = TaskContext::empty();
-      assert_eq!(context.shell(), "sh");
+      assert_eq!(context.shell().cmd(), "sh".to_string());
       assert!(!context.ignore_errors());
       assert!(context.verbose());
     }
@@ -148,8 +153,8 @@ mod test {
   fn test_task_context_2() -> anyhow::Result<()> {
     {
       let mut context = TaskContext::empty();
-      context.set_shell("bash");
-      assert_eq!(context.shell(), "bash");
+      context.set_shell(&Shell::String("bash".to_string()));
+      assert_eq!(context.shell().cmd(), "bash".to_string());
     }
 
     Ok(())

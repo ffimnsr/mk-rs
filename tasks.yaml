@@ -125,3 +125,9 @@ tasks:
           --keep-only 'src/*' \
           -o coverage/tests.lcov
     description: Generate lcov coverage report
+  python:
+    commands:
+      - command: ls -lah
+      - command: python3
+        interactive: true
+    description: Serve the project

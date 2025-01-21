@@ -16,7 +16,7 @@ macro_rules! handle_output {
 
 #[macro_export]
 macro_rules! run_shell_command {
-  ($value:expr, $shell:expr, $verbose:expr) => {{
+  ($value:expr, $cmd:expr, $verbose:expr) => {{
     let arg = $value.trim_start_matches("$(").trim_end_matches(")");
     let stdout = if $verbose {
       std::process::Stdio::piped()
@@ -24,8 +24,7 @@ macro_rules! run_shell_command {
       std::process::Stdio::null()
     };
 
-    let mut cmd = std::process::Command::new($shell);
-    let mut child = cmd.arg("-c").arg(arg).stdout(stdout).spawn()?;
+    let mut child = $cmd.arg(arg).stdout(stdout).spawn()?;
     let stdout = child
       .stdout
       .take()

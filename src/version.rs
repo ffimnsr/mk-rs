@@ -30,11 +30,7 @@ mod tests {
     let version: &str = &get_version_digits();
     let re_1 = Regex::new(r"^\d+\.\d+\.\d+$")?;
     let re_2 = Regex::new(r"^\d+\.\d+\.\d+ \(rev [a-f0-9]+\)$")?;
-    assert!(
-      version == "unknown" ||
-      re_1.find(version).is_some() ||
-      re_2.find(version).is_some()
-    );
+    assert!(version == "unknown" || re_1.find(version).is_some() || re_2.find(version).is_some());
 
     Ok(())
   }

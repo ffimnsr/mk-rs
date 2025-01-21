@@ -29,6 +29,7 @@ use prettytable::{
   row,
   Table,
 };
+use reqwest::blocking::Client;
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 
@@ -89,6 +90,7 @@ enum Command {
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
   Secrets(Secrets),
+  Update,
 }
 
 /// The CLI entry
@@ -135,6 +137,9 @@ impl CliEntry {
       Some(Command::Secrets(secrets)) => {
         secrets.execute()?;
       },
+      Some(Command::Update) => {
+        self.update_mk()?;
+      },
       None => {
         if let Some(task_name) = &self.args.task_name {
           self.run_task(task_name)?;
@@ -142,6 +147,44 @@ impl CliEntry {
           anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
         }
       },
+    }
+
+    Ok(())
+  }
+
+  fn update_mk(&self) -> anyhow::Result<()> {
+    println!("Checking for updates...");
+    let current_version = VERSION.as_str();
+    println!("Current version: {}", current_version);
+
+    // Extract semver without git hash
+    let current_semver = current_version.split_whitespace().next().unwrap_or("0.0.0");
+
+    // GitHub API endpoint for latest release
+    let client = Client::new();
+    let resp = client
+      .get("https://api.github.com/repos/ffimnsr/mk-rs/releases/latest")
+      .header("User-Agent", "mk-rs/updater")
+      .send()?;
+
+    if !resp.status().is_success() {
+      anyhow::bail!("Failed to check for updates: {}", resp.status());
+    }
+
+    let release: serde_json::Value = resp.json()?;
+    let latest_version = release["tag_name"]
+      .as_str()
+      .ok_or_else(|| anyhow::anyhow!("Invalid release tag"))?
+      .trim_start_matches('v');
+
+    if latest_version == current_semver {
+      println!("You are using the latest version.");
+    } else {
+      println!(
+        "New version {} is available (you have {})",
+        latest_version, current_semver
+      );
+      println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
     }
 
     Ok(())

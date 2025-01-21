@@ -1,6 +1,7 @@
 mod command;
 mod include;
 mod precondition;
+mod shell;
 mod task;
 mod task_context;
 mod task_dependency;
@@ -20,6 +21,7 @@ pub type ExecutionStack = Arc<Mutex<HashSet<String>>>;
 pub use command::*;
 pub use include::*;
 pub use precondition::*;
+pub use shell::*;
 pub use task::*;
 pub use task_context::*;
 pub use task_dependency::*;

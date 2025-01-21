@@ -18,13 +18,17 @@ pub enum Include {
 impl Include {
   pub fn capture(&self) -> anyhow::Result<()> {
     match self {
-      Include::String(_) => self.capture_root(),
+      Include::String(name) => self.capture_root(name),
       Include::Include(args) => args.capture_root(),
     }
   }
 
-  fn capture_root(&self) -> anyhow::Result<()> {
-    unimplemented!()
+  fn capture_root(&self, name: &str) -> anyhow::Result<()> {
+    IncludeArgs {
+      name: name.to_string(),
+      overwrite: false,
+    }
+    .capture_root()
   }
 }
 

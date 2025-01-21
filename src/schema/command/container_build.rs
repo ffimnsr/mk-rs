@@ -11,10 +11,7 @@ use git2::Repository;
 use serde::Deserialize;
 use which::which;
 
-use crate::defaults::{
-  default_shell,
-  default_verbose,
-};
+use crate::defaults::default_verbose;
 use crate::schema::{
   get_output_handler,
   is_shell_command,
@@ -170,16 +167,12 @@ impl ContainerBuild {
     Ok(())
   }
 
-  fn shell(&self, context: &TaskContext) -> String {
-    context.shell.clone().unwrap_or(default_shell())
-  }
-
   fn get_tag(&self, context: &TaskContext, tag_in: &str) -> anyhow::Result<String> {
     let verbose = self.verbose.or(context.verbose).unwrap_or(default_verbose());
 
     if is_shell_command(tag_in)? {
-      let shell: &str = &self.shell(context);
-      let output = run_shell_command!(tag_in, shell, verbose);
+      let mut cmd = context.shell().proc();
+      let output = run_shell_command!(tag_in, cmd, verbose);
       Ok(output)
     } else if is_template_command(tag_in)? {
       let output = get_template_command_value!(tag_in, context);
@@ -214,8 +207,8 @@ impl ContainerBuild {
         },
         _ => {
           let value = if is_shell_command(value)? {
-            let shell: &str = &context.shell.clone().unwrap_or(default_shell());
-            run_shell_command!(value, shell, verbose)
+            let mut cmd = context.shell().proc();
+            run_shell_command!(value, cmd, verbose)
           } else if is_template_command(value)? {
             get_template_command_value!(value, context)
           } else {

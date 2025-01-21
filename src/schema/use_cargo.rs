@@ -1,11 +1,10 @@
+use hashbrown::HashMap;
 use serde::Deserialize;
+
+use super::Task;
 
 #[derive(Debug, Deserialize)]
 pub struct UseCargoArgs {
-  /// The package manager to use
-  #[serde(default)]
-  pub package_manager: String,
-
   /// The working directory to run the command in
   #[serde(default)]
   pub work_dir: Option<String>,
@@ -19,21 +18,49 @@ pub enum UseCargo {
 }
 
 impl UseCargo {
-  pub fn capture(&self) -> anyhow::Result<()> {
+  pub fn capture(&self) -> anyhow::Result<HashMap<String, Task>> {
     match self {
       UseCargo::Bool(true) => self.capture_tasks(),
       UseCargo::UseCargo(args) => args.capture_tasks(),
-      _ => Ok(()),
+      _ => Ok(HashMap::new()),
     }
   }
 
-  fn capture_tasks(&self) -> anyhow::Result<()> {
-    unimplemented!()
+  fn capture_tasks(&self) -> anyhow::Result<HashMap<String, Task>> {
+    UseCargoArgs { work_dir: None }.capture_tasks()
   }
 }
 
 impl UseCargoArgs {
-  pub fn capture_tasks(&self) -> anyhow::Result<()> {
-    unimplemented!()
+  pub fn capture_tasks(&self) -> anyhow::Result<HashMap<String, Task>> {
+    let cargo_commands = [
+      "add",
+      "bench",
+      "build",
+      "check",
+      "clean",
+      "clippy",
+      "doc",
+      "fix",
+      "fmt",
+      "init",
+      "install",
+      "miri",
+      "new",
+      "publish",
+      "remove",
+      "report",
+      "run",
+      "search",
+      "test",
+      "uninstall",
+      "update",
+    ];
+
+    let hm: HashMap<String, Task> = cargo_commands
+      .iter()
+      .map(|cmd| (cmd.to_string(), Task::String(format!("cargo {}", cmd))))
+      .collect();
+    Ok(hm)
   }
 }

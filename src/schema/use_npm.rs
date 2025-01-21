@@ -75,7 +75,7 @@ impl UseNpmArgs {
     let reader = BufReader::new(file);
 
     let package: NpmPackage = serde_json::from_reader(reader)?;
-    let package_manager = self
+    let package_manager: &str = &self
       .package_manager
       .clone()
       .unwrap_or_else(default_node_package_manager);

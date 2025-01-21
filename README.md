@@ -432,7 +432,6 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 - [ ] Add global context for environment and output
 - [ ] Add support for makefile, markdown and org-mode as task config format
-- [ ] Add `update` subcommand so, command can check for update and also update itself
 - [ ] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add implementation to use vault secrets
@@ -441,7 +440,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add support for trigger reload when on cargo run
 - [ ] Add fuzzy finder for tasks
 - [ ] Add more unit tests and benchmarks
-- [ ] Add support for npm scripts
+- [ ] Add support for npm commands
 - [ ] Add fuzzer scripts for code fuzzing
 - [ ] Complete the code coverage
 - [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
