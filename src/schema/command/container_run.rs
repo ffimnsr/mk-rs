@@ -23,7 +23,7 @@ use crate::schema::{
   TaskContext,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ContainerRun {
   /// The command to run in the container
   pub container_command: Vec<String>,

@@ -16,7 +16,7 @@ mod container_run;
 mod local_run;
 mod task_run;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum CommandRunner {
   ContainerBuild(container_build::ContainerBuild),
@@ -27,7 +27,7 @@ pub enum CommandRunner {
 }
 
 impl CommandRunner {
-  pub fn execute(&self, context: &mut TaskContext) -> anyhow::Result<()> {
+  pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
     match self {
       CommandRunner::ContainerBuild(container_build) => container_build.execute(context),
       CommandRunner::ContainerRun(container_run) => container_run.execute(context),

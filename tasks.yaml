@@ -131,3 +131,21 @@ tasks:
       - command: python3
         interactive: true
     description: Serve the project
+  parallel:
+    commands:
+      - command: |
+          sleep 5
+          echo "Hello"
+      - command: |
+          sleep 5
+          echo "World"
+    description: Run the project in parallel
+    parallel: true
+  parallel2:
+    commands:
+      - task: check
+      - command: |
+          sleep 5
+          echo "World"
+    description: Run the project in parallel
+    parallel: true

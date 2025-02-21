@@ -21,6 +21,7 @@ use super::{
 /// Used to pass information to tasks
 /// This use arc to allow for sharing of data between tasks
 /// and allow parallel runs of tasks
+#[derive(Clone)]
 pub struct TaskContext {
   pub task_root: Arc<TaskRoot>,
   pub execution_stack: ExecutionStack,

@@ -20,7 +20,7 @@ use crate::schema::{
   TaskContext,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct LocalRun {
   /// The command to run
   pub command: String,
@@ -112,6 +112,12 @@ impl LocalRun {
     }
 
     Ok(())
+  }
+
+  /// Check if the local run task is parallel safe
+  /// If the task is interactive, it is not parallel safe
+  pub fn is_parallel_safe(&self) -> bool {
+    !self.interactive()
   }
 
   fn test(&self, context: &TaskContext) -> anyhow::Result<()> {

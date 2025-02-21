@@ -6,7 +6,7 @@ use crate::defaults::{
 };
 use crate::schema::TaskContext;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TaskRun {
   /// The name of the task to run
   pub task: String,

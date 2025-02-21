@@ -9,6 +9,11 @@ use rand::Rng as _;
 use serde::Deserialize;
 
 use std::io::BufRead as _;
+use std::sync::mpsc::{
+  channel,
+  Receiver,
+  Sender,
+};
 use std::time::{
   Duration,
   Instant,
@@ -66,6 +71,11 @@ pub struct TaskArgs {
   #[serde(default)]
   pub shell: Option<Shell>,
 
+  /// Run the commands in parallel
+  /// It should only work if the task are local_run commands
+  #[serde(default)]
+  pub parallel: Option<bool>,
+
   /// Ignore errors if the task fails
   #[serde(default)]
   pub ignore_errors: Option<bool>,
@@ -80,6 +90,13 @@ pub struct TaskArgs {
 pub enum Task {
   String(String),
   Task(Box<TaskArgs>),
+}
+
+#[derive(Debug)]
+pub struct CommandResult {
+  index: usize,
+  success: bool,
+  message: String,
 }
 
 impl Task {
@@ -104,6 +121,9 @@ impl Task {
 impl TaskArgs {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     assert!(!self.commands.is_empty());
+
+    // Validate parallel execution requirements early
+    self.validate_parallel_commands()?;
 
     let started = Instant::now();
     let tick_interval = Duration::from_millis(80);
@@ -178,18 +198,141 @@ impl TaskArgs {
       }
     }
 
-    let command_pb = context.multi.add(ProgressBar::new(self.commands.len() as u64));
-    command_pb.set_style(pb_style);
-    command_pb.set_message("Running task command...");
-    command_pb.enable_steady_tick(tick_interval);
-    for (i, command) in self.commands.iter().enumerate() {
-      thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
-      command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));
-      command.execute(context)?;
-      command_pb.inc(1);
+    if self.parallel.unwrap_or(false) {
+      self.execute_commands_parallel(context)?;
+    } else {
+      let command_pb = context.multi.add(ProgressBar::new(self.commands.len() as u64));
+      command_pb.set_style(pb_style);
+      command_pb.set_message("Running task command...");
+      command_pb.enable_steady_tick(tick_interval);
+      for (i, command) in self.commands.iter().enumerate() {
+        thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
+        command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));
+        command.execute(context)?;
+        command_pb.inc(1);
+      }
+
+      let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
+      if context.is_nested {
+        command_pb.finish_and_clear();
+      } else {
+        command_pb.finish_with_message(message);
+      }
     }
 
-    let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
+    Ok(())
+  }
+
+  /// Validate if the task can be run in parallel
+  fn validate_parallel_commands(&self) -> anyhow::Result<()> {
+    if !self.parallel.unwrap_or(false) {
+      return Ok(());
+    }
+
+    for command in &self.commands {
+      match command {
+        CommandRunner::LocalRun(local_run) if local_run.is_parallel_safe() => continue,
+        CommandRunner::LocalRun(_) => {
+          return Err(anyhow::anyhow!(
+            "Interactive local commands cannot be run in parallel"
+          ))
+        },
+        _ => {
+          return Err(anyhow::anyhow!(
+            "Parallel execution is only supported for non-interactive local commands"
+          ))
+        },
+      }
+    }
+    Ok(())
+  }
+
+  /// Execute the commands in parallel
+  fn execute_commands_parallel(&self, context: &TaskContext) -> anyhow::Result<()> {
+    let (tx, rx): (Sender<CommandResult>, Receiver<CommandResult>) = channel();
+    let mut handles = vec![];
+    let command_count = self.commands.len();
+
+    // Clone all commands upfront to avoid borrowing issues
+    let commands: Vec<_> = self.commands.to_vec();
+
+    // Track results in order
+    let mut completed = 0;
+
+    for (i, command) in commands.into_iter().enumerate() {
+      let tx = tx.clone();
+      let context = context.clone();
+
+      let handle = thread::spawn(move || {
+        let result = match command.execute(&context) {
+          Ok(_) => CommandResult {
+            index: i,
+            success: true,
+            message: format!("Command {} completed successfully", i + 1),
+          },
+          Err(e) => CommandResult {
+            index: i,
+            success: false,
+            message: format!("Command {} failed: {}", i + 1, e),
+          },
+        };
+        tx.send(result).unwrap();
+      });
+
+      handles.push(handle);
+    }
+
+    // Set up progress bar
+    let command_pb = context.multi.add(ProgressBar::new(command_count as u64));
+    command_pb.set_style(ProgressStyle::with_template(
+      "{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ",
+    )?);
+    command_pb.set_prefix("?/?");
+    command_pb.set_message("Running task commands in parallel...");
+    command_pb.enable_steady_tick(Duration::from_millis(80));
+
+    // Process results as they come in
+    let mut failures = Vec::new();
+
+    while completed < command_count {
+      match rx.recv() {
+        Ok(result) => {
+          let index = result.index;
+          if !result.success && !context.ignore_errors() {
+            failures.push(result.message);
+          }
+
+          completed += 1;
+          command_pb.set_prefix(format!("{}/{}", completed, command_count));
+          command_pb.inc(1);
+
+          // Update progress message with latest completed command
+          command_pb.set_message(format!(
+            "Running task commands in parallel (completed {})",
+            index + 1
+          ));
+        },
+        Err(e) => {
+          command_pb.finish_with_message("Error receiving command results");
+          return Err(anyhow::anyhow!("Channel error: {}", e));
+        },
+      }
+    }
+
+    // Wait for all threads to complete
+    for handle in handles {
+      handle.join().unwrap();
+    }
+
+    if !failures.is_empty() {
+      command_pb.finish_with_message("Some commands failed");
+
+      // Sort failures by command index for clearer error reporting
+      failures.sort();
+      return Err(anyhow::anyhow!("Failed commands:\n{}", failures.join("\n")));
+    }
+
+    let message = "Commands completed in parallel";
     if context.is_nested {
       command_pb.finish_and_clear();
     } else {
@@ -672,5 +815,51 @@ mod test {
 
       Ok(())
     }
+  }
+
+  #[test]
+  fn test_parallel_interactive_rejected() -> anyhow::Result<()> {
+    let yaml = r#"
+          commands:
+            - command: "echo hello"
+              interactive: true
+            - command: "echo world"
+          parallel: true
+      "#;
+
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+    let mut context = TaskContext::empty();
+
+    if let Task::Task(task) = task {
+      let result = task.run(&mut context);
+      assert!(result.is_err());
+      assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Interactive local commands cannot be run in parallel"));
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_parallel_non_interactive_accepted() -> anyhow::Result<()> {
+    let yaml = r#"
+          commands:
+            - command: "echo hello"
+              interactive: false
+            - command: "echo world"
+          parallel: true
+      "#;
+
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+    let mut context = TaskContext::empty();
+
+    if let Task::Task(task) = task {
+      let result = task.run(&mut context);
+      assert!(result.is_ok());
+    }
+
+    Ok(())
   }
 }

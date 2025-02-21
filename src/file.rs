@@ -7,7 +7,10 @@ pub trait ToUtf8 {
   fn to_utf8(&self) -> anyhow::Result<&str>;
 }
 
+/// Implement `ToUtf8` for `OsStr`
 impl ToUtf8 for OsStr {
+  /// Convert `OsStr` to `&str`
+  /// This function will return an error if the conversion fails
   fn to_utf8(&self) -> anyhow::Result<&str> {
     self
       .to_str()
@@ -15,7 +18,9 @@ impl ToUtf8 for OsStr {
   }
 }
 
+/// Implement `ToUtf8` for `Path`
 impl ToUtf8 for Path {
+  /// Convert `Path` to `&str`
   fn to_utf8(&self) -> anyhow::Result<&str> {
     self.as_os_str().to_utf8()
   }

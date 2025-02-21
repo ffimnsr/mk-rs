@@ -24,7 +24,7 @@ use crate::{
   run_shell_command,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ContainerBuildArgs {
   /// The image name to build
   pub image_name: String,
@@ -61,7 +61,7 @@ pub struct ContainerBuildArgs {
   pub force_rm: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ContainerBuild {
   /// The command to run in the container
   pub container_build: ContainerBuildArgs,
