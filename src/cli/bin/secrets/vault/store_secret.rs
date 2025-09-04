@@ -12,14 +12,12 @@ use std::path::Path;
 
 use clap::Args;
 use mk_lib::file::ToUtf8 as _;
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::types::SecretKeyTrait;
-use pgp::{
+use pgp::composed::{
   ArmorOptions,
   Deserializable,
-  Message,
   SignedSecretKey,
 };
+use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use rand::thread_rng;
 
 use crate::secrets::context::Context;
@@ -53,7 +51,7 @@ pub struct StoreSecret {
 impl StoreSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
-    let value: &str = &match &self.value {
+    let value: String = match &self.value {
       Some(value) => value.clone(),
       None => {
         let stdin = io::stdin();
@@ -112,17 +110,21 @@ impl StoreSecret {
       let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
       signed_secret_key.verify()?;
 
-      // Get the public key
-      let pubkey = signed_secret_key.public_key();
+      // Get the public key (signed form implements PublicKeyTrait)
+      let pubkey = signed_secret_key.signed_public_key();
 
-      // Encrypt the value
-      let message = Message::new_literal("none", value);
-      let encrypted_message =
-        message.encrypt_to_keys_seipdv1(&mut thread_rng(), SymmetricKeyAlgorithm::AES128, &[&pubkey])?;
+      // Encrypt the value using MessageBuilder and write armored output
+      let mut rng = thread_rng();
+      let builder = pgp::composed::MessageBuilder::from_bytes("", value.into_bytes())
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+      // Add recipient public key(s)
+      let mut builder = builder;
+      builder.encrypt_to_key(&mut rng, &pubkey)?;
+      let armored = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
 
-      // Save the encrypted message to a file
+      // Save the armored encrypted message to a file
       let mut writer = File::create(data_path)?;
-      encrypted_message.to_armored_writer(&mut writer, ArmorOptions::default())?;
+      write!(writer, "{}", armored)?;
       writer.flush()?;
 
       println!("Secret stored at {}", secret_path.to_utf8()?);

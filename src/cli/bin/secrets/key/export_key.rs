@@ -3,7 +3,7 @@ use std::io::Write as _;
 use std::path::Path;
 
 use clap::Args;
-use pgp::{
+use pgp::composed::{
   ArmorOptions,
   Deserializable as _,
   SignedSecretKey,

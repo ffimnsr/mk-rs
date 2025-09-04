@@ -6,11 +6,11 @@ use std::path::Path;
 
 use clap::Args;
 use console::style;
-use pgp::types::PublicKeyTrait;
-use pgp::{
+use pgp::composed::{
   Deserializable as _,
   SignedSecretKey,
 };
+use pgp::types::KeyDetails;
 use prettytable::format::consts;
 use prettytable::{
   row,

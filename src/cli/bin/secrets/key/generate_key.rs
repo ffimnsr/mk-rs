@@ -7,7 +7,7 @@ use std::path::Path;
 
 use clap::Args;
 use mk_lib::file::ToUtf8;
-use pgp::{
+use pgp::composed::{
   ArmorOptions,
   KeyType,
   SecretKeyParamsBuilder,
@@ -71,7 +71,7 @@ impl GenerateKey {
     let private_key = private_key_params.generate(thread_rng())?;
 
     // Use the private key to sign itself and put empty password
-    let signed_private_key = private_key.sign(&mut thread_rng(), String::new)?;
+    let signed_private_key = private_key.sign(&mut thread_rng(), &pgp::types::Password::empty())?;
 
     // Save the armored private key to a file
     let mut file = File::create(file_path.clone())?;

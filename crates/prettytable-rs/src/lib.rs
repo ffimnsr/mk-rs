@@ -150,12 +150,12 @@ impl TableSlice<'_> {
   }
 
   /// Returns an iterator over the immutable cells of the column specified by `column`
-  pub fn column_iter(&self, column: usize) -> ColumnIter {
+  pub fn column_iter(&self, column: usize) -> ColumnIter<'_> {
     ColumnIter(self.rows.iter(), column)
   }
 
   /// Returns an iterator over immutable rows
-  pub fn row_iter(&self) -> Iter<Row> {
+  pub fn row_iter(&self) -> Iter<'_, Row> {
     self.rows.iter()
   }
 
@@ -363,22 +363,22 @@ impl Table {
   }
 
   /// Return an iterator over the immutable cells of the column specified by `column`
-  pub fn column_iter(&self, column: usize) -> ColumnIter {
+  pub fn column_iter(&self, column: usize) -> ColumnIter<'_> {
     ColumnIter(self.rows.iter(), column)
   }
 
   /// Return an iterator over the mutable cells of the column specified by `column`
-  pub fn column_iter_mut(&mut self, column: usize) -> ColumnIterMut {
+  pub fn column_iter_mut(&mut self, column: usize) -> ColumnIterMut<'_> {
     ColumnIterMut(self.rows.iter_mut(), column)
   }
 
   /// Returns an iterator over immutable rows
-  pub fn row_iter(&self) -> Iter<Row> {
+  pub fn row_iter(&self) -> Iter<'_, Row> {
     self.rows.iter()
   }
 
   /// Returns an iterator over mutable rows
-  pub fn row_iter_mut(&mut self) -> IterMut<Row> {
+  pub fn row_iter_mut(&mut self) -> IterMut<'_, Row> {
     self.rows.iter_mut()
   }
 

@@ -146,12 +146,12 @@ impl Row {
   }
 
   /// Returns an immutable iterator over cells
-  pub fn iter(&self) -> Iter<Cell> {
+  pub fn iter(&self) -> Iter<'_, Cell> {
     self.cells.iter()
   }
 
   /// Returns an mutable iterator over cells
-  pub fn iter_mut(&mut self) -> IterMut<Cell> {
+  pub fn iter_mut(&mut self) -> IterMut<'_, Cell> {
     self.cells.iter_mut()
   }
 

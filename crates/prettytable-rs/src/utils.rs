@@ -1,7 +1,6 @@
 //! Internal only utilities
 use std::io::{
   Error,
-  ErrorKind,
   Write,
 };
 use std::{
@@ -44,12 +43,7 @@ impl Write for StringWriter {
   fn write(&mut self, data: &[u8]) -> Result<usize, Error> {
     let string = match str::from_utf8(data) {
       Ok(s) => s,
-      Err(e) => {
-        return Err(Error::new(
-          ErrorKind::Other,
-          format!("Cannot decode utf8 string : {}", e),
-        ))
-      },
+      Err(e) => return Err(Error::other(format!("Cannot decode utf8 string : {}", e))),
     };
     self.string.push_str(string);
     Ok(data.len())

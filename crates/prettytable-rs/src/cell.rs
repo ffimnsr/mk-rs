@@ -328,7 +328,7 @@ impl Cell {
 fn term_error_to_io_error(te: ::term::Error) -> Error {
   match te {
     ::term::Error::Io(why) => why,
-    _ => Error::new(::std::io::ErrorKind::Other, te),
+    _ => Error::other(te),
   }
 }
 

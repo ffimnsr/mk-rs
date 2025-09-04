@@ -88,18 +88,20 @@ Yet another simple task runner 🦀
 Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
-  run          Run specific tasks [aliases: r]
-  list         List all available tasks [aliases: ls]
-  completions  Generate shell completions [aliases: comp]
-  secrets      Access stored secrets [aliases: s]
-  help         Print this message or the help of the given subcommand(s)
+  init        Initialize a sample tasks.yaml file in the current directory
+  run         Run specific tasks [aliases: r]
+  list        List all available tasks [aliases: ls]
+  completion  Generate shell completions [aliases: comp]
+  secrets     Access stored secrets [aliases: s]
+  update
+  help        Print this message or the help of the given subcommand(s)
 
 Arguments:
   [TASK_NAME]  The task name to run
 
 Options:
-  -c, --config <CONFIG>  Config file to source [default: tasks.yaml]
-  -h, --help             Print help
+  -c, --config <CONFIG>  Config file to source [env: MK_CONFIG=] [default: tasks.yaml]
+  -h, --help             Print help (see more with '--help')
   -V, --version          Print version
 ```
 

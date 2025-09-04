@@ -16,6 +16,7 @@ use clap::{
 };
 use clap_complete::Shell;
 use console::style;
+use mk_lib::file::ToUtf8 as _;
 use mk_lib::schema::{
   ExecutionStack,
   Task,
@@ -70,6 +71,13 @@ struct Args {
 /// The available subcommands
 #[derive(Debug, Subcommand)]
 enum Command {
+  #[command(about = "Initialize a sample tasks.yaml file in the current directory")]
+  Init {
+    #[arg(short, long, help = "Overwrite existing config file if present")]
+    force: bool,
+    #[arg(help = "Optional output path for the created config file")]
+    output: Option<String>,
+  },
   #[command(visible_aliases = ["r"], arg_required_else_help = true, about = "Run specific tasks")]
   Run {
     #[arg(required = true, help = "The task name to run", value_hint = clap::ValueHint::Other)]
@@ -109,11 +117,17 @@ impl CliEntry {
     assert!(!args.config.is_empty());
 
     let config = Path::new(&args.config);
-    if !config.exists() {
+    let allow_without_config = matches!(args.command, Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update));
+
+    if !config.exists() && !allow_without_config {
       anyhow::bail!("Config file does not exist");
     }
 
-    let task_root = Arc::new(TaskRoot::from_file(&args.config)?);
+    let task_root = if allow_without_config {
+      Arc::new(TaskRoot::default())
+    } else {
+      Arc::new(TaskRoot::from_file(&args.config)?)
+    };
     let execution_stack = Arc::new(Mutex::new(HashSet::new()));
     Ok(Self {
       args,
@@ -125,6 +139,22 @@ impl CliEntry {
   /// Run the CLI entry
   pub fn run(&self) -> anyhow::Result<()> {
     match &self.args.command {
+      Some(Command::Init { force, output }) => {
+        let config_path = if let Some(ref out) = output {
+          Path::new(out)
+        } else {
+          Path::new(&self.args.config)
+        };
+
+        if config_path.exists() && !force {
+          anyhow::bail!("Config file already exists. Use `--force` to overwrite");
+        }
+
+        let contents = include_str!("../../../templates/init_tasks.yaml");
+
+        std::fs::write(config_path, contents)?;
+        println!("Config file created at {}", config_path.to_utf8()?);
+      },
       Some(Command::Run { task_name }) => {
         self.run_task(task_name)?;
       },
@@ -177,14 +207,31 @@ impl CliEntry {
       .ok_or_else(|| anyhow::anyhow!("Invalid release tag"))?
       .trim_start_matches('v');
 
-    if latest_version == current_semver {
-      println!("You are using the latest version.");
-    } else {
-      println!(
-        "New version {} is available (you have {})",
-        latest_version, current_semver
-      );
-      println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
+    // Compare using semver for accurate ordering
+    match (semver::Version::parse(latest_version), semver::Version::parse(current_semver)) {
+      (Result::Ok(latest_v), Result::Ok(current_v)) => {
+        if latest_v <= current_v {
+          println!("You are using the latest version.");
+        } else {
+          println!(
+            "New version {} is available (you have {})",
+            latest_version, current_semver
+          );
+          println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
+        }
+      }
+      // Fallback to simple equality check if parsing fails
+      _ => {
+        if latest_version == current_semver {
+          println!("You are using the latest version.");
+        } else {
+          println!(
+            "New version {} is available (you have {})",
+            latest_version, current_semver
+          );
+          println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
+        }
+      }
     }
 
     Ok(())

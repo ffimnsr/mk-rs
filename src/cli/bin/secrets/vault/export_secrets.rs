@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Context as _;
 use clap::Args;
-use pgp::{
+use pgp::composed::{
   Deserializable as _,
   Message,
   SignedSecretKey,
@@ -84,13 +84,11 @@ impl ExportSecrets {
 
         // Read the data file
         if data_path.exists() && data_path.is_file() {
-          let mut data_file = File::open(data_path)?;
-          let (message, _) = Message::from_armor_single(&mut data_file)?;
-          let (decrypted_message, _) = message.decrypt(String::new, &[&signed_secret_key])?;
+          let mut data_file = std::io::BufReader::new(File::open(data_path)?);
+          let (message, _) = Message::from_armor(&mut data_file)?;
+          let mut decrypted_message = message.decrypt(&pgp::types::Password::empty(), &signed_secret_key)?;
           let value = decrypted_message
-            .get_literal()
-            .ok_or_else(|| anyhow::anyhow!("Secret value is not a literal"))?
-            .to_string()
+            .as_data_string()
             .context("Failed to read secret value")?;
 
           values.push(value);
