@@ -16,6 +16,8 @@ mod container_run;
 mod local_run;
 mod task_run;
 
+pub use local_run::LocalRun;
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum CommandRunner {

@@ -1,4 +1,5 @@
 /.trigger
+/AGENTS.md
 /target
 **/*.rs.bk
 /passport.db
@@ -11,3 +12,6 @@
 /test.env
 /.mk
 /.cargo
+/package.json
+/package-lock.json
+/node_modules

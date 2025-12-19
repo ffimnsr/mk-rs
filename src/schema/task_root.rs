@@ -19,6 +19,7 @@ use super::{
   UseCargo,
   UseNpm,
 };
+use crate::utils::deserialize_environment;
 
 const MK_COMMANDS: [&str; 5] = ["run", "list", "completion", "secrets", "help"];
 
@@ -44,6 +45,14 @@ macro_rules! process_tasks {
 pub struct TaskRoot {
   /// The tasks that can be executed
   pub tasks: HashMap<String, Task>,
+
+  /// The environment variables to set before running any task
+  #[serde(default, deserialize_with = "deserialize_environment")]
+  pub environment: HashMap<String, String>,
+
+  /// The environment files to load before running any task
+  #[serde(default)]
+  pub env_file: Vec<String>,
 
   /// This allows mk to use npm scripts as tasks
   #[serde(default)]
@@ -80,6 +89,8 @@ impl TaskRoot {
   pub fn from_hashmap(tasks: HashMap<String, Task>) -> Self {
     Self {
       tasks,
+      environment: HashMap::new(),
+      env_file: Vec::new(),
       use_npm: None,
       use_cargo: None,
       include: None,
