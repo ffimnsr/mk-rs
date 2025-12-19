@@ -1,7 +1,12 @@
 use hashbrown::HashMap;
 use serde::Deserialize;
 
-use super::Task;
+use super::{
+  CommandRunner,
+  LocalRun,
+  Task,
+  TaskArgs,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct UseCargoArgs {
@@ -59,7 +64,22 @@ impl UseCargoArgs {
 
     let hm: HashMap<String, Task> = cargo_commands
       .iter()
-      .map(|cmd| (cmd.to_string(), Task::String(format!("cargo {}", cmd))))
+      .map(|cmd| {
+        let command = format!("cargo {}", cmd);
+        let task = Task::Task(Box::new(TaskArgs {
+          commands: vec![CommandRunner::LocalRun(LocalRun {
+            command,
+            shell: None,
+            test: None,
+            work_dir: self.work_dir.clone(),
+            interactive: Some(true),
+            ignore_errors: None,
+            verbose: None,
+          })],
+          ..Default::default()
+        }));
+        (cmd.to_string(), task)
+      })
       .collect();
     Ok(hm)
   }

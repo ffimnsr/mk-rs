@@ -432,9 +432,9 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
 ## What's on the roadmap?
 
-- [ ] Add global context for environment and output
+- [x] Add global context for environment and output
 - [ ] Add support for makefile, markdown and org-mode as task config format
-- [ ] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
+- [x] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
@@ -448,7 +448,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
-- [ ] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
+- [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
 - [ ] Support for lima and nerdctrl
 - [ ] There's still a lot of unknown, if you found a bug please report.
 

@@ -161,6 +161,7 @@ impl ContainerBuild {
 
     let status = cmd.wait()?;
     if !status.success() {
+      // Note: container build failures are always fatal and do not honor task-level ignore_errors.
       anyhow::bail!("Container build failed");
     }
 

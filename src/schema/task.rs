@@ -1,4 +1,3 @@
-use anyhow::Context;
 use hashbrown::HashMap;
 use indicatif::{
   HumanDuration,
@@ -14,13 +13,10 @@ use std::sync::mpsc::{
   Receiver,
   Sender,
 };
+use std::thread;
 use std::time::{
   Duration,
   Instant,
-};
-use std::{
-  fs,
-  thread,
 };
 
 use super::{
@@ -33,7 +29,10 @@ use super::{
 };
 use crate::defaults::default_verbose;
 use crate::run_shell_command;
-use crate::utils::deserialize_environment;
+use crate::utils::{
+  deserialize_environment,
+  load_env_files,
+};
 
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
@@ -138,6 +137,14 @@ impl TaskArgs {
 
     if let Some(verbose) = &self.verbose {
       context.set_verbose(*verbose);
+    }
+
+    // Load environment variables from root and task environments and env files.
+    if !context.is_nested {
+      let root_env = context.task_root.environment.clone();
+      let root_env_files = load_env_files(&context.task_root.env_file)?;
+      context.extend_env_vars(root_env);
+      context.extend_env_vars(root_env_files);
     }
 
     // Load environment variables from the task environment and env files field
@@ -353,19 +360,7 @@ impl TaskArgs {
   }
 
   fn load_env_file(&self) -> anyhow::Result<HashMap<String, String>> {
-    let mut local_env: HashMap<String, String> = HashMap::new();
-    for env_file in &self.env_file {
-      let contents =
-        fs::read_to_string(env_file).with_context(|| format!("Failed to read env file - {}", env_file))?;
-
-      for line in contents.lines() {
-        if let Some((key, value)) = line.split_once('=') {
-          local_env.insert(key.trim().to_string(), value.trim().to_string());
-        }
-      }
-    }
-
-    Ok(local_env)
+    load_env_files(&self.env_file)
   }
 
   fn get_env_value(&self, context: &TaskContext, value_in: &str) -> anyhow::Result<String> {

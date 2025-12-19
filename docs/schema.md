@@ -4,8 +4,12 @@
 
 | Name | Type | Default Value | Required | Description |
 | --- | --- | --- | --- | --- |
-| tasks | [String / Task][] | - | true | Contains list of tasks. |
+| tasks | HashMap<String, Task> | - | true | Contains list of tasks keyed by task name. |
+| environment | HashMap<String, String> | {} | false | Environment variables applied to all tasks. |
+| env_file | String[] | [] | false | Environment files applied to all tasks. |
 | use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
+| use_cargo | Bool or UseCargo | false | false | This allows mk to use cargo commands as tasks. |
+| include | Include[] | - | false | Includes additional files to be merged into the current file. |
 
 ### UseNpm
 
@@ -13,6 +17,21 @@
 | --- | --- | --- | --- | --- |
 | package_manager | String | - | false | The package manager to use (.e.g pnpm, npm, yarn). |
 | work_dir | String | - | false | The working directory to run the command in. |
+
+### UseCargo
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| work_dir | String | - | false | The working directory to run the command in. |
+
+### Include
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| name | String | - | true | The file name to include. |
+| overwrite | bool | false | false | Overwrite existing tasks on conflict. |
+
+Include can be either a string path or an object with `name` and `overwrite`.
 
 ### Task
 
@@ -25,8 +44,10 @@
 | description | String | \<empty-string\> | false | The description of the task. |
 | environment | HashMap<String, String> | {} | false | The environment variables to set before running the task. |
 | env_file | String[] | [] | false | The environment files to load before running the task. |
+| shell | String | sh | false | The shell to call for command execution. |
+| parallel | bool | false | false | Run local_run commands in parallel. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
-| verbose | bool | false | false | Show verbose output. |
+| verbose | bool | true | false | Show verbose output. |
 
 #### CommandRunner
 
@@ -50,9 +71,11 @@ Run the command in local available shell.
 | --- | --- | --- | --- | --- |
 | command | String | - | true | The command to run. |
 | shell | String | sh | false | The shell to call. |
+| test | String | - | false | A test command to run before executing the main command. |
 | work_dir | String | \<current-working-directory\> | false | The working directory to run the command into. |
+| interactive | bool | false | false | Run the command interactively (stdin/stdout attached). |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
-| verbose | bool | false | false | Show verbose output. |
+| verbose | bool | true | false | Show verbose output. |
 
 ```yaml
 tasks:
@@ -71,9 +94,9 @@ Run the command in container environment. This automatically searches for availa
 | --- | --- | --- | --- | --- |
 | container_command | String[] | - | true | The command to run in the container. |
 | image | String | - | true | The container image to use. |
-| mounted_paths | String[] | [] | true | The mounted paths to bind mount into the container. |
+| mounted_paths | String[] | [] | false | The mounted paths to bind mount into the container. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
-| verbose | bool | false | false | Show verbose output. |
+| verbose | bool | true | false | Show verbose output. |
 
 **Example**
 
@@ -104,6 +127,7 @@ Build a container image. This automatically searches for available `docker` or `
 | context | String | - | true | Defines the path to a directory to build the container. |
 | containerfile | String | - | false | The containerfile or dockerfile to use (automatically searches context for either a `Containerfile` or `Dockerfile`). |
 | tags | String[] | [] | false | The tags to apply to the container image. |
+| build_args | String[] | [] | false | Build arguments to pass to the container. |
 | labels | String[] | [] | false | Labels to apply to the container image. |
 | sbom | bool | false | false | Add sbom to image. |
 | no_cache | bool | false | false | Don't cache builds. |
@@ -138,7 +162,7 @@ Run another task.
 | --- | --- | --- | --- | --- |
 | task | String | - | true | The name of the task to run. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
-| verbose | bool | false | false | Show verbose output. |
+| verbose | bool | true | false | Show verbose output. |
 
 **Example**
 
@@ -155,11 +179,10 @@ The preconditions that must be met before the task can be executed.
 | Name | Type | Default Value | Required | Description |
 | --- | --- | --- | --- | --- |
 | command | String | - | true | The commands to run. |
-| message | String | \<empty-string\> | false | The message to display if you get error. |
+| message | String | - | false | The message to display if you get error. |
 | shell | String | sh | false | The shell to call. |
 | work_dir | String | \<current-working-directory\> | false | The working directory to run the command into. |
-| ignore_errors | bool | false | false | Ignore errors if the task fails? |
-| verbose | bool | false | false | Show verbose output. |
+| verbose | bool | true | false | Show verbose output. |
 
 **Example**
 
@@ -181,6 +204,8 @@ The tasks that must be executed before this task can be executed.
 | Name | Type | Default Value | Required | Description |
 | --- | --- | --- | --- | --- |
 | name | String | - | true | The name of the task to run. |
+
+TaskDependency can be either a string task name or an object with `name`.
 
 **Example**
 

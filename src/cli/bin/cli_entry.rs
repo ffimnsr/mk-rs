@@ -98,6 +98,8 @@ enum Command {
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
   Secrets(Secrets),
+  // Update does not require a config file.
+  #[command(about = "Check for mk (make) updates")]
   Update,
 }
 
@@ -112,21 +114,23 @@ impl CliEntry {
   /// Create a new CLI entry
   pub fn new() -> anyhow::Result<Self> {
     let args = Args::parse();
-    log::trace!("Config: {}", args.config);
-
     assert!(!args.config.is_empty());
 
-    let config = Path::new(&args.config);
-    let allow_without_config = matches!(args.command, Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update));
+    let (config, allow_without_config) = Self::resolve_config(&args)?;
+    log::trace!("Config: {}", config.to_utf8()?);
 
     if !config.exists() && !allow_without_config {
-      anyhow::bail!("Config file does not exist");
+      let mut message = format!("Config file does not exist: {}", config.to_utf8()?);
+      if args.config == "tasks.yaml" {
+        message.push_str(". Note: mk also checks for tasks.yml when tasks.yaml is missing.");
+      }
+      anyhow::bail!(message);
     }
 
     let task_root = if allow_without_config {
       Arc::new(TaskRoot::default())
     } else {
-      Arc::new(TaskRoot::from_file(&args.config)?)
+      Arc::new(TaskRoot::from_file(&config.to_utf8()?)?)
     };
     let execution_stack = Arc::new(Mutex::new(HashSet::new()));
     Ok(Self {
@@ -134,6 +138,23 @@ impl CliEntry {
       task_root,
       execution_stack,
     })
+  }
+
+  fn resolve_config(args: &Args) -> anyhow::Result<(std::path::PathBuf, bool)> {
+    let mut config = Path::new(&args.config).to_path_buf();
+    if !config.exists() && args.config == "tasks.yaml" {
+      let fallback = Path::new("tasks.yml");
+      if fallback.exists() {
+        config = fallback.to_path_buf();
+      }
+    }
+
+    let allow_without_config = matches!(
+      args.command,
+      Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update)
+    );
+
+    Ok((config, allow_without_config))
   }
 
   /// Run the CLI entry
@@ -208,7 +229,10 @@ impl CliEntry {
       .trim_start_matches('v');
 
     // Compare using semver for accurate ordering
-    match (semver::Version::parse(latest_version), semver::Version::parse(current_semver)) {
+    match (
+      semver::Version::parse(latest_version),
+      semver::Version::parse(current_semver),
+    ) {
       (Result::Ok(latest_v), Result::Ok(current_v)) => {
         if latest_v <= current_v {
           println!("You are using the latest version.");
@@ -219,7 +243,7 @@ impl CliEntry {
           );
           println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
         }
-      }
+      },
       // Fallback to simple equality check if parsing fails
       _ => {
         if latest_version == current_semver {
@@ -231,7 +255,7 @@ impl CliEntry {
           );
           println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
         }
-      }
+      },
     }
 
     Ok(())

@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::Context as _;
 use hashbrown::HashMap;
@@ -9,13 +9,18 @@ use serde::Deserialize;
 use crate::defaults::default_node_package_manager;
 use crate::file::ToUtf8 as _;
 
-use super::Task;
+use super::{
+  CommandRunner,
+  LocalRun,
+  Task,
+  TaskArgs,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NpmPackage {
   /// The name of the package
-  pub name: String,
+  pub name: Option<String>,
 
   /// The version of the package
   pub version: Option<String>,
@@ -27,7 +32,6 @@ pub struct NpmPackage {
   pub package_manager: Option<String>,
 }
 
-// TODO: Make use of the work_dir field
 #[derive(Debug, Deserialize)]
 pub struct UseNpmArgs {
   /// The package manager to use
@@ -66,12 +70,17 @@ impl UseNpm {
 
 impl UseNpmArgs {
   pub fn capture_tasks(&self) -> anyhow::Result<HashMap<String, Task>> {
-    let path = Path::new("package.json");
+    let path = self
+      .work_dir
+      .as_ref()
+      .map(|work_dir| PathBuf::from(work_dir).join("package.json"))
+      .unwrap_or_else(|| PathBuf::from("package.json"));
+
     if !path.exists() || !path.is_file() {
       return Err(anyhow::anyhow!("package.json does not exist"));
     }
 
-    let file = File::open(path).context(format!("Failed to open file - {}", path.to_utf8()?))?;
+    let file = File::open(&path).context(format!("Failed to open file - {}", path.to_utf8()?))?;
     let reader = BufReader::new(file);
 
     let package: NpmPackage = serde_json::from_reader(reader)?;
@@ -86,7 +95,22 @@ impl UseNpmArgs {
       .scripts
       .unwrap_or_default()
       .into_iter()
-      .map(|(k, _)| (k.clone(), Task::String(format!("{package_manager} run {k}"))))
+      .map(|(k, _)| {
+        let command = format!("{package_manager} run {k}");
+        let task = Task::Task(Box::new(TaskArgs {
+          commands: vec![CommandRunner::LocalRun(LocalRun {
+            command,
+            shell: None,
+            test: None,
+            work_dir: self.work_dir.clone(),
+            interactive: Some(true),
+            ignore_errors: None,
+            verbose: None,
+          })],
+          ..Default::default()
+        }));
+        (k, task)
+      })
       .collect();
     Ok(tasks)
   }
@@ -107,7 +131,7 @@ mod tests {
       }
     }"#;
     let package = serde_json::from_str::<NpmPackage>(json)?;
-    assert_eq!(package.name, "test");
+    assert_eq!(package.name, Some("test".to_string()));
     assert_eq!(package.version, Some("1.0.0".to_string()));
     assert_eq!(
       package.scripts,

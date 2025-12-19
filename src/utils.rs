@@ -1,5 +1,9 @@
-use std::fmt;
+use std::{
+  fmt,
+  fs,
+};
 
+use anyhow::Context as _;
 use hashbrown::HashMap;
 use serde::de::{
   self,
@@ -71,4 +75,20 @@ where
   }
 
   deserializer.deserialize_map(EnvironmentVisitor)
+}
+
+pub(crate) fn load_env_files(env_files: &[String]) -> anyhow::Result<HashMap<String, String>> {
+  let mut local_env: HashMap<String, String> = HashMap::new();
+  for env_file in env_files {
+    let contents =
+      fs::read_to_string(env_file).with_context(|| format!("Failed to read env file - {}", env_file))?;
+
+    for line in contents.lines() {
+      if let Some((key, value)) = line.split_once('=') {
+        local_env.insert(key.trim().to_string(), value.trim().to_string());
+      }
+    }
+  }
+
+  Ok(local_env)
 }
