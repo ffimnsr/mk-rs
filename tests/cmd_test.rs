@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use assert_fs::TempDir;
+use assert_cmd::cargo;
 
 mod common;
 
@@ -10,7 +11,7 @@ fn test_sanity() {
 
 #[test]
 fn test_mk_1() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-h").assert();
   assert
     .success()
@@ -27,7 +28,7 @@ fn test_mk_1() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_2() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("--version").assert();
 
   let version = env!("CARGO_PKG_VERSION");
@@ -41,7 +42,7 @@ fn test_mk_2() -> anyhow::Result<()> {
 fn test_mk_3() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-c").arg(&config_file_path).arg("ls").assert();
   assert.success().stdout(predicates::str::contains("hello"));
   Ok(())
@@ -49,7 +50,7 @@ fn test_mk_3() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_4() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("help").assert();
   assert
     .success()
@@ -69,7 +70,7 @@ fn test_mk_4() -> anyhow::Result<()> {
 fn test_mk_5() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd
     .arg("-c")
     .arg(&config_file_path)
@@ -84,7 +85,7 @@ fn test_mk_5() -> anyhow::Result<()> {
 fn test_mk_6() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd
     .arg("-c")
     .arg(&config_file_path)
@@ -97,7 +98,7 @@ fn test_mk_6() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_7() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("u").assert();
   assert
     .failure()
@@ -108,7 +109,7 @@ fn test_mk_7() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_8() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-c").arg("hello.yaml").assert();
   assert
     .failure()
@@ -121,7 +122,7 @@ fn test_mk_8() -> anyhow::Result<()> {
 fn test_mk_9() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello").assert();
   assert.success();
   Ok(())
@@ -131,7 +132,7 @@ fn test_mk_9() -> anyhow::Result<()> {
 fn test_mk_10() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello0").assert();
   assert
     .failure()
@@ -143,7 +144,7 @@ fn test_mk_10() -> anyhow::Result<()> {
 fn test_mk_11() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd
     .arg("-c")
     .arg(&config_file_path)
@@ -158,7 +159,7 @@ fn test_mk_11() -> anyhow::Result<()> {
 fn test_mk_12() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("-c").arg(&config_file_path).arg("run").assert();
   assert.failure();
   Ok(())
@@ -166,7 +167,7 @@ fn test_mk_12() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_13() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("run").assert();
   assert.failure();
   Ok(())
@@ -174,7 +175,7 @@ fn test_mk_13() -> anyhow::Result<()> {
 
 #[test]
 fn test_mk_14() -> anyhow::Result<()> {
-  let mut cmd = Command::cargo_bin("mk")?;
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd.arg("r").assert();
   assert.failure();
   Ok(())
