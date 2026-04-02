@@ -11,6 +11,9 @@
 //!
 //! [YAML]: https://github.com/dtolnay/serde-yaml
 
+/// Task execution cache helpers
+pub mod cache;
+
 /// The defaults module contains the default values for the library
 pub mod defaults;
 
@@ -30,5 +33,8 @@ pub mod macros;
 /// The utils module contains the utility functions used in the library
 pub mod utils;
 
-/// The execution stack module contains the stack used to track the execution of tasks
-pub use schema::ExecutionStack;
+/// Shared task execution state types
+pub use schema::{
+  ActiveTasks,
+  CompletedTasks,
+};

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::defaults::default_node_package_manager;
 use crate::file::ToUtf8 as _;
+use crate::utils::resolve_path;
 
 use super::{
   CommandRunner,
@@ -52,29 +53,41 @@ pub enum UseNpm {
 
 impl UseNpm {
   pub fn capture(&self) -> anyhow::Result<HashMap<String, Task>> {
+    self.capture_in_dir(&PathBuf::from("."))
+  }
+
+  pub fn capture_in_dir(&self, base_dir: &std::path::Path) -> anyhow::Result<HashMap<String, Task>> {
     match self {
-      UseNpm::Bool(true) => self.capture_tasks(),
-      UseNpm::UseNpm(args) => args.capture_tasks(),
+      UseNpm::Bool(true) => self.capture_tasks_in_dir(base_dir),
+      UseNpm::UseNpm(args) => args.capture_tasks_in_dir(base_dir),
       _ => Ok(HashMap::new()),
     }
   }
 
-  fn capture_tasks(&self) -> anyhow::Result<HashMap<String, Task>> {
+  fn capture_tasks_in_dir(&self, base_dir: &std::path::Path) -> anyhow::Result<HashMap<String, Task>> {
     UseNpmArgs {
       package_manager: None,
       work_dir: None,
     }
-    .capture_tasks()
+    .capture_tasks_in_dir(base_dir)
   }
 }
 
 impl UseNpmArgs {
   pub fn capture_tasks(&self) -> anyhow::Result<HashMap<String, Task>> {
+    self.capture_tasks_in_dir(&PathBuf::from("."))
+  }
+
+  pub fn capture_tasks_in_dir(&self, base_dir: &std::path::Path) -> anyhow::Result<HashMap<String, Task>> {
+    let resolved_work_dir = self
+      .work_dir
+      .as_ref()
+      .map(|work_dir| resolve_path(base_dir, work_dir));
     let path = self
       .work_dir
       .as_ref()
-      .map(|work_dir| PathBuf::from(work_dir).join("package.json"))
-      .unwrap_or_else(|| PathBuf::from("package.json"));
+      .map(|_| resolved_work_dir.clone().unwrap().join("package.json"))
+      .unwrap_or_else(|| base_dir.join("package.json"));
 
     if !path.exists() || !path.is_file() {
       return Err(anyhow::anyhow!("package.json does not exist"));
@@ -102,7 +115,9 @@ impl UseNpmArgs {
             command,
             shell: None,
             test: None,
-            work_dir: self.work_dir.clone(),
+            work_dir: resolved_work_dir
+              .as_ref()
+              .map(|work_dir| work_dir.to_string_lossy().into_owned()),
             interactive: Some(true),
             ignore_errors: None,
             verbose: None,

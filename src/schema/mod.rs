@@ -1,5 +1,6 @@
 mod command;
 mod include;
+mod plan;
 mod precondition;
 mod shell;
 mod task;
@@ -8,6 +9,7 @@ mod task_dependency;
 mod task_root;
 mod use_cargo;
 mod use_npm;
+mod validation;
 
 use std::collections::HashSet;
 use std::process::Stdio;
@@ -16,10 +18,12 @@ use std::sync::{
   Mutex,
 };
 
-pub type ExecutionStack = Arc<Mutex<HashSet<String>>>;
+pub type ActiveTasks = Arc<Mutex<HashSet<String>>>;
+pub type CompletedTasks = Arc<Mutex<HashSet<String>>>;
 
 pub use command::*;
 pub use include::*;
+pub use plan::*;
 pub use precondition::*;
 pub use shell::*;
 pub use task::*;
@@ -28,6 +32,7 @@ pub use task_dependency::*;
 pub use task_root::*;
 pub use use_cargo::*;
 pub use use_npm::*;
+pub use validation::*;
 
 pub fn is_shell_command(value: &str) -> anyhow::Result<bool> {
   use regex::Regex;

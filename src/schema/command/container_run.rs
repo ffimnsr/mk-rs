@@ -8,9 +8,8 @@ use std::{
   thread,
 };
 
-use anyhow::Context as _;
+use anyhow::Context;
 use serde::Deserialize;
-use which::which;
 
 use crate::defaults::{
   default_ignore_errors,
@@ -20,6 +19,7 @@ use crate::file::ToUtf8 as _;
 use crate::handle_output;
 use crate::schema::{
   get_output_handler,
+  ContainerRuntime,
   TaskContext,
 };
 
@@ -34,6 +34,10 @@ pub struct ContainerRun {
   /// The mounted paths to bind mount into the container
   #[serde(default)]
   pub mounted_paths: Vec<String>,
+
+  /// The container runtime to use
+  #[serde(default)]
+  pub runtime: Option<ContainerRuntime>,
 
   /// Ignore errors if the command fails
   #[serde(default)]
@@ -55,9 +59,8 @@ impl ContainerRun {
     let stdout = get_output_handler(verbose);
     let stderr = get_output_handler(verbose);
 
-    let container_runtime = which("docker")
-      .or_else(|_| which("podman"))
-      .with_context(|| "Failed to find docker or podman")?;
+    let container_runtime =
+      ContainerRuntime::resolve(self.runtime.as_ref().or(context.container_runtime.as_ref()))?;
 
     let mut cmd = ProcessCommand::new(container_runtime);
     cmd.arg("run").arg("--rm").arg("-i").stdout(stdout).stderr(stderr);

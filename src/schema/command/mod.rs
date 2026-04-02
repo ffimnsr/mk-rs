@@ -13,9 +13,11 @@ use serde::Deserialize;
 
 mod container_build;
 mod container_run;
+mod container_runtime;
 mod local_run;
 mod task_run;
 
+pub use container_runtime::ContainerRuntime;
 pub use local_run::LocalRun;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -30,13 +32,28 @@ pub enum CommandRunner {
 
 impl CommandRunner {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
-    match self {
+    context.emit_event(&serde_json::json!({
+      "event": "command_started",
+      "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
+      "kind": self.kind(),
+    }))?;
+
+    let result = match self {
       CommandRunner::ContainerBuild(container_build) => container_build.execute(context),
       CommandRunner::ContainerRun(container_run) => container_run.execute(context),
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
       CommandRunner::CommandRun(command) => self.execute_command(context, command),
-    }
+    };
+
+    context.emit_event(&serde_json::json!({
+      "event": "command_finished",
+      "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
+      "kind": self.kind(),
+      "success": result.is_ok(),
+    }))?;
+
+    result
   }
 
   fn execute_command(&self, context: &TaskContext, command: &str) -> anyhow::Result<()> {
@@ -69,6 +86,16 @@ impl CommandRunner {
     }
 
     Ok(())
+  }
+
+  fn kind(&self) -> &'static str {
+    match self {
+      CommandRunner::ContainerBuild(_) => "container_build",
+      CommandRunner::ContainerRun(_) => "container_run",
+      CommandRunner::LocalRun(_) => "local_run",
+      CommandRunner::TaskRun(_) => "task_run",
+      CommandRunner::CommandRun(_) => "command_run",
+    }
   }
 }
 

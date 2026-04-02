@@ -16,24 +16,17 @@ pub enum Include {
 }
 
 impl Include {
-  pub fn capture(&self) -> anyhow::Result<()> {
+  pub fn name(&self) -> &str {
     match self {
-      Include::String(name) => self.capture_root(name),
-      Include::Include(args) => args.capture_root(),
+      Include::String(name) => name,
+      Include::Include(args) => &args.name,
     }
   }
 
-  fn capture_root(&self, name: &str) -> anyhow::Result<()> {
-    IncludeArgs {
-      name: name.to_string(),
-      overwrite: false,
+  pub fn overwrite(&self) -> bool {
+    match self {
+      Include::String(_) => false,
+      Include::Include(args) => args.overwrite,
     }
-    .capture_root()
-  }
-}
-
-impl IncludeArgs {
-  pub fn capture_root(&self) -> anyhow::Result<()> {
-    unimplemented!()
   }
 }

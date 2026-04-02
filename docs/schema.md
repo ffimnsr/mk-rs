@@ -1,5 +1,21 @@
 # Config Schema
 
+## CLI Commands
+
+| Command | Description |
+| --- | --- |
+| `mk validate` | Validate task configuration without executing tasks. |
+| `mk validate --json` | Emit validation results in JSON format. |
+| `mk plan <task>` | Show the resolved dependency and command plan for a task. |
+| `mk plan <task> --json` | Emit the task plan in JSON format. |
+| `mk run <task> --dry-run` | Print the resolved task plan without executing commands. |
+| `mk run <task> --force` | Bypass task cache and force execution. |
+| `mk run <task> --json-events` | Emit newline-delimited JSON task and command events. |
+| `mk clean-cache` | Remove persisted task cache metadata. |
+
+Planning commands are side-effect free and do not evaluate shell or template expressions.
+Relative `extends`, `env_file`, `inputs`, and `outputs` paths resolve from the config file directory, except task cache `inputs` and `outputs` prefer a single effective local command `work_dir` when the task defines one consistently.
+
 ## Root
 
 | Name | Type | Default Value | Required | Description |
@@ -9,7 +25,8 @@
 | env_file | String[] | [] | false | Environment files applied to all tasks. |
 | use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
 | use_cargo | Bool or UseCargo | false | false | This allows mk to use cargo commands as tasks. |
-| include | Include[] | - | false | Includes additional files to be merged into the current file. |
+| container_runtime | auto / docker / podman | auto | false | Default container runtime for container commands. |
+| extends | String | - | false | Load and merge another task file before the current file. |
 
 ### UseNpm
 
@@ -24,14 +41,7 @@
 | --- | --- | --- | --- | --- |
 | work_dir | String | - | false | The working directory to run the command in. |
 
-### Include
-
-| Name | Type | Default Value | Required | Description |
-| --- | --- | --- | --- | --- |
-| name | String | - | true | The file name to include. |
-| overwrite | bool | false | false | Overwrite existing tasks on conflict. |
-
-Include can be either a string path or an object with `name` and `overwrite`.
+`include` is deprecated and unsupported. Use `extends` instead. Loading a config that still declares `include` fails fast.
 
 ### Task
 
@@ -46,8 +56,26 @@ Include can be either a string path or an object with `name` and `overwrite`.
 | env_file | String[] | [] | false | The environment files to load before running the task. |
 | shell | String | sh | false | The shell to call for command execution. |
 | parallel | bool | false | false | Run local_run commands in parallel. |
+| execution | TaskExecution | - | false | Richer execution settings for parallel mode. |
+| cache | TaskCache | - | false | Enable incremental cache lookups for the task. |
+| inputs | String[] | [] | false | Files or glob patterns that affect task output. |
+| outputs | String[] | [] | false | Files produced by the task. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |
+
+#### TaskExecution
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| mode | sequential / parallel | sequential | false | Execute commands sequentially or in parallel. |
+| max_parallel | usize | number-of-commands | false | Limit concurrent command execution when mode is parallel. |
+| fail_fast | bool | true | false | Stop scheduling new parallel work after the first failure. |
+
+#### TaskCache
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| enabled | bool | true | false | Enable cache reads and writes for the task. |
 
 #### CommandRunner
 
@@ -95,6 +123,7 @@ Run the command in container environment. This automatically searches for availa
 | container_command | String[] | - | true | The command to run in the container. |
 | image | String | - | true | The container image to use. |
 | mounted_paths | String[] | [] | false | The mounted paths to bind mount into the container. |
+| runtime | auto / docker / podman | auto | false | Explicitly choose the container runtime. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |
 
@@ -132,6 +161,7 @@ Build a container image. This automatically searches for available `docker` or `
 | sbom | bool | false | false | Add sbom to image. |
 | no_cache | bool | false | false | Don't cache builds. |
 | force_rm | bool | false | false | Delete intermediary containers use to build images. |
+| runtime | auto / docker / podman | auto | false | Explicitly choose the container runtime. |
 
 **Example**
 

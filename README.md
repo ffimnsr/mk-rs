@@ -92,8 +92,11 @@ Commands:
   run         Run specific tasks [aliases: r]
   list        List all available tasks [aliases: ls]
   completion  Generate shell completions [aliases: comp]
+  validate    Validate task configuration without executing tasks
+  plan        Show the resolved execution plan for a task
   secrets     Access stored secrets [aliases: s]
   update
+  clean-cache Remove mk task cache metadata
   help        Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -116,6 +119,15 @@ mk run <task_name>
 ```
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
+When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, and `mk.toml`.
+
+Recent workflow features:
+
+- `mk validate` validates task graphs and command configuration without running anything.
+- `mk plan <task>` and `mk run <task> --dry-run` show the resolved execution plan.
+- `mk run <task> --json-events` emits newline-delimited JSON task and command events.
+- Tasks can opt into incremental caching with `inputs`, `outputs`, and `cache.enabled`.
+- Container commands can select `runtime: docker|podman|auto`.
 
 ### Makefile and task.yaml comparison
 
@@ -445,7 +457,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add support for npm commands
 - [ ] Add fuzzer scripts for code fuzzing
 - [ ] Complete the code coverage
-- [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
+- [ ] Expand `extends`-based composition beyond local single-parent files
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels
 - [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands

@@ -1,10 +1,6 @@
-use std::collections::HashSet;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::{
-  Arc,
-  Mutex,
-};
+use std::sync::Arc;
 
 use crate::secrets::Secrets;
 use anyhow::Ok;
@@ -18,9 +14,10 @@ use clap_complete::Shell;
 use console::style;
 use mk_lib::file::ToUtf8 as _;
 use mk_lib::schema::{
-  ExecutionStack,
+  run_task_by_name,
   Task,
   TaskContext,
+  TaskPlan,
   TaskRoot,
 };
 use mk_lib::version::get_version_digits;
@@ -82,6 +79,15 @@ enum Command {
   Run {
     #[arg(required = true, help = "The task name to run", value_hint = clap::ValueHint::Other)]
     task_name: String,
+
+    #[arg(long, help = "Print the resolved task plan without executing commands")]
+    dry_run: bool,
+
+    #[arg(long, help = "Bypass task cache and force execution")]
+    force: bool,
+
+    #[arg(long, help = "Emit newline-delimited JSON execution events")]
+    json_events: bool,
   },
   #[command(visible_aliases = ["ls"], about = "List all available tasks")]
   List {
@@ -96,18 +102,32 @@ enum Command {
     #[arg(required = true, help = "The shell to generate completions for")]
     shell: String,
   },
+  #[command(about = "Validate task configuration without executing tasks")]
+  Validate {
+    #[arg(long, help = "Show validation results in JSON format")]
+    json: bool,
+  },
+  #[command(about = "Show the resolved execution plan for a task")]
+  Plan {
+    #[arg(required = true, help = "The task name to inspect", value_hint = clap::ValueHint::Other)]
+    task_name: String,
+
+    #[arg(long, help = "Show the plan in JSON format")]
+    json: bool,
+  },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
   Secrets(Secrets),
   // Update does not require a config file.
   #[command(about = "Check for mk (make) updates")]
   Update,
+  #[command(about = "Remove mk task cache metadata")]
+  CleanCache,
 }
 
 /// The CLI entry
 pub(super) struct CliEntry {
   args: Args,
   task_root: Arc<TaskRoot>,
-  execution_stack: ExecutionStack,
 }
 
 impl CliEntry {
@@ -130,22 +150,20 @@ impl CliEntry {
     let task_root = if allow_without_config {
       Arc::new(TaskRoot::default())
     } else {
-      Arc::new(TaskRoot::from_file(&config.to_utf8()?)?)
+      Arc::new(TaskRoot::from_file(config.to_utf8()?)?)
     };
-    let execution_stack = Arc::new(Mutex::new(HashSet::new()));
-    Ok(Self {
-      args,
-      task_root,
-      execution_stack,
-    })
+    Ok(Self { args, task_root })
   }
 
   fn resolve_config(args: &Args) -> anyhow::Result<(std::path::PathBuf, bool)> {
     let mut config = Path::new(&args.config).to_path_buf();
     if !config.exists() && args.config == "tasks.yaml" {
-      let fallback = Path::new("tasks.yml");
-      if fallback.exists() {
-        config = fallback.to_path_buf();
+      for candidate in ["tasks.yml", ".mk/tasks.yaml", ".mk/tasks.yml", "mk.toml"] {
+        let fallback = Path::new(candidate);
+        if fallback.exists() {
+          config = fallback.to_path_buf();
+          break;
+        }
       }
     }
 
@@ -176,8 +194,17 @@ impl CliEntry {
         std::fs::write(config_path, contents)?;
         println!("Config file created at {}", config_path.to_utf8()?);
       },
-      Some(Command::Run { task_name }) => {
-        self.run_task(task_name)?;
+      Some(Command::Run {
+        task_name,
+        dry_run,
+        force,
+        json_events,
+      }) => {
+        if *dry_run {
+          self.print_plan(task_name, false)?;
+        } else {
+          self.run_task(task_name, *force, *json_events)?;
+        }
       },
       Some(Command::List { plain, json }) => {
         self.print_available_tasks(*plain, *json)?;
@@ -185,15 +212,25 @@ impl CliEntry {
       Some(Command::Completion { shell }) => {
         self.write_completions(shell)?;
       },
+      Some(Command::Validate { json }) => {
+        self.validate_config(*json)?;
+      },
+      Some(Command::Plan { task_name, json }) => {
+        self.print_plan(task_name, *json)?;
+      },
       Some(Command::Secrets(secrets)) => {
         secrets.execute()?;
       },
       Some(Command::Update) => {
         self.update_mk()?;
       },
+      Some(Command::CleanCache) => {
+        mk_lib::cache::CacheStore::remove_in_dir(&self.task_root.cache_base_dir())?;
+        println!("Cache cleared");
+      },
       None => {
         if let Some(task_name) = &self.args.task_name {
-          self.run_task(task_name)?;
+          self.run_task(task_name, false, false)?;
         } else {
           anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
         }
@@ -262,41 +299,10 @@ impl CliEntry {
   }
 
   /// Run the specified tasks
-  fn run_task(&self, task_name: &str) -> anyhow::Result<()> {
+  fn run_task(&self, task_name: &str, force: bool, json_events: bool) -> anyhow::Result<()> {
     assert!(!task_name.is_empty());
-
-    let task = self
-      .task_root
-      .tasks
-      .get(task_name)
-      .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
-
-    log::trace!("Task: {:?}", task);
-
-    // Scope the lock to the task execution
-    {
-      let mut stack = self
-        .execution_stack
-        .lock()
-        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
-
-      stack.insert(task_name.to_string());
-    }
-
-    let mut context = TaskContext::new(self.task_root.clone(), self.execution_stack.clone());
-    task.run(&mut context)?;
-
-    // Don't carry over the execution stack to the next task
-    {
-      let mut stack = self
-        .execution_stack
-        .lock()
-        .map_err(|e| anyhow::anyhow!("Failed to lock execution stack - {}", e))?;
-
-      stack.clear();
-    }
-
-    Ok(())
+    let context = TaskContext::new_with_options(self.task_root.clone(), force, json_events);
+    run_task_by_name(&context, task_name)
   }
 
   /// Print all available tasks
@@ -354,5 +360,87 @@ impl CliEntry {
     clap_complete::generate(shell, &mut app, "mk", &mut std::io::stdout().lock());
 
     Ok(())
+  }
+
+  fn validate_config(&self, json: bool) -> anyhow::Result<()> {
+    let report = self.task_root.validate();
+    if json {
+      println!("{}", serde_json::to_string_pretty(&report)?);
+    } else if report.issues.is_empty() {
+      println!("Validation passed");
+    } else {
+      println!("Validation failed");
+      println!();
+      for issue in &report.issues {
+        let task = issue
+          .task
+          .as_ref()
+          .map(|task| format!(" task={}", task))
+          .unwrap_or_default();
+        let field = issue
+          .field
+          .as_ref()
+          .map(|field| format!(" field={}", field))
+          .unwrap_or_default();
+        println!(
+          "{}{}{}",
+          match issue.severity {
+            mk_lib::schema::ValidationSeverity::Error => "ERROR",
+            mk_lib::schema::ValidationSeverity::Warning => "WARNING",
+          },
+          task,
+          field
+        );
+        println!("  {}", issue.message);
+      }
+    }
+
+    if report.has_errors() {
+      anyhow::bail!("Validation failed");
+    }
+
+    Ok(())
+  }
+
+  fn print_plan(&self, task_name: &str, json: bool) -> anyhow::Result<()> {
+    let plan = self.task_root.plan_task(task_name)?;
+    if json {
+      println!("{}", serde_json::to_string_pretty(&plan)?);
+    } else {
+      self.print_plan_text(&plan);
+    }
+    Ok(())
+  }
+
+  fn print_plan_text(&self, plan: &TaskPlan) {
+    println!("Plan for task: {}", plan.root_task);
+    println!();
+
+    for (index, step) in plan.steps.iter().enumerate() {
+      println!("{}. {}", index + 1, step.name);
+      println!("   base_dir: {}", step.base_dir);
+      if let Some(description) = &step.description {
+        if !description.is_empty() {
+          println!("   description: {}", description);
+        }
+      }
+      println!(
+        "   mode: {}",
+        match step.execution_mode {
+          mk_lib::schema::PlannedExecutionMode::Sequential => "sequential",
+          mk_lib::schema::PlannedExecutionMode::Parallel => "parallel",
+        }
+      );
+      if !step.dependencies.is_empty() {
+        println!("   depends_on: {}", step.dependencies.join(", "));
+      }
+      for command in &step.commands {
+        println!("   {}", command.summary());
+      }
+      if let Some(reason) = &step.skipped_reason {
+        println!("   skip: {}", reason);
+      }
+      println!();
+    }
   }
 }

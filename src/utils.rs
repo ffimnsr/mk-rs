@@ -1,3 +1,7 @@
+use std::path::{
+  Path,
+  PathBuf,
+};
 use std::{
   fmt,
   fs,
@@ -15,6 +19,8 @@ use serde::{
   Deserializer,
 };
 use serde_json::Value as JsonValue;
+
+use crate::file::ToUtf8 as _;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -77,11 +83,28 @@ where
   deserializer.deserialize_map(EnvironmentVisitor)
 }
 
-pub(crate) fn load_env_files(env_files: &[String]) -> anyhow::Result<HashMap<String, String>> {
+pub(crate) fn resolve_path(base_dir: &Path, value: &str) -> PathBuf {
+  let path = Path::new(value);
+  if path.is_absolute() {
+    path.to_path_buf()
+  } else {
+    base_dir.join(path)
+  }
+}
+
+pub(crate) fn load_env_files_in_dir(
+  env_files: &[String],
+  base_dir: &Path,
+) -> anyhow::Result<HashMap<String, String>> {
   let mut local_env: HashMap<String, String> = HashMap::new();
   for env_file in env_files {
-    let contents =
-      fs::read_to_string(env_file).with_context(|| format!("Failed to read env file - {}", env_file))?;
+    let path = resolve_path(base_dir, env_file);
+    let contents = fs::read_to_string(&path).with_context(|| {
+      format!(
+        "Failed to read env file - {}",
+        path.to_utf8().unwrap_or("<non-utf8-path>")
+      )
+    })?;
 
     for line in contents.lines() {
       if let Some((key, value)) = line.split_once('=') {

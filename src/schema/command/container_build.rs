@@ -9,13 +9,13 @@ use std::thread;
 use anyhow::Context as _;
 use git2::Repository;
 use serde::Deserialize;
-use which::which;
 
 use crate::defaults::default_verbose;
 use crate::schema::{
   get_output_handler,
   is_shell_command,
   is_template_command,
+  ContainerRuntime,
   TaskContext,
 };
 use crate::{
@@ -59,6 +59,10 @@ pub struct ContainerBuildArgs {
   /// Always remove intermediate containers
   #[serde(default)]
   pub force_rm: bool,
+
+  /// The container runtime to use
+  #[serde(default)]
+  pub runtime: Option<ContainerRuntime>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -81,9 +85,13 @@ impl ContainerBuild {
     let stdout = get_output_handler(verbose);
     let stderr = get_output_handler(verbose);
 
-    let container_runtime = which("docker")
-      .or_else(|_| which("podman"))
-      .with_context(|| "Failed to find docker or podman")?;
+    let container_runtime = ContainerRuntime::resolve(
+      self
+        .container_build
+        .runtime
+        .as_ref()
+        .or(context.container_runtime.as_ref()),
+    )?;
 
     let mut cmd = ProcessCommand::new(container_runtime);
     cmd.arg("build").stdout(stdout).stderr(stderr);
