@@ -37,6 +37,7 @@ use crate::cache::{
 };
 use crate::defaults::default_verbose;
 use crate::run_shell_command;
+use crate::secrets::load_secret_env;
 use crate::utils::{
   deserialize_environment,
   load_env_files_in_dir,
@@ -107,6 +108,22 @@ pub struct TaskArgs {
   /// The environment files to load before running the task
   #[serde(default)]
   pub env_file: Vec<String>,
+
+  /// Secret paths to load as dotenv-style environment entries before running the task
+  #[serde(default)]
+  pub secrets_path: Vec<String>,
+
+  /// The path to the secret vault
+  #[serde(default)]
+  pub vault_location: Option<String>,
+
+  /// The path to the private keys used for secret decryption
+  #[serde(default)]
+  pub keys_location: Option<String>,
+
+  /// The key name to use for secret decryption
+  #[serde(default)]
+  pub key_name: Option<String>,
 
   /// The shell to use when running the task
   #[serde(default)]
@@ -197,21 +214,57 @@ impl TaskArgs {
       context.set_verbose(*verbose);
     }
 
+    if !context.is_nested {
+      if let Some(vault_location) = &context.task_root.vault_location {
+        context.set_secret_vault_location(vault_location.clone());
+      }
+
+      if let Some(keys_location) = &context.task_root.keys_location {
+        context.set_secret_keys_location(keys_location.clone());
+      }
+
+      if let Some(key_name) = &context.task_root.key_name {
+        context.set_secret_key_name(key_name.clone());
+      }
+    }
+
+    if let Some(vault_location) = &self.vault_location {
+      context.set_secret_vault_location(vault_location.clone());
+    }
+
+    if let Some(keys_location) = &self.keys_location {
+      context.set_secret_keys_location(keys_location.clone());
+    }
+
+    if let Some(key_name) = &self.key_name {
+      context.set_secret_key_name(key_name.clone());
+    }
+
     // Load environment variables from root and task environments and env files.
     if !context.is_nested {
       let config_base_dir = self.config_base_dir(context);
       let root_env = context.task_root.environment.clone();
       let root_env_files = load_env_files_in_dir(&context.task_root.env_file, &config_base_dir)?;
+      let root_secret_env = load_secret_env(
+        &context.task_root.secrets_path,
+        &config_base_dir,
+        context.secret_vault_location.as_deref(),
+        context.secret_keys_location.as_deref(),
+        context.secret_key_name.as_deref(),
+      )?;
       context.extend_env_vars(root_env);
       context.extend_env_vars(root_env_files);
+      context.extend_env_vars(root_secret_env);
     }
 
     // Load environment variables from the task environment and env files field
     let defined_env = self.load_env(context)?;
     let additional_env = self.load_env_file(context)?;
+    let secret_env = self.load_secret_env(context)?;
 
     context.extend_env_vars(defined_env);
     context.extend_env_vars(additional_env);
+    context.extend_env_vars(secret_env);
 
     if self.should_skip_from_cache(context)? {
       context.emit_event(&serde_json::json!({
@@ -447,6 +500,16 @@ impl TaskArgs {
     load_env_files_in_dir(&self.env_file, &self.config_base_dir(context))
   }
 
+  fn load_secret_env(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
+    load_secret_env(
+      &self.secrets_path,
+      &self.config_base_dir(context),
+      context.secret_vault_location.as_deref(),
+      context.secret_keys_location.as_deref(),
+      context.secret_key_name.as_deref(),
+    )
+  }
+
   fn get_env_value(&self, context: &TaskContext, value_in: &str) -> anyhow::Result<String> {
     if is_shell_command(value_in)? {
       let verbose = self.verbose();
@@ -457,6 +520,8 @@ impl TaskArgs {
         .unwrap_or_else(|| context.shell().proc());
       let output = run_shell_command!(value_in, cmd, verbose);
       Ok(output)
+    } else if super::is_template_command(value_in)? {
+      Ok(crate::schema::resolve_template_command_value(value_in, context)?)
     } else {
       Ok(value_in.to_string())
     }
@@ -523,7 +588,10 @@ impl TaskArgs {
 
     let env_vars = sorted_env_vars(&context.env_vars);
     let inputs = self.resolve_input_paths(context)?;
-    let env_files = self.resolve_env_file_paths(context);
+    let mut env_files = self.resolve_env_file_paths(context);
+    env_files.extend(self.resolve_secret_paths(context));
+    env_files.sort();
+    env_files.dedup();
     let fingerprint = compute_fingerprint(
       &context
         .current_task_name
@@ -554,7 +622,10 @@ impl TaskArgs {
 
     let env_vars = sorted_env_vars(&context.env_vars);
     let inputs = self.resolve_input_paths(context)?;
-    let env_files = self.resolve_env_file_paths(context);
+    let mut env_files = self.resolve_env_file_paths(context);
+    env_files.extend(self.resolve_secret_paths(context));
+    env_files.sort();
+    env_files.dedup();
     let resolved_outputs = self.resolve_output_paths(context)?;
     let fingerprint = compute_fingerprint(
       &context
@@ -653,6 +724,25 @@ impl TaskArgs {
     env_files.dedup();
     env_files
   }
+
+  fn resolve_secret_paths(&self, context: &TaskContext) -> Vec<std::path::PathBuf> {
+    let config_base_dir = self.config_base_dir(context);
+    let vault_location = context
+      .secret_vault_location
+      .as_deref()
+      .map(|path| resolve_path(&config_base_dir, path))
+      .unwrap_or_else(|| resolve_path(&config_base_dir, "./.mk/vault"));
+    let mut secret_paths = context
+      .task_root
+      .secrets_path
+      .iter()
+      .chain(self.secrets_path.iter())
+      .map(|secret_path| vault_location.join(secret_path))
+      .collect::<Vec<_>>();
+    secret_paths.sort();
+    secret_paths.dedup();
+    secret_paths
+  }
 }
 
 impl ExecutionMode {
@@ -695,8 +785,11 @@ fn stable_task_debug(task: &TaskArgs) -> String {
     .collect();
   environment.sort();
 
+  let mut secrets_path = task.secrets_path.clone();
+  secrets_path.sort();
+
   format!(
-    "commands={:?};preconditions={:?};depends_on={:?};labels={:?};description={:?};environment={:?};env_file={:?};shell={:?};execution_mode={:?};max_parallel={:?};fail_fast={};cache_enabled={};inputs={:?};outputs={:?};ignore_errors={:?};verbose={:?}",
+    "commands={:?};preconditions={:?};depends_on={:?};labels={:?};description={:?};environment={:?};env_file={:?};secrets_path={:?};vault_location={:?};keys_location={:?};key_name={:?};shell={:?};execution_mode={:?};max_parallel={:?};fail_fast={};cache_enabled={};inputs={:?};outputs={:?};ignore_errors={:?};verbose={:?}",
     task.commands,
     task.preconditions,
     task.depends_on,
@@ -704,6 +797,10 @@ fn stable_task_debug(task: &TaskArgs) -> String {
     task.description,
     environment,
     task.env_file,
+    secrets_path,
+    task.vault_location,
+    task.keys_location,
+    task.key_name,
     task.shell,
     task.execution_mode(),
     task.execution.as_ref().and_then(|execution| execution.max_parallel),
@@ -1143,6 +1240,37 @@ mod test {
 
       Ok(())
     }
+  }
+
+  #[test]
+  fn test_task_14() -> anyhow::Result<()> {
+    let yaml = "
+      commands: []
+      secrets_path:
+        - app/common
+      vault_location: ./.mk/vault
+      keys_location: ./.mk/keys
+      key_name: team
+      environment:
+        SECRET_VALUE: ${{ secrets.app/password }}
+    ";
+
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+
+    if let Task::Task(task) = &task {
+      assert_eq!(task.secrets_path, vec!["app/common"]);
+      assert_eq!(task.vault_location.as_deref(), Some("./.mk/vault"));
+      assert_eq!(task.keys_location.as_deref(), Some("./.mk/keys"));
+      assert_eq!(task.key_name.as_deref(), Some("team"));
+      assert_eq!(
+        task.environment.get("SECRET_VALUE").map(String::as_str),
+        Some("${{ secrets.app/password }}")
+      );
+    } else {
+      panic!("Expected Task::Task");
+    }
+
+    Ok(())
   }
 
   #[test]

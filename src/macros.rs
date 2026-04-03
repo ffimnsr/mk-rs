@@ -41,17 +41,6 @@ macro_rules! run_shell_command {
 #[macro_export]
 macro_rules! get_template_command_value {
   ($value:expr, $context:expr) => {{
-    let value = $value.trim_start_matches("${{").trim_end_matches("}}").trim();
-    let value = if value.starts_with("env.") {
-      let value = value.trim_start_matches("env.");
-      let value = $context
-        .env_vars
-        .get(value)
-        .ok_or_else(|| anyhow::anyhow!("Failed to find environment variable"))?;
-      value
-    } else {
-      value
-    };
-    value.to_string()
+    $crate::schema::resolve_template_command_value($value, $context)?
   }};
 }

@@ -23,6 +23,10 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | tasks | HashMap<String, Task> | - | true | Contains list of tasks keyed by task name. |
 | environment | HashMap<String, String> | {} | false | Environment variables applied to all tasks. |
 | env_file | String[] | [] | false | Environment files applied to all tasks. |
+| secrets_path | String[] | [] | false | Secret paths whose decrypted values are parsed as dotenv content and merged into the environment. |
+| vault_location | String | ./.mk/vault | false | Secret vault location used for `secrets_path` and `${{ secrets.NAME }}` resolution. |
+| keys_location | String | ~/.config/mk/priv | false | Private key directory used for secret decryption. |
+| key_name | String | default | false | Private key name used for secret decryption. |
 | use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
 | use_cargo | Bool or UseCargo | false | false | This allows mk to use cargo commands as tasks. |
 | container_runtime | auto / docker / podman | auto | false | Default container runtime for container commands. |
@@ -54,6 +58,10 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | description | String | \<empty-string\> | false | The description of the task. |
 | environment | HashMap<String, String> | {} | false | The environment variables to set before running the task. |
 | env_file | String[] | [] | false | The environment files to load before running the task. |
+| secrets_path | String[] | [] | false | Secret paths whose decrypted values are parsed as dotenv content and merged into the task environment. |
+| vault_location | String | inherited | false | Override the secret vault location for this task. |
+| keys_location | String | inherited | false | Override the private key directory for this task. |
+| key_name | String | inherited | false | Override the private key name for this task. |
 | shell | String | sh | false | The shell to call for command execution. |
 | parallel | bool | false | false | Run local_run commands in parallel. |
 | execution | TaskExecution | - | false | Richer execution settings for parallel mode. |
@@ -62,6 +70,23 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | outputs | String[] | [] | false | Files produced by the task. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |
+
+Task environment values also support `${{ secrets.path/to/secret }}` in addition to `${{ env.NAME }}`. Secret templates decrypt the referenced secret and inject the raw value.
+
+```yaml
+vault_location: ./.mk/vault
+keys_location: ./.mk/keys
+key_name: team
+secrets_path:
+  - app/common
+
+tasks:
+  deploy:
+    environment:
+      PSQL_PASSWORD: ${{ secrets.app/database/password }}
+    commands:
+      - command: ./deploy.sh
+```
 
 #### TaskExecution
 

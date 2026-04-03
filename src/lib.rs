@@ -23,6 +23,9 @@ pub mod file;
 /// The schema module contains the data structures used to represent the tasks
 pub mod schema;
 
+/// Shared secret vault helpers used by the CLI and task execution
+pub mod secrets;
+
 /// The version module contains the version information for the library
 pub mod version;
 

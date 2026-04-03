@@ -150,3 +150,9 @@ tasks:
           echo "World"
     description: Run the project in parallel
     parallel: true
+  test_secrets:
+    secrets_path:
+      - hello
+    commands:
+      - command: echo "The secret is $asdasd"
+    description: Test secrets

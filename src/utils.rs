@@ -125,12 +125,25 @@ pub(crate) fn load_env_files_in_dir(
       )
     })?;
 
-    for line in contents.lines() {
-      if let Some((key, value)) = line.split_once('=') {
-        local_env.insert(key.trim().to_string(), value.trim().to_string());
-      }
-    }
+    local_env.extend(parse_env_contents(&contents));
   }
 
   Ok(local_env)
+}
+
+pub(crate) fn parse_env_contents(contents: &str) -> HashMap<String, String> {
+  let mut env_vars = HashMap::new();
+
+  for line in contents.lines() {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+      continue;
+    }
+
+    if let Some((key, value)) = line.split_once('=') {
+      env_vars.insert(key.trim().to_string(), value.trim().to_string());
+    }
+  }
+
+  env_vars
 }

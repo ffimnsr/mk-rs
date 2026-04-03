@@ -45,9 +45,9 @@ enum SecretsCommand {
   #[command(visible_aliases = ["init"], about = "Initialize a new secret vault")]
   InitVault(vault::InitVault),
 
-  /// Export a secret store
-  #[command(visible_aliases = ["export", "e"], about = "Export secrets to file")]
-  ExportSecrets(vault::ExportSecrets),
+  /// Export a secret
+  #[command(visible_aliases = ["export", "e"], about = "Export a secret to file")]
+  ExportSecret(vault::ExportSecret),
 }
 
 impl Secrets {
@@ -66,7 +66,7 @@ impl Secrets {
       Some(SecretsCommand::Vault(vault)) => vault.execute(&mut context),
       Some(SecretsCommand::ListKeys(list_keys)) => list_keys.execute(&context),
       Some(SecretsCommand::InitVault(init_store)) => init_store.execute(&context),
-      Some(SecretsCommand::ExportSecrets(export_secrets)) => export_secrets.execute(&context),
+      Some(SecretsCommand::ExportSecret(export_secret)) => export_secret.execute(&context),
       None => Err(anyhow::anyhow!("No subcommand provided")),
     }
   }

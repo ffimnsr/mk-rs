@@ -8,15 +8,15 @@ use crate::secrets::context::Context;
 use crate::secrets::vault::verify_vault;
 
 #[derive(Debug, Args)]
-pub struct PurgeSecrets {
-  #[arg(help = "The secret identifier or prefix to export")]
+pub struct PurgeSecret {
+  #[arg(help = "The secret identifier")]
   path: String,
 
   #[arg(short, long, help = "The path to the secret vault")]
   vault_location: Option<String>,
 }
 
-impl PurgeSecrets {
+impl PurgeSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
     let vault_location: &str = &self
@@ -30,11 +30,12 @@ impl PurgeSecrets {
     verify_vault(vault_location)?;
 
     let path = Path::new(vault_location).join(path);
-    if path.exists() {
+    let data_path = path.join("data.asc");
+    if path.exists() && path.is_dir() && data_path.exists() && data_path.is_file() {
       fs::remove_dir_all(path.clone())?;
-      println!("Secrets purged at {}", path.to_utf8()?);
+      println!("Secret purged at {}", path.to_utf8()?);
     } else {
-      println!("Secrets not found at {}", path.to_utf8()?);
+      println!("Secret not found at {}", path.to_utf8()?);
     }
     Ok(())
   }

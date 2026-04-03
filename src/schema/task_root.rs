@@ -57,6 +57,22 @@ pub struct TaskRoot {
   #[serde(default)]
   pub env_file: Vec<String>,
 
+  /// Secret paths to load as dotenv-style environment entries before running any task
+  #[serde(default)]
+  pub secrets_path: Vec<String>,
+
+  /// The path to the secret vault
+  #[serde(default)]
+  pub vault_location: Option<String>,
+
+  /// The path to the private keys used for secret decryption
+  #[serde(default)]
+  pub keys_location: Option<String>,
+
+  /// The key name to use for secret decryption
+  #[serde(default)]
+  pub key_name: Option<String>,
+
   /// This allows mk to use npm scripts as tasks
   #[serde(default)]
   pub use_npm: Option<UseNpm>,
@@ -110,6 +126,10 @@ impl TaskRoot {
       tasks,
       environment: HashMap::new(),
       env_file: Vec::new(),
+      secrets_path: Vec::new(),
+      vault_location: None,
+      keys_location: None,
+      key_name: None,
       use_npm: None,
       use_cargo: None,
       container_runtime: None,
@@ -268,6 +288,10 @@ fn apply_extends(file: &Path, stack: &mut Vec<PathBuf>, mut root: TaskRoot) -> a
   base.tasks.extend(root.tasks.drain());
   base.environment.extend(root.environment.drain());
   base.env_file.extend(root.env_file);
+  base.secrets_path.extend(root.secrets_path);
+  base.vault_location = root.vault_location.or(base.vault_location);
+  base.keys_location = root.keys_location.or(base.keys_location);
+  base.key_name = root.key_name.or(base.key_name);
   base.use_npm = root.use_npm.or(base.use_npm);
   base.use_cargo = root.use_cargo.or(base.use_cargo);
   base.container_runtime = root.container_runtime.or(base.container_runtime);
@@ -480,6 +504,30 @@ mod test {
     } else {
       panic!("Expected Task::String");
     }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_secrets_config() -> anyhow::Result<()> {
+    let yaml = "
+      vault_location: ./.mk/vault
+      keys_location: ./.mk/keys
+      key_name: team
+      secrets_path:
+        - app/common
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+
+    assert_eq!(task_root.secrets_path, vec!["app/common"]);
+    assert_eq!(task_root.vault_location.as_deref(), Some("./.mk/vault"));
+    assert_eq!(task_root.keys_location.as_deref(), Some("./.mk/keys"));
+    assert_eq!(task_root.key_name.as_deref(), Some("team"));
 
     Ok(())
   }

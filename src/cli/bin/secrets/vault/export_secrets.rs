@@ -1,27 +1,15 @@
-use std::fs::{
-  self,
-  File,
-};
+use std::fs::File;
 use std::io::Write as _;
 use std::path::Path;
 
-use anyhow::Context as _;
 use clap::Args;
-use pgp::composed::{
-  Deserializable as _,
-  Message,
-  SignedSecretKey,
-};
+use mk_lib::secrets::load_secret_value;
 
 use crate::secrets::context::Context;
-use crate::secrets::vault::{
-  verify_key,
-  verify_vault,
-};
 
 #[derive(Debug, Args)]
-pub struct ExportSecrets {
-  #[arg(help = "The secret identifier or prefix to export")]
+pub struct ExportSecret {
+  #[arg(help = "The secret identifier")]
   path: String,
 
   #[arg(short, long, help = "The output file")]
@@ -37,7 +25,7 @@ pub struct ExportSecrets {
   key_name: Option<String>,
 }
 
-impl ExportSecrets {
+impl ExportSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
     let vault_location: &str = &self
@@ -55,66 +43,20 @@ impl ExportSecrets {
     assert!(!keys_location.is_empty(), "Keys location must be provided");
     assert!(!key_name.is_empty(), "Key name must be provided");
 
-    verify_vault(vault_location)?;
-    verify_key(keys_location, key_name)?;
+    let value = load_secret_value(
+      path,
+      Path::new("."),
+      Some(vault_location),
+      Some(keys_location),
+      Some(key_name),
+    )?;
 
-    // Open the secret key file
-    let key_name_with_ext = format!("{key_name}.key");
-    let key_path = Path::new(keys_location).join(key_name_with_ext);
-    let mut secret_key_string = File::open(key_path)?;
-    let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-    signed_secret_key.verify()?;
-
-    let secret_path = Path::new(vault_location).join(path);
-    let mut values = Vec::new();
-
-    if secret_path.exists() && secret_path.is_dir() {
-      // Check for file and subdirectories
-      let entries = fs::read_dir(secret_path.clone())?
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
-
-      // Check for data files in the subdirectories
-      for entry in entries {
-        let data_path = if entry.path().is_dir() {
-          entry.path().join("data.asc")
-        } else {
-          entry.path()
-        };
-
-        // Read the data file
-        if data_path.exists() && data_path.is_file() {
-          let mut data_file = std::io::BufReader::new(File::open(data_path)?);
-          let (message, _) = Message::from_armor(&mut data_file)?;
-          let mut decrypted_message = message.decrypt(&pgp::types::Password::empty(), &signed_secret_key)?;
-          let value = decrypted_message
-            .as_data_string()
-            .context("Failed to read secret value")?;
-
-          values.push(value);
-        }
-      }
-
-      if values.is_empty() {
-        println!("No secrets found for path: {}", path);
-      } else {
-        // Write the values to the output file if provided
-        // Otherwise, print the values to stdout which can be redirected
-        // to a file
-        if let Some(output) = &self.output {
-          let mut output_file = File::create(output)?;
-          for value in values {
-            writeln!(output_file, "{}", value)?;
-          }
-          output_file.flush()?;
-        } else {
-          for value in values {
-            println!("{}", value);
-          }
-        }
-      }
+    if let Some(output) = &self.output {
+      let mut output_file = File::create(output)?;
+      writeln!(output_file, "{}", value)?;
+      output_file.flush()?;
     } else {
-      println!("Path does not exist or is not a directory");
+      println!("{}", value);
     }
 
     Ok(())

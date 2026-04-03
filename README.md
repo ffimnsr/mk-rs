@@ -428,6 +428,12 @@ To display secrets:
 mk secrets vault show app/development/jobserver
 ```
 
+To list available secrets:
+
+```bash
+mk secrets vault list
+```
+
 To export secrets back to a dotenv file:
 
 ```bash
@@ -436,6 +442,43 @@ mk secrets vault export --output .env app/development/jobserver
 ...or...
 
 mk secrets vault export app/development/jobserver > .env
+```
+
+Secrets can also be consumed directly from `tasks.yaml`.
+
+Use `secrets_path` when the decrypted secret is dotenv content:
+
+```yaml
+vault_location: ./.mk/vault
+keys_location: ./.mk/keys
+key_name: default
+
+tasks:
+  deploy:
+    secrets_path:
+      - app/development/env
+    commands:
+      - command: env | grep '^NODE_ENV='
+```
+
+If `app/development/env` decrypts to:
+
+```dotenv
+NODE_ENV=production
+VERSION=1
+```
+
+those values are merged into the task environment before commands run.
+
+Use `${{ secrets.NAME }}` when the decrypted secret should become a single environment value:
+
+```yaml
+tasks:
+  migrate:
+    environment:
+      PSQL_PASSWORD: ${{ secrets.app/database/password }}
+    commands:
+      - command: ./migrate.sh
 ```
 
 ## Config Schema
@@ -448,7 +491,6 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add support for makefile, markdown and org-mode as task config format
 - [x] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
 - [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
-- [ ] Add implementation to use vault secrets
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run

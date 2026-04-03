@@ -37,6 +37,9 @@ pub struct TaskContext {
   pub completed_tasks: CompletedTasks,
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
+  pub secret_vault_location: Option<String>,
+  pub secret_keys_location: Option<String>,
+  pub secret_key_name: Option<String>,
   pub shell: Option<Arc<Shell>>,
   pub container_runtime: Option<ContainerRuntime>,
   pub ignore_errors: Option<bool>,
@@ -57,6 +60,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      secret_vault_location: None,
+      secret_keys_location: None,
+      secret_key_name: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -77,6 +83,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      secret_vault_location: None,
+      secret_keys_location: None,
+      secret_key_name: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -97,6 +106,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(MultiProgress::new()),
       env_vars: HashMap::new(),
+      secret_vault_location: task_root.vault_location.clone(),
+      secret_keys_location: task_root.keys_location.clone(),
+      secret_key_name: task_root.key_name.clone(),
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -122,6 +134,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi,
       env_vars: HashMap::new(),
+      secret_vault_location: task_root.vault_location.clone(),
+      secret_keys_location: task_root.keys_location.clone(),
+      secret_key_name: task_root.key_name.clone(),
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -141,6 +156,9 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      secret_vault_location: context.secret_vault_location.clone(),
+      secret_keys_location: context.secret_keys_location.clone(),
+      secret_key_name: context.secret_key_name.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: context.ignore_errors,
@@ -160,6 +178,9 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      secret_vault_location: context.secret_vault_location.clone(),
+      secret_keys_location: context.secret_keys_location.clone(),
+      secret_key_name: context.secret_key_name.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: Some(ignore_errors),
@@ -182,6 +203,18 @@ impl TaskContext {
   pub fn set_shell(&mut self, shell: &Shell) {
     let shell = Arc::new(Shell::from_shell(shell));
     self.shell = Some(shell);
+  }
+
+  pub fn set_secret_vault_location(&mut self, vault_location: impl Into<String>) {
+    self.secret_vault_location = Some(vault_location.into());
+  }
+
+  pub fn set_secret_keys_location(&mut self, keys_location: impl Into<String>) {
+    self.secret_keys_location = Some(keys_location.into());
+  }
+
+  pub fn set_secret_key_name(&mut self, key_name: impl Into<String>) {
+    self.secret_key_name = Some(key_name.into());
   }
 
   pub fn set_container_runtime(&mut self, runtime: &ContainerRuntime) {
