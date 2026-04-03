@@ -26,6 +26,10 @@ tasks:
     description: Build the project
     depends_on:
       - name: check
+  release:
+    commands:
+      - command: ./scripts/release.sh ${RELEASE_ARGS:-} "${RELEASE_VERSION:-}"
+    description: Publish a release to crates.io and push the git release tag
   build-in-container:
     commands:
       - container_command:
