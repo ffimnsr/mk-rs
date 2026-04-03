@@ -235,7 +235,7 @@ main() {
     cargo publish
   fi
 
-  git tag "$version"
+  git tag -a "$version" -m "release: $version"
 
   if ((run_push)); then
     git push "$REMOTE_NAME" HEAD
