@@ -189,7 +189,7 @@ impl CliEntry {
           anyhow::bail!("Config file already exists. Use `--force` to overwrite");
         }
 
-        let contents = include_str!("../../../templates/init_tasks.yaml");
+        let contents = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/init_tasks.yaml"));
 
         std::fs::write(config_path, contents)?;
         println!("Config file created at {}", config_path.to_utf8()?);

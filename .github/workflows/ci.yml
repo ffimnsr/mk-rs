@@ -113,6 +113,9 @@ jobs:
           echo "CARGO=cross" >> $GITHUB_ENV
           echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
           echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+          if [ "${{ matrix.target }}" = "powerpc64-unknown-linux-gnu" ]; then
+            echo "CFLAGS_powerpc64_unknown_linux_gnu=-mabi=elfv1" >> $GITHUB_ENV
+          fi
       - name: Show command used for Cargo
         run: |
           echo "cargo command is: ${{ env.CARGO }}"
