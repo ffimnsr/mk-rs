@@ -3,10 +3,7 @@ use std::io::{
   BufReader,
 };
 use std::process::Command as ProcessCommand;
-use std::{
-  env,
-  thread,
-};
+use std::thread;
 
 use anyhow::Context;
 use serde::Deserialize;
@@ -65,13 +62,11 @@ impl ContainerRun {
     let mut cmd = ProcessCommand::new(container_runtime);
     cmd.arg("run").arg("--rm").arg("-i").stdout(stdout).stderr(stderr);
 
-    let current_dir = env::current_dir()?;
-    cmd
-      .arg("-v")
-      .arg(format!("{}:/workdir:z", current_dir.to_utf8()?));
+    let workdir = context.task_root.config_base_dir();
+    cmd.arg("-v").arg(format!("{}:/workdir:z", workdir.to_utf8()?));
     cmd.arg("-w").arg("/workdir");
 
-    for mounted_path in self.mounted_paths.clone() {
+    for mounted_path in self.resolved_mounted_paths(context) {
       cmd.arg("-v").arg(mounted_path);
     }
 
@@ -109,4 +104,50 @@ impl ContainerRun {
   fn verbose(&self, context: &TaskContext) -> bool {
     self.verbose.or(context.verbose).unwrap_or(default_verbose())
   }
+
+  pub fn resolved_mounted_paths(&self, context: &TaskContext) -> Vec<String> {
+    self
+      .mounted_paths
+      .iter()
+      .map(|mounted_path| resolve_mount_spec(context, mounted_path))
+      .collect()
+  }
+}
+
+fn resolve_mount_spec(context: &TaskContext, mounted_path: &str) -> String {
+  let mut parts = mounted_path.splitn(3, ':');
+  let host = parts.next().unwrap_or_default();
+  let second = parts.next();
+  let third = parts.next();
+
+  if let Some(container_path) = second {
+    if !should_resolve_bind_host(host, container_path) {
+      return mounted_path.to_string();
+    }
+
+    let resolved_host = context.resolve_from_config(host);
+    match third {
+      Some(options) => format!(
+        "{}:{}:{}",
+        resolved_host.to_string_lossy(),
+        container_path,
+        options
+      ),
+      None => format!("{}:{}", resolved_host.to_string_lossy(), container_path),
+    }
+  } else {
+    mounted_path.to_string()
+  }
+}
+
+fn should_resolve_bind_host(host: &str, container_path: &str) -> bool {
+  if host.is_empty() || container_path.is_empty() {
+    return false;
+  }
+
+  host.starts_with('.')
+    || host.starts_with('/')
+    || host.contains('/')
+    || host == "~"
+    || host.starts_with("~/")
 }

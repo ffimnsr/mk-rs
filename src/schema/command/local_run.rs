@@ -91,7 +91,7 @@ impl LocalRun {
       }
     }
 
-    if let Some(work_dir) = &self.work_dir.clone() {
+    if let Some(work_dir) = self.resolved_work_dir(context) {
       cmd.current_dir(work_dir);
     }
 
@@ -134,6 +134,10 @@ impl LocalRun {
         .unwrap_or_else(|| context.shell().proc());
       cmd.arg(test).stdout(stdout).stderr(stderr);
 
+      if let Some(work_dir) = self.resolved_work_dir(context) {
+        cmd.current_dir(work_dir);
+      }
+
       let mut cmd = cmd.spawn()?;
       if verbose {
         handle_output!(cmd.stdout, context);
@@ -164,6 +168,13 @@ impl LocalRun {
 
   fn verbose(&self, context: &TaskContext) -> bool {
     self.verbose.or(context.verbose).unwrap_or(default_verbose())
+  }
+
+  pub fn resolved_work_dir(&self, context: &TaskContext) -> Option<std::path::PathBuf> {
+    self
+      .work_dir
+      .as_ref()
+      .map(|work_dir| context.resolve_from_config(work_dir))
   }
 }
 

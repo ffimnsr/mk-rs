@@ -2,7 +2,7 @@ use std::io::{
   BufRead as _,
   BufReader,
 };
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 use std::thread;
 
@@ -85,6 +85,9 @@ impl ContainerBuild {
     let stdout = get_output_handler(verbose);
     let stderr = get_output_handler(verbose);
 
+    let resolved_context = self.resolved_context(context);
+    let resolved_containerfile = self.resolved_containerfile(context);
+
     let container_runtime = ContainerRuntime::resolve(
       self
         .container_build
@@ -132,24 +135,23 @@ impl ContainerBuild {
       cmd.arg("-t").arg(tag);
     }
 
-    if let Some(containerfile) = &self.container_build.containerfile {
+    if let Some(containerfile) = &resolved_containerfile {
       cmd.arg("-f").arg(containerfile);
     } else {
-      let dockerfile = format!("{}/Dockerfile", &self.container_build.context);
-      let containerfile = format!("{}/Containerfile", &self.container_build.context);
+      let dockerfile = resolved_context.join("Dockerfile");
+      let containerfile = resolved_context.join("Containerfile");
 
       // Check for Dockerfile and Containerfile
-      if Path::new(&dockerfile).exists() {
+      if dockerfile.exists() {
         cmd.arg("-f").arg(dockerfile);
-      } else if Path::new(&containerfile).exists() {
+      } else if containerfile.exists() {
         cmd.arg("-f").arg(containerfile);
       } else {
         anyhow::bail!("Failed to find Dockerfile or Containerfile in context");
       }
     }
 
-    let build_path: &str = &self.container_build.context;
-    cmd.arg(build_path);
+    cmd.arg(&resolved_context);
 
     let cmd_str = format!("{:?}", cmd);
     context.multi.println(cmd_str)?;
@@ -205,12 +207,14 @@ impl ContainerBuild {
           Ok(format!("{}={}", key, now))
         },
         "MK_GIT_REVISION" => {
-          let revision = self.get_git_revision().unwrap_or_else(|_| "unknown".to_string());
+          let revision = self
+            .get_git_revision(context)
+            .unwrap_or_else(|_| "unknown".to_string());
           Ok(format!("{}={}", key, revision))
         },
         "MK_GIT_REMOTE_ORIGIN" => {
           let remote_url = self
-            .get_git_remote_origin()
+            .get_git_remote_origin(context)
             .unwrap_or_else(|_| "unknown".to_string());
           Ok(format!("{}={}", key, remote_url))
         },
@@ -232,8 +236,8 @@ impl ContainerBuild {
     }
   }
 
-  fn get_git_revision(&self) -> anyhow::Result<String> {
-    let repo = Repository::open(".").context("Failed to open git repository")?;
+  fn get_git_revision(&self, context: &TaskContext) -> anyhow::Result<String> {
+    let repo = self.open_git_repository(context)?;
     let head = repo.head().context("Failed to get git HEAD reference")?;
     let commit = head
       .peel_to_commit()
@@ -241,13 +245,35 @@ impl ContainerBuild {
     Ok(commit.id().to_string())
   }
 
-  fn get_git_remote_origin(&self) -> anyhow::Result<String> {
-    let repo = Repository::open(".").context("Failed to open git repository")?;
+  fn get_git_remote_origin(&self, context: &TaskContext) -> anyhow::Result<String> {
+    let repo = self.open_git_repository(context)?;
     let remote = repo
       .find_remote("origin")
       .context("Failed to find git remote origin")?;
     let url = remote.url().context("Failed to get git remote URL")?;
     Ok(url.to_string())
+  }
+
+  pub fn resolved_context(&self, context: &TaskContext) -> PathBuf {
+    context.resolve_from_config(&self.container_build.context)
+  }
+
+  pub fn resolved_containerfile(&self, context: &TaskContext) -> Option<PathBuf> {
+    self
+      .container_build
+      .containerfile
+      .as_ref()
+      .map(|containerfile| context.resolve_from_config(containerfile))
+  }
+
+  fn open_git_repository(&self, context: &TaskContext) -> anyhow::Result<Repository> {
+    let resolved_context = self.resolved_context(context);
+    Repository::discover(&resolved_context).with_context(|| {
+      format!(
+        "Failed to open git repository from build context - {}",
+        resolved_context.to_string_lossy()
+      )
+    })
   }
 }
 

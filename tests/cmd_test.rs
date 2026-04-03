@@ -807,7 +807,7 @@ fn test_mk_30_cache_file_is_stored_under_config_root() -> anyhow::Result<()> {
           enabled: true
         commands:
           - command: cat input.txt > output.txt
-            work_dir: nested
+            work_dir: .
             verbose: false
     ",
   )?;
@@ -910,6 +910,316 @@ fn test_mk_32_plan_reports_effective_base_dir() -> anyhow::Result<()> {
       "base_dir: {}",
       expected_base_dir.to_string_lossy()
     )));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_33_local_run_and_precondition_resolve_work_dir_from_config_dir() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::create_dir_all(temp_dir.path().join("nested/work"))?;
+  let marker_file = temp_dir.path().join("nested/work/marker.txt");
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "nested/tasks.yaml",
+    "
+    tasks:
+      build:
+        preconditions:
+          - command: test -f input.txt
+            work_dir: work
+            verbose: false
+        commands:
+          - command: printf 'ok' > marker.txt
+            work_dir: work
+            verbose: false
+    ",
+  )?;
+
+  std::fs::write(temp_dir.path().join("nested/work/input.txt"), "hello")?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&marker_file)?, "ok");
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_34_container_build_resolves_context_and_containerfile_from_config_dir() -> anyhow::Result<()> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let temp_dir = TempDir::new()?;
+  std::fs::create_dir_all(temp_dir.path().join("nested/buildctx"))?;
+  let podman_path = temp_dir.path().join("podman");
+  let marker_file = temp_dir.path().join("build-args.txt");
+  std::fs::write(
+    temp_dir.path().join("nested/buildctx/Customfile"),
+    "FROM scratch\n",
+  )?;
+
+  std::fs::write(
+    &podman_path,
+    format!(
+      "#!/bin/sh\nprintf '%s\\n' \"$*\" > {}\n",
+      marker_file.to_string_lossy()
+    ),
+  )?;
+  std::fs::set_permissions(&podman_path, std::fs::Permissions::from_mode(0o755))?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "nested/tasks.yaml",
+    "
+    container_runtime: podman
+    tasks:
+      image:
+        commands:
+          - container_build:
+              image_name: example/test
+              context: buildctx
+              containerfile: buildctx/Customfile
+    ",
+  )?;
+
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("image")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert!(marker.contains(
+    &temp_dir
+      .path()
+      .join("nested/buildctx")
+      .to_string_lossy()
+      .into_owned()
+  ));
+  assert!(marker.contains(
+    &temp_dir
+      .path()
+      .join("nested/buildctx/Customfile")
+      .to_string_lossy()
+      .into_owned()
+  ));
+
+  let mut plan_cmd = Command::new(cargo::cargo_bin!("mk"));
+  plan_cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("image")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains(format!(
+      "\"context\": \"{}\"",
+      temp_dir.path().join("nested/buildctx").to_string_lossy()
+    )))
+    .stdout(predicates::str::contains(format!(
+      "\"containerfile\": \"{}\"",
+      temp_dir
+        .path()
+        .join("nested/buildctx/Customfile")
+        .to_string_lossy()
+    )));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_35_container_run_resolves_relative_mount_host_paths_from_config_dir() -> anyhow::Result<()> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let temp_dir = TempDir::new()?;
+  std::fs::create_dir_all(temp_dir.path().join("nested/data"))?;
+  let podman_path = temp_dir.path().join("podman");
+  let marker_file = temp_dir.path().join("run-args.txt");
+
+  std::fs::write(
+    &podman_path,
+    format!(
+      "#!/bin/sh\nprintf '%s\\n' \"$*\" > {}\n",
+      marker_file.to_string_lossy()
+    ),
+  )?;
+  std::fs::set_permissions(&podman_path, std::fs::Permissions::from_mode(0o755))?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "nested/tasks.yaml",
+    "
+    container_runtime: podman
+    tasks:
+      hello:
+        commands:
+          - image: docker.io/library/bash:latest
+            container_command:
+              - echo
+              - hello
+            mounted_paths:
+              - ./data:/data:ro,z
+    ",
+  )?;
+
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("hello")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert!(
+    marker.contains(&format!(
+      "{}:/workdir:z",
+      temp_dir.path().join("nested").to_string_lossy()
+    )),
+    "expected config-root workdir mount, got: {}",
+    marker
+  );
+  assert!(
+    marker.contains(&format!(
+      "{}:/data:ro,z",
+      temp_dir.path().join("nested/data").to_string_lossy()
+    )),
+    "expected resolved relative host mount, got: {}",
+    marker
+  );
+
+  let mut plan_cmd = Command::new(cargo::cargo_bin!("mk"));
+  plan_cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("hello")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains(format!(
+      "\"{}:/data:ro,z\"",
+      temp_dir.path().join("nested/data").to_string_lossy()
+    )));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_36_container_run_preserves_named_volumes() -> anyhow::Result<()> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let temp_dir = TempDir::new()?;
+  std::fs::create_dir_all(temp_dir.path().join("nested"))?;
+  let podman_path = temp_dir.path().join("podman");
+  let marker_file = temp_dir.path().join("named-volume-args.txt");
+
+  std::fs::write(
+    &podman_path,
+    format!(
+      "#!/bin/sh\nprintf '%s\\n' \"$*\" > {}\n",
+      marker_file.to_string_lossy()
+    ),
+  )?;
+  std::fs::set_permissions(&podman_path, std::fs::Permissions::from_mode(0o755))?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "nested/tasks.yaml",
+    "
+    container_runtime: podman
+    tasks:
+      hello:
+        commands:
+          - image: docker.io/library/bash:latest
+            container_command:
+              - echo
+              - hello
+            mounted_paths:
+              - cache:/data
+    ",
+  )?;
+
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("hello")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert!(
+    marker.contains("cache:/data"),
+    "expected named volume to remain unchanged, got: {}",
+    marker
+  );
+  assert!(
+    !marker.contains(
+      &temp_dir
+        .path()
+        .join("nested/cache")
+        .to_string_lossy()
+        .into_owned()
+    ),
+    "named volume was incorrectly rewritten: {}",
+    marker
+  );
+
+  let mut plan_cmd = Command::new(cargo::cargo_bin!("mk"));
+  plan_cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("hello")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("\"cache:/data\""));
 
   Ok(())
 }

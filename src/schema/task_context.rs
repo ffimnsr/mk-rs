@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::{
   Arc,
   Mutex,
@@ -259,6 +260,10 @@ impl TaskContext {
 
   pub fn set_current_task_name(&mut self, task_name: &str) {
     self.current_task_name = Some(task_name.to_string());
+  }
+
+  pub fn resolve_from_config(&self, value: &str) -> PathBuf {
+    self.task_root.resolve_from_config(value)
   }
 }
 

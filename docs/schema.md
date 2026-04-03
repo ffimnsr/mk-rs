@@ -14,7 +14,7 @@
 | `mk clean-cache` | Remove persisted task cache metadata. |
 
 Planning commands are side-effect free and do not evaluate shell or template expressions.
-Relative `extends`, `env_file`, `inputs`, and `outputs` paths resolve from the config file directory, except task cache `inputs` and `outputs` prefer a single effective local command `work_dir` when the task defines one consistently.
+Relative `extends`, `env_file`, command `work_dir`, container build `context`, and `containerfile` paths resolve from the config file directory. Task cache `inputs` and `outputs` prefer a single effective local command `work_dir` when the task defines one consistently.
 
 ## Root
 
@@ -122,7 +122,7 @@ Run the command in container environment. This automatically searches for availa
 | --- | --- | --- | --- | --- |
 | container_command | String[] | - | true | The command to run in the container. |
 | image | String | - | true | The container image to use. |
-| mounted_paths | String[] | [] | false | The mounted paths to bind mount into the container. |
+| mounted_paths | String[] | [] | false | The mounted paths to bind mount into the container. Relative host-side paths resolve from the config file directory. |
 | runtime | auto / docker / podman | auto | false | Explicitly choose the container runtime. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |

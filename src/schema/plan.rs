@@ -194,7 +194,10 @@ impl PlannedCommand {
       CommandRunner::LocalRun(local_run) => PlannedCommand::LocalRun {
         command: local_run.command.clone(),
         shell: Some(effective_shell(task, local_run.shell.as_ref()).cmd()),
-        work_dir: local_run.work_dir.clone(),
+        work_dir: local_run
+          .work_dir
+          .as_ref()
+          .map(|work_dir| root.resolve_from_config(work_dir).to_string_lossy().into_owned()),
         interactive: local_run.interactive.unwrap_or(false),
       },
       CommandRunner::ContainerRun(container_run) => PlannedCommand::ContainerRun {
@@ -206,7 +209,11 @@ impl PlannedCommand {
           .unwrap_or_else(|| "auto".to_string()),
         image: container_run.image.clone(),
         command: container_run.container_command.clone(),
-        mounted_paths: container_run.mounted_paths.clone(),
+        mounted_paths: container_run
+          .mounted_paths
+          .iter()
+          .map(|mounted_path| resolve_plan_mount_spec(root, mounted_path))
+          .collect(),
       },
       CommandRunner::ContainerBuild(container_build) => PlannedCommand::ContainerBuild {
         runtime: container_build
@@ -217,8 +224,20 @@ impl PlannedCommand {
           .map(|runtime| runtime.name().to_string())
           .unwrap_or_else(|| "auto".to_string()),
         image_name: container_build.container_build.image_name.clone(),
-        context: container_build.container_build.context.clone(),
-        containerfile: container_build.container_build.containerfile.clone(),
+        context: root
+          .resolve_from_config(&container_build.container_build.context)
+          .to_string_lossy()
+          .into_owned(),
+        containerfile: container_build
+          .container_build
+          .containerfile
+          .as_ref()
+          .map(|containerfile| {
+            root
+              .resolve_from_config(containerfile)
+              .to_string_lossy()
+              .into_owned()
+          }),
         tags: container_build
           .container_build
           .tags
@@ -243,6 +262,44 @@ fn effective_shell(task: &TaskArgs, command_shell: Option<&Shell>) -> Shell {
     .cloned()
     .or_else(|| task.shell.clone())
     .unwrap_or_else(default_shell)
+}
+
+fn resolve_plan_mount_spec(root: &TaskRoot, mounted_path: &str) -> String {
+  let mut parts = mounted_path.splitn(3, ':');
+  let host = parts.next().unwrap_or_default();
+  let second = parts.next();
+  let third = parts.next();
+
+  if let Some(container_path) = second {
+    if !should_resolve_bind_host(host, container_path) {
+      return mounted_path.to_string();
+    }
+
+    let resolved_host = root.resolve_from_config(host);
+    match third {
+      Some(options) => format!(
+        "{}:{}:{}",
+        resolved_host.to_string_lossy(),
+        container_path,
+        options
+      ),
+      None => format!("{}:{}", resolved_host.to_string_lossy(), container_path),
+    }
+  } else {
+    mounted_path.to_string()
+  }
+}
+
+fn should_resolve_bind_host(host: &str, container_path: &str) -> bool {
+  if host.is_empty() || container_path.is_empty() {
+    return false;
+  }
+
+  host.starts_with('.')
+    || host.starts_with('/')
+    || host.contains('/')
+    || host == "~"
+    || host.starts_with("~/")
 }
 
 #[cfg(test)]

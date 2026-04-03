@@ -55,8 +55,8 @@ impl Precondition {
 
     cmd.arg(self.command.clone()).stdout(stdout).stderr(stderr);
 
-    if self.work_dir.is_some() {
-      cmd.current_dir(self.work_dir.as_ref().with_context(|| "Failed to get work_dir")?);
+    if let Some(work_dir) = self.resolved_work_dir(context) {
+      cmd.current_dir(work_dir);
     }
 
     // Inject environment variables
@@ -85,6 +85,13 @@ impl Precondition {
 
   fn verbose(&self, context: &TaskContext) -> bool {
     self.verbose.or(context.verbose).unwrap_or(default_verbose())
+  }
+
+  fn resolved_work_dir(&self, context: &TaskContext) -> Option<std::path::PathBuf> {
+    self
+      .work_dir
+      .as_ref()
+      .map(|work_dir| context.resolve_from_config(work_dir))
   }
 }
 
