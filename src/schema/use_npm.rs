@@ -120,6 +120,7 @@ impl UseNpmArgs {
               .map(|work_dir| work_dir.to_string_lossy().into_owned()),
             interactive: Some(true),
             ignore_errors: None,
+            save_output_as: None,
             verbose: None,
           })],
           ..Default::default()

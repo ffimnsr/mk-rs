@@ -128,6 +128,7 @@ Recent workflow features:
 - `mk run <task> --json-events` emits newline-delimited JSON task and command events.
 - Tasks can opt into incremental caching with `inputs`, `outputs`, and `cache.enabled`.
 - Container commands can select `runtime: docker|podman|auto`.
+- Local `command:` steps can save stdout with `save_output_as` and reuse it later via `${{ outputs.NAME }}`.
 
 ### Makefile and task.yaml comparison
 
@@ -481,6 +482,33 @@ tasks:
       - command: ./migrate.sh
 ```
 
+Use `save_output_as` to capture a command stdout value for later commands in the same task:
+
+```yaml
+tasks:
+  release:
+    commands:
+      - command: printf 'v1.2.3\n'
+        save_output_as: version
+      - command: echo "building ${{ outputs.version }}"
+```
+
+Multi-line commands can also save outputs. Internal newlines are preserved, and trailing newline characters are trimmed:
+
+```yaml
+tasks:
+  package:
+    environment:
+      BUILD_TAG: build-${{ outputs.tag }}
+    commands:
+      - command: |
+          version="1.2.3"
+          commit="abc123"
+          printf '%s-%s\n' "$version" "$commit"
+        save_output_as: tag
+      - command: printf '%s\n' "$BUILD_TAG"
+```
+
 ## Config Schema
 
 The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
@@ -490,7 +518,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [x] Add global context for environment and output
 - [ ] Add support for makefile, markdown and org-mode as task config format
 - [x] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
-- [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
+- [x] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run

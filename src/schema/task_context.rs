@@ -37,6 +37,7 @@ pub struct TaskContext {
   pub completed_tasks: CompletedTasks,
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
+  pub task_outputs: Arc<Mutex<HashMap<String, String>>>,
   pub secret_vault_location: Option<String>,
   pub secret_keys_location: Option<String>,
   pub secret_key_name: Option<String>,
@@ -60,6 +61,7 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: None,
       secret_keys_location: None,
       secret_key_name: None,
@@ -83,6 +85,7 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: None,
       secret_keys_location: None,
       secret_key_name: None,
@@ -106,6 +109,7 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(MultiProgress::new()),
       env_vars: HashMap::new(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: task_root.vault_location.clone(),
       secret_keys_location: task_root.keys_location.clone(),
       secret_key_name: task_root.key_name.clone(),
@@ -134,6 +138,7 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi,
       env_vars: HashMap::new(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: task_root.vault_location.clone(),
       secret_keys_location: task_root.keys_location.clone(),
       secret_key_name: task_root.key_name.clone(),
@@ -156,6 +161,7 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: context.secret_vault_location.clone(),
       secret_keys_location: context.secret_keys_location.clone(),
       secret_key_name: context.secret_key_name.clone(),
@@ -178,6 +184,7 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_vault_location: context.secret_vault_location.clone(),
       secret_keys_location: context.secret_keys_location.clone(),
       secret_key_name: context.secret_key_name.clone(),
@@ -227,6 +234,35 @@ impl TaskContext {
 
   pub fn set_verbose(&mut self, verbose: bool) {
     self.verbose = Some(verbose);
+  }
+
+  pub fn insert_task_output(&self, name: impl Into<String>, value: impl Into<String>) -> anyhow::Result<()> {
+    let name = name.into();
+    let mut outputs = self
+      .task_outputs
+      .lock()
+      .map_err(|e| anyhow::anyhow!("Failed to lock task outputs - {}", e))?;
+    if outputs.contains_key(&name) {
+      anyhow::bail!("Task output already exists - {}", name);
+    }
+    outputs.insert(name, value.into());
+    Ok(())
+  }
+
+  pub fn get_task_output(&self, name: &str) -> anyhow::Result<Option<String>> {
+    let outputs = self
+      .task_outputs
+      .lock()
+      .map_err(|e| anyhow::anyhow!("Failed to lock task outputs - {}", e))?;
+    Ok(outputs.get(name).cloned())
+  }
+
+  pub fn has_task_output(&self, name: &str) -> anyhow::Result<bool> {
+    let outputs = self
+      .task_outputs
+      .lock()
+      .map_err(|e| anyhow::anyhow!("Failed to lock task outputs - {}", e))?;
+    Ok(outputs.contains_key(name))
   }
 
   pub fn shell(&self) -> Arc<Shell> {
@@ -357,6 +393,15 @@ mod test {
       assert!(context.verbose());
     }
 
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_context_outputs_are_stored() -> anyhow::Result<()> {
+    let context = TaskContext::empty();
+    context.insert_task_output("tag", "v1.0.0")?;
+    assert_eq!(context.get_task_output("tag")?, Some("v1.0.0".to_string()));
+    assert!(context.has_task_output("tag")?);
     Ok(())
   }
 }

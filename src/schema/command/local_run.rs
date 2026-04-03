@@ -16,6 +16,7 @@ use crate::defaults::{
 use crate::handle_output;
 use crate::schema::{
   get_output_handler,
+  interpolate_template_string,
   Shell,
   TaskContext,
 };
@@ -47,6 +48,10 @@ pub struct LocalRun {
   #[serde(default)]
   pub ignore_errors: Option<bool>,
 
+  /// Save the command stdout to a task-scoped output name
+  #[serde(default)]
+  pub save_output_as: Option<String>,
+
   /// Show verbose output
   #[serde(default)]
   pub verbose: Option<bool>,
@@ -56,8 +61,10 @@ impl LocalRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
     assert!(!self.command.is_empty());
 
+    let command = interpolate_template_string(&self.command, context)?;
     let interactive = self.interactive();
     let ignore_errors = self.ignore_errors(context);
+    let capture_output = self.save_output_as.is_some();
     // If interactive mode is enabled, we don't need to redirect the output
     // to the parent process. This is because the command will be run in the
     // foreground and the user will be able to see the output.
@@ -74,9 +81,17 @@ impl LocalRun {
       .map(|shell| shell.proc())
       .unwrap_or_else(|| context.shell().proc());
 
-    cmd.arg(&self.command);
+    cmd.arg(&command);
 
-    if verbose {
+    if capture_output {
+      cmd.stdout(Stdio::piped());
+      if interactive {
+        context.multi.set_draw_target(ProgressDrawTarget::hidden());
+        cmd.stdin(Stdio::inherit()).stderr(Stdio::inherit());
+      } else {
+        cmd.stderr(get_output_handler(verbose));
+      }
+    } else if verbose {
       if interactive {
         context.multi.set_draw_target(ProgressDrawTarget::hidden());
 
@@ -101,14 +116,50 @@ impl LocalRun {
     }
 
     let mut cmd = cmd.spawn()?;
-    if verbose && !interactive {
+    let stdout_handle = if capture_output {
+      let stdout = cmd.stdout.take().context("Failed to open stdout")?;
+      let multi = context.multi.clone();
+      Some(thread::spawn(move || -> anyhow::Result<String> {
+        let reader = BufReader::new(stdout);
+        let mut output = String::new();
+        for line in reader.lines() {
+          let line = line?;
+          if verbose {
+            let _ = multi.println(line.clone());
+          }
+          output.push_str(&line);
+          output.push('\n');
+        }
+        Ok(output.trim_end_matches(['\r', '\n']).to_string())
+      }))
+    } else {
+      None
+    };
+
+    if verbose && !interactive && !capture_output {
       handle_output!(cmd.stdout, context);
+      handle_output!(cmd.stderr, context);
+    } else if verbose && !interactive && capture_output {
       handle_output!(cmd.stderr, context);
     }
 
     let status = cmd.wait()?;
+    let captured_stdout = match stdout_handle {
+      Some(handle) => Some(
+        handle
+          .join()
+          .map_err(|_| anyhow::anyhow!("Failed to join stdout capture thread"))??,
+      ),
+      None => None,
+    };
     if !status.success() && !ignore_errors {
-      anyhow::bail!("Command failed - {}", self.command);
+      anyhow::bail!("Command failed - {}", command);
+    }
+
+    if status.success() {
+      if let (Some(output_name), Some(output_value)) = (&self.save_output_as, captured_stdout) {
+        context.insert_task_output(output_name.clone(), output_value)?;
+      }
     }
 
     Ok(())
@@ -127,12 +178,13 @@ impl LocalRun {
     let stderr = get_output_handler(verbose);
 
     if let Some(test) = &self.test {
+      let test = interpolate_template_string(test, context)?;
       let mut cmd = self
         .shell
         .as_ref()
         .map(|shell| shell.proc())
         .unwrap_or_else(|| context.shell().proc());
-      cmd.arg(test).stdout(stdout).stderr(stderr);
+      cmd.arg(&test).stdout(stdout).stderr(stderr);
 
       if let Some(work_dir) = self.resolved_work_dir(context) {
         cmd.current_dir(work_dir);
@@ -196,6 +248,7 @@ mod test {
       assert_eq!(local_run.work_dir, None);
       assert_eq!(local_run.ignore_errors, Some(false));
       assert_eq!(local_run.verbose, Some(false));
+      assert_eq!(local_run.save_output_as, None);
 
       Ok(())
     }
@@ -217,6 +270,7 @@ mod test {
       assert_eq!(local_run.work_dir, None);
       assert_eq!(local_run.ignore_errors, Some(false));
       assert_eq!(local_run.verbose, Some(false));
+      assert_eq!(local_run.save_output_as, None);
 
       Ok(())
     }
@@ -242,6 +296,7 @@ mod test {
       assert_eq!(local_run.ignore_errors, Some(false));
       assert_eq!(local_run.verbose, Some(false));
       assert_eq!(local_run.interactive, Some(true));
+      assert_eq!(local_run.save_output_as, None);
 
       Ok(())
     }

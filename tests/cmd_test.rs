@@ -1223,3 +1223,284 @@ fn test_mk_36_container_run_preserves_named_volumes() -> anyhow::Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("result.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "outputs.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        environment:
+          IMAGE_TAG: tag-${{{{ outputs.version }}}}
+        commands:
+          - command: printf '1.2.3\\n'
+            save_output_as: version
+            verbose: false
+          - command: printf '%s|%s' \"${{{{ outputs.version }}}}\" \"$IMAGE_TAG\" > {}
+            verbose: false
+    ",
+      result_file.to_utf8()?
+    ),
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "1.2.3|tag-1.2.3");
+  Ok(())
+}
+
+#[test]
+fn test_mk_38_capture_multiline_output_trims_trailing_newlines() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("multiline.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "multiline-output.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        commands:
+          - command: |
+              printf 'line1\\nline2\\n\\n'
+            save_output_as: block
+            verbose: false
+          - command: printf '%s' \"${{{{ outputs.block }}}}\" > {}
+            verbose: false
+    ",
+      result_file.to_utf8()?
+    ),
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "line1\nline2");
+  Ok(())
+}
+
+#[test]
+fn test_mk_39_failed_command_does_not_publish_output() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "failed-output.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: printf 'broken' && false
+            save_output_as: version
+            ignore_errors: true
+            verbose: false
+          - command: printf '%s' \"${{ outputs.version }}\"
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Failed to find task output - version"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let parent_file = temp_dir.path().join("parent.txt");
+  let child_file = temp_dir.path().join("child.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "nested-output.yaml",
+    &format!(
+      "
+    tasks:
+      root:
+        commands:
+          - command: printf 'parent\\n'
+            save_output_as: shared
+            verbose: false
+          - task: child
+          - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
+            verbose: false
+      child:
+        commands:
+          - command: printf 'child\\n'
+            save_output_as: shared
+            verbose: false
+          - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
+            verbose: false
+    ",
+      parent_file.to_utf8()?,
+      child_file.to_utf8()?
+    ),
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("root")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&parent_file)?, "parent");
+  assert_eq!(std::fs::read_to_string(&child_file)?, "child");
+  Ok(())
+}
+
+#[test]
+fn test_mk_41_validate_rejects_duplicate_saved_outputs() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "duplicate-output.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: printf 'one'
+            save_output_as: version
+            verbose: false
+          - command: printf 'two'
+            save_output_as: version
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("Duplicate saved output name: version"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_42_validate_rejects_forward_output_reference() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "forward-output.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: printf '%s' \"${{ outputs.version }}\"
+            verbose: false
+          - command: printf '1.2.3'
+            save_output_as: version
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains(
+      "Output reference must come from an earlier command: version",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_43_validate_rejects_unknown_output_reference_in_environment() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "unknown-output-env.yaml",
+    "
+    tasks:
+      build:
+        environment:
+          IMAGE_TAG: ${{ outputs.version }}
+        commands:
+          - command: printf 'ok'
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains(
+      "Unknown task output reference: version",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_44_validate_rejects_parallel_saved_outputs() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "parallel-output.yaml",
+    "
+    tasks:
+      build:
+        execution:
+          mode: parallel
+        commands:
+          - command: printf '1.2.3'
+            save_output_as: version
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains(
+      "Parallel execution does not support saved command outputs",
+    ));
+
+  Ok(())
+}

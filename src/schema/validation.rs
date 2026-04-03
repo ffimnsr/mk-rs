@@ -4,6 +4,8 @@ use std::path::Path;
 use serde::Serialize;
 
 use super::{
+  contains_output_reference,
+  extract_output_references,
   CommandRunner,
   ContainerRuntime,
   Include,
@@ -151,6 +153,19 @@ impl TaskRoot {
               ),
             }
           }
+
+          if task
+            .environment
+            .values()
+            .any(|value| contains_output_reference(value))
+            || task.commands.iter().any(command_uses_task_outputs)
+          {
+            report.push_error(
+              Some(task_name),
+              Some("execution.mode"),
+              "Parallel execution does not support saved command outputs",
+            );
+          }
         }
 
         if let Some(execution) = &task.execution {
@@ -176,6 +191,8 @@ impl TaskRoot {
         for command in &task.commands {
           self.validate_command(task_name, command, report);
         }
+
+        self.validate_command_outputs(task_name, task, report);
       },
     }
   }
@@ -186,10 +203,26 @@ impl TaskRoot {
         if command.trim().is_empty() {
           report.push_error(Some(task_name), Some("command"), "Command must not be empty");
         }
+        if contains_output_reference(command) {
+          report.push_error(
+            Some(task_name),
+            Some("command"),
+            "Saved command outputs are only supported by local `command:` entries",
+          );
+        }
       },
       CommandRunner::LocalRun(local_run) => {
         if local_run.command.trim().is_empty() {
           report.push_error(Some(task_name), Some("command"), "Command must not be empty");
+        }
+        if let Some(save_output_as) = &local_run.save_output_as {
+          if save_output_as.trim().is_empty() {
+            report.push_error(
+              Some(task_name),
+              Some("save_output_as"),
+              "save_output_as must not be empty",
+            );
+          }
         }
       },
       CommandRunner::ContainerRun(container_run) => {
@@ -256,6 +289,92 @@ impl TaskRoot {
           );
         }
       },
+    }
+  }
+
+  fn validate_command_outputs(&self, task_name: &str, task: &super::TaskArgs, report: &mut ValidationReport) {
+    let declared_outputs = task
+      .commands
+      .iter()
+      .filter_map(|command| match command {
+        CommandRunner::LocalRun(local_run) => local_run.save_output_as.as_ref(),
+        _ => None,
+      })
+      .map(|name| name.trim().to_string())
+      .filter(|name| !name.is_empty())
+      .collect::<HashSet<_>>();
+
+    for value in task.environment.values() {
+      for output_name in extract_output_references(value) {
+        if !declared_outputs.contains(&output_name) {
+          report.push_error(
+            Some(task_name),
+            Some("environment"),
+            format!("Unknown task output reference: {}", output_name),
+          );
+        }
+      }
+    }
+
+    let mut produced_outputs = HashSet::new();
+    for command in &task.commands {
+      match command {
+        CommandRunner::LocalRun(local_run) => {
+          for output_name in extract_output_references(&local_run.command) {
+            if !produced_outputs.contains(&output_name) {
+              report.push_error(
+                Some(task_name),
+                Some("command"),
+                format!(
+                  "Output reference must come from an earlier command: {}",
+                  output_name
+                ),
+              );
+            }
+          }
+
+          if let Some(test) = &local_run.test {
+            for output_name in extract_output_references(test) {
+              if !produced_outputs.contains(&output_name) {
+                report.push_error(
+                  Some(task_name),
+                  Some("test"),
+                  format!(
+                    "Output reference must come from an earlier command: {}",
+                    output_name
+                  ),
+                );
+              }
+            }
+          }
+
+          if let Some(save_output_as) = &local_run.save_output_as {
+            let save_output_as = save_output_as.trim().to_string();
+            if !save_output_as.is_empty() && !produced_outputs.insert(save_output_as.clone()) {
+              report.push_error(
+                Some(task_name),
+                Some("save_output_as"),
+                format!("Duplicate saved output name: {}", save_output_as),
+              );
+            }
+          }
+        },
+        CommandRunner::ContainerRun(_) | CommandRunner::ContainerBuild(_) | CommandRunner::TaskRun(_) => {},
+        CommandRunner::CommandRun(command) => {
+          for output_name in extract_output_references(command) {
+            if !produced_outputs.contains(&output_name) {
+              report.push_error(
+                Some(task_name),
+                Some("command"),
+                format!(
+                  "Output reference must come from an earlier command: {}",
+                  output_name
+                ),
+              );
+            }
+          }
+        },
+      }
     }
   }
 
@@ -388,6 +507,21 @@ impl TaskRoot {
 
     visiting.pop();
     visited.insert(task_name.to_string());
+  }
+}
+
+fn command_uses_task_outputs(command: &CommandRunner) -> bool {
+  match command {
+    CommandRunner::LocalRun(local_run) => {
+      local_run.save_output_as.is_some()
+        || contains_output_reference(&local_run.command)
+        || local_run
+          .test
+          .as_ref()
+          .is_some_and(|test| contains_output_reference(test))
+    },
+    CommandRunner::CommandRun(command) => contains_output_reference(command),
+    CommandRunner::ContainerRun(_) | CommandRunner::ContainerBuild(_) | CommandRunner::TaskRun(_) => false,
   }
 }
 

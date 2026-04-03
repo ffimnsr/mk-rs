@@ -23,6 +23,9 @@ use std::time::{
 };
 
 use super::{
+  contains_output_reference,
+  extract_output_references,
+  interpolate_template_string,
   is_shell_command,
   CommandRunner,
   Precondition,
@@ -258,7 +261,7 @@ impl TaskArgs {
     }
 
     // Load environment variables from the task environment and env files field
-    let defined_env = self.load_env(context)?;
+    let defined_env = self.load_static_env(context)?;
     let additional_env = self.load_env_file(context)?;
     let secret_env = self.load_secret_env(context)?;
 
@@ -336,6 +339,7 @@ impl TaskArgs {
       for (i, command) in self.commands.iter().enumerate() {
         thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
         command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));
+        self.refresh_output_env(context)?;
         command.execute(context)?;
         command_pb.inc(1);
       }
@@ -486,14 +490,44 @@ impl TaskArgs {
     Ok(())
   }
 
-  fn load_env(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
+  fn load_static_env(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
     let mut local_env: HashMap<String, String> = HashMap::new();
     for (key, value) in &self.environment {
+      if contains_output_reference(value) {
+        continue;
+      }
       let value = self.get_env_value(context, value)?;
       local_env.insert(key.clone(), value);
     }
 
     Ok(local_env)
+  }
+
+  fn refresh_output_env(&self, context: &mut TaskContext) -> anyhow::Result<()> {
+    let mut updated_env = HashMap::new();
+
+    for (key, value) in &self.environment {
+      let output_refs = extract_output_references(value);
+      if output_refs.is_empty() {
+        continue;
+      }
+
+      let mut all_outputs_ready = true;
+      for output_name in &output_refs {
+        if !context.has_task_output(output_name)? {
+          all_outputs_ready = false;
+          break;
+        }
+      }
+      if !all_outputs_ready {
+        continue;
+      }
+
+      updated_env.insert(key.clone(), self.get_env_value(context, value)?);
+    }
+
+    context.extend_env_vars(updated_env);
+    Ok(())
   }
 
   fn load_env_file(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
@@ -520,8 +554,8 @@ impl TaskArgs {
         .unwrap_or_else(|| context.shell().proc());
       let output = run_shell_command!(value_in, cmd, verbose);
       Ok(output)
-    } else if super::is_template_command(value_in)? {
-      Ok(crate::schema::resolve_template_command_value(value_in, context)?)
+    } else if super::is_template_command(value_in)? || contains_output_reference(value_in) {
+      Ok(interpolate_template_string(value_in, context)?)
     } else {
       Ok(value_in.to_string())
     }

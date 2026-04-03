@@ -127,6 +127,7 @@ Run the command in local available shell.
 | test | String | - | false | A test command to run before executing the main command. |
 | work_dir | String | \<current-working-directory\> | false | The working directory to run the command into. |
 | interactive | bool | false | false | Run the command interactively (stdin/stdout attached). |
+| save_output_as | String | - | false | Save the command stdout as a task-scoped output for later commands in the same task. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |
 
@@ -136,7 +137,22 @@ tasks:
     - command: echo foobar
       shell: /bin/zsh
       work_dir: /srv
+      save_output_as: release_tag
       ignore_errors: true
+```
+
+Saved outputs can be reused by later local commands in the same task with `${{ outputs.NAME }}`. Captured stdout keeps internal newlines and trims trailing newline characters.
+
+```yaml
+tasks:
+  release:
+    environment:
+      IMAGE_TAG: app-${{ outputs.version }}
+    commands:
+      - command: printf '1.2.3\n'
+        save_output_as: version
+      - command: echo "$IMAGE_TAG"
+      - command: printf '%s\n' "${{ outputs.version }}"
 ```
 
 ##### ContainerRun

@@ -86,6 +86,17 @@ tasks:
       - command: docsify serve docs
     description: Serve the documentation
   docs_2: docsify serve docs
+  demo_saved_output:
+    commands:
+      - command: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          printf '%s\n' "$version"
+        save_output_as: version
+      - command: 'echo "Resolved version: ${{ outputs.version }}"'
+      - command: |
+          printf 'MK_VERSION=%s\n' "${{ outputs.version }}" > /tmp/mk-rs-output-demo.env
+          echo "Wrote /tmp/mk-rs-output-demo.env"
+    description: Demonstrate saving and reusing command output inside one task
   install_codecov_tools:
     commands:
       - cargo install --locked grcov

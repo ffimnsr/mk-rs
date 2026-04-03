@@ -453,6 +453,33 @@ tasks:
       - command: ./migrate.sh
 ```
 
+Use `save_output_as` to capture a command stdout value for later commands in the same task:
+
+```yaml
+tasks:
+  release:
+    commands:
+      - command: printf 'v1.2.3\n'
+        save_output_as: version
+      - command: echo "building ${{ outputs.version }}"
+```
+
+Multi-line commands can also save outputs. Internal newlines are preserved, and trailing newline characters are trimmed:
+
+```yaml
+tasks:
+  package:
+    environment:
+      BUILD_TAG: build-${{ outputs.tag }}
+    commands:
+      - command: |
+          version="1.2.3"
+          commit="abc123"
+          printf '%s-%s\n' "$version" "$commit"
+        save_output_as: tag
+      - command: printf '%s\n' "$BUILD_TAG"
+```
+
 ## Config Schema
 
 The docs can be found [here](./schema.md).
@@ -460,7 +487,7 @@ The docs can be found [here](./schema.md).
 ## What's on the roadmap?
 
 - [ ] Add lua script as config file
-- [ ] Add support for saving and reusing command output (output can be reused on other command inside a task)
+- [x] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [ ] Add support for trigger reload when on cargo run
