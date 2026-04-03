@@ -8,6 +8,11 @@ tasks:
     commands:
       - command: cargo r
     description: Run the project
+  run-retrigger:
+    commands:
+      - command: cargo r
+        retrigger: true
+    description: Run the project and press R to manually restart it
   fmt:
     commands:
       - command: cargo fmt --all

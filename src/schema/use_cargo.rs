@@ -89,6 +89,7 @@ impl UseCargoArgs {
               .as_ref()
               .map(|work_dir| work_dir.to_string_lossy().into_owned()),
             interactive: Some(true),
+            retrigger: None,
             ignore_errors: None,
             save_output_as: None,
             verbose: None,

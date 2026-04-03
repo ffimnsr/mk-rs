@@ -12,6 +12,7 @@ mod use_npm;
 mod validation;
 
 use std::collections::HashSet;
+use std::fmt;
 use std::process::Stdio;
 use std::sync::{
   Arc,
@@ -23,6 +24,17 @@ use regex::Regex;
 
 pub type ActiveTasks = Arc<Mutex<HashSet<String>>>;
 pub type CompletedTasks = Arc<Mutex<HashSet<String>>>;
+
+#[derive(Debug)]
+pub struct ExecutionInterrupted;
+
+impl fmt::Display for ExecutionInterrupted {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "Execution interrupted")
+  }
+}
+
+impl std::error::Error for ExecutionInterrupted {}
 
 pub use command::*;
 pub use include::*;

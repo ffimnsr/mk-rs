@@ -2037,6 +2037,7 @@ dependencies = [
  "hashbrown 0.16.1",
  "hex",
  "indicatif",
+ "libc",
  "log",
  "mk_ext_prettytable",
  "mk_ext_serde_yaml",

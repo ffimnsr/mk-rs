@@ -480,6 +480,8 @@ tasks:
       - command: printf '%s\n' "$BUILD_TAG"
 ```
 
+Set `retrigger: true` on a non-interactive local command to allow pressing `R` while it is running to stop and start it again manually. This is useful for long-running processes without turning on file watching.
+
 ## Config Schema
 
 The docs can be found [here](./schema.md).
@@ -490,7 +492,7 @@ The docs can be found [here](./schema.md).
 - [x] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
-- [ ] Add support for trigger reload when on cargo run
+- [x] Add support for trigger reload when on cargo run
 - [ ] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
 - [ ] Add support for npm scripts

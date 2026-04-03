@@ -366,9 +366,14 @@ impl TaskArgs {
     for command in &self.commands {
       match command {
         CommandRunner::LocalRun(local_run) if local_run.is_parallel_safe() => continue,
-        CommandRunner::LocalRun(_) => {
+        CommandRunner::LocalRun(local_run) if local_run.interactive_enabled() => {
           return Err(anyhow::anyhow!(
             "Interactive local commands cannot be run in parallel"
+          ))
+        },
+        CommandRunner::LocalRun(_) => {
+          return Err(anyhow::anyhow!(
+            "Local commands with `retrigger: true` cannot be run in parallel"
           ))
         },
         _ => {
@@ -1348,6 +1353,30 @@ mod test {
     if let Task::Task(task) = task {
       let result = task.run(&mut context);
       assert!(result.is_ok());
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_parallel_retrigger_rejected() -> anyhow::Result<()> {
+    let yaml = r#"
+          commands:
+            - command: "go run ."
+              retrigger: true
+          parallel: true
+      "#;
+
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+    let mut context = TaskContext::empty();
+
+    if let Task::Task(task) = task {
+      let result = task.run(&mut context);
+      assert!(result.is_err());
+      assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Local commands with `retrigger: true` cannot be run in parallel"));
     }
 
     Ok(())

@@ -49,6 +49,7 @@ pub enum PlannedCommand {
     shell: Option<String>,
     work_dir: Option<String>,
     interactive: bool,
+    retrigger: bool,
   },
   ContainerRun {
     runtime: String,
@@ -198,7 +199,8 @@ impl PlannedCommand {
           .work_dir
           .as_ref()
           .map(|work_dir| root.resolve_from_config(work_dir).to_string_lossy().into_owned()),
-        interactive: local_run.interactive.unwrap_or(false),
+        interactive: local_run.interactive_enabled(),
+        retrigger: local_run.retrigger_enabled(),
       },
       CommandRunner::ContainerRun(container_run) => PlannedCommand::ContainerRun {
         runtime: container_run
@@ -323,6 +325,30 @@ mod tests {
     match command {
       PlannedCommand::LocalRun { shell, .. } => {
         assert_eq!(shell.as_deref(), Some("bash"));
+      },
+      _ => panic!("Expected PlannedCommand::LocalRun"),
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_task_includes_retrigger() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        dev:
+          commands:
+            - command: go run .
+              retrigger: true
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task("dev")?;
+    let command = &plan.steps[0].commands[0];
+
+    match command {
+      PlannedCommand::LocalRun { retrigger, .. } => {
+        assert!(*retrigger);
       },
       _ => panic!("Expected PlannedCommand::LocalRun"),
     }

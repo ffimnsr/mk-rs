@@ -141,10 +141,15 @@ impl TaskRoot {
           for command in &task.commands {
             match command {
               CommandRunner::LocalRun(local_run) if local_run.is_parallel_safe() => {},
-              CommandRunner::LocalRun(_) => report.push_error(
+              CommandRunner::LocalRun(local_run) if local_run.interactive_enabled() => report.push_error(
                 Some(task_name),
                 Some("parallel"),
                 "Parallel execution only supports non-interactive local commands",
+              ),
+              CommandRunner::LocalRun(_) => report.push_error(
+                Some(task_name),
+                Some("parallel"),
+                "Parallel execution does not support local commands with `retrigger: true`",
               ),
               _ => report.push_error(
                 Some(task_name),
@@ -223,6 +228,13 @@ impl TaskRoot {
               "save_output_as must not be empty",
             );
           }
+        }
+        if local_run.interactive_enabled() && local_run.retrigger_enabled() {
+          report.push_error(
+            Some(task_name),
+            Some("retrigger"),
+            "retrigger is only supported for non-interactive local commands",
+          );
         }
       },
       CommandRunner::ContainerRun(container_run) => {
@@ -527,4 +539,31 @@ fn command_uses_task_outputs(command: &CommandRunner) -> bool {
 
 fn has_default_containerfile(context_path: &Path) -> bool {
   context_path.join("Dockerfile").is_file() || context_path.join("Containerfile").is_file()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_validate_retrigger_requires_non_interactive_local_run() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        dev:
+          commands:
+            - command: "go run ."
+              interactive: true
+              retrigger: true
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(report.issues.iter().any(|issue| {
+      issue.field.as_deref() == Some("retrigger")
+        && issue.message == "retrigger is only supported for non-interactive local commands"
+    }));
+
+    Ok(())
+  }
 }
