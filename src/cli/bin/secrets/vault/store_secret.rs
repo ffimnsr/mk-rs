@@ -133,10 +133,10 @@ impl StoreSecret {
         let key_path = Path::new(keys_location).join(key_name);
         let mut secret_key_string = File::open(key_path)?;
         let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-        signed_secret_key.verify()?;
+        signed_secret_key.verify_bindings()?;
 
         // Get the public key (signed form implements PublicKeyTrait)
-        let pubkey = signed_secret_key.signed_public_key();
+        let pubkey = signed_secret_key.to_public_key();
 
         // Encrypt the value using MessageBuilder and write armored output
         let mut rng = thread_rng();

@@ -10,7 +10,7 @@ use pgp::composed::{
   Deserializable as _,
   SignedSecretKey,
 };
-use pgp::types::KeyDetails;
+use pgp::types::KeyDetails as _;
 use prettytable::format::consts;
 use prettytable::{
   row,
@@ -63,9 +63,9 @@ impl ListKeys {
         let key_path = Path::new(location).join(filename_with_ext);
         let mut secret_key_string = File::open(key_path)?;
         let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-        signed_secret_key.verify()?;
+        signed_secret_key.verify_bindings()?;
 
-        let key_id = hex::encode(signed_secret_key.key_id());
+        let key_id = hex::encode(signed_secret_key.legacy_key_id());
         let fingerprint = hex::encode(signed_secret_key.fingerprint().as_bytes());
 
         table.add_row(row![b->&key_name, Fg->&key_id, Fg->&fingerprint]);

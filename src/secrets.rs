@@ -344,7 +344,7 @@ fn load_secret_key(config: &SecretConfig) -> anyhow::Result<SignedSecretKey> {
 
   let mut secret_key_string = File::open(key_path)?;
   let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-  signed_secret_key.verify()?;
+  signed_secret_key.verify_bindings()?;
   Ok(signed_secret_key)
 }
 

@@ -44,7 +44,7 @@ impl ExportKey {
       // We opt to parse it rather than copy it directly to verify if it is a valid key
       let mut secret_key_string = File::open(path)?;
       let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-      signed_secret_key.verify()?;
+      signed_secret_key.verify_bindings()?;
 
       // Save the armored private key to a file
       let mut file = File::open(output)?;

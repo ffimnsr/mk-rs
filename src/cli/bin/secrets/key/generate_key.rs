@@ -9,6 +9,7 @@ use clap::Args;
 use mk_lib::file::ToUtf8;
 use pgp::composed::{
   ArmorOptions,
+  EncryptionCaps,
   KeyType,
   SecretKeyParamsBuilder,
 };
@@ -64,14 +65,11 @@ impl GenerateKey {
     key_params
       .key_type(KeyType::Rsa(2048))
       .can_certify(false)
-      .can_encrypt(true)
+      .can_encrypt(EncryptionCaps::All)
       .can_sign(true)
       .primary_user_id(primary_user_id);
     let private_key_params = key_params.build()?;
-    let private_key = private_key_params.generate(thread_rng())?;
-
-    // Use the private key to sign itself and put empty password
-    let signed_private_key = private_key.sign(&mut thread_rng(), &pgp::types::Password::empty())?;
+    let signed_private_key = private_key_params.generate(thread_rng())?;
 
     // Save the armored private key to a file
     let mut file = File::create(file_path.clone())?;
