@@ -5,6 +5,7 @@ pub(super) struct Context {
   keys_location: Option<String>,
   vault_location: Option<String>,
   key_name: Option<String>,
+  gpg_key_id: Option<String>,
 }
 
 impl Context {
@@ -13,6 +14,7 @@ impl Context {
       keys_location: None,
       vault_location: None,
       key_name: None,
+      gpg_key_id: None,
     }
   }
 
@@ -22,6 +24,14 @@ impl Context {
 
   pub fn set_vault_location(&mut self, vault_location: &str) {
     self.vault_location = Some(vault_location.to_string());
+  }
+
+  pub fn set_key_name(&mut self, key_name: &str) {
+    self.key_name = Some(key_name.to_string());
+  }
+
+  pub fn set_gpg_key_id(&mut self, gpg_key_id: &str) {
+    self.gpg_key_id = Some(gpg_key_id.to_string());
   }
 
   pub fn keys_location(&self) -> String {
@@ -45,5 +55,9 @@ impl Context {
 
   pub fn key_name(&self) -> String {
     self.key_name.clone().unwrap_or("default".to_string())
+  }
+
+  pub fn gpg_key_id(&self) -> Option<String> {
+    self.gpg_key_id.clone()
   }
 }

@@ -24,6 +24,12 @@ pub struct ShowSecret {
 
   #[arg(short, long, help = "The key name")]
   key_name: Option<String>,
+
+  #[arg(
+    long,
+    help = "GPG key ID or fingerprint for hardware/passphrase-protected keys. Cannot be combined with --key-name."
+  )]
+  gpg_key_id: Option<String>,
 }
 
 impl ShowSecret {
@@ -37,7 +43,11 @@ impl ShowSecret {
       .keys_location
       .clone()
       .unwrap_or_else(|| context.keys_location());
+    if self.key_name.is_some() && self.gpg_key_id.is_some() {
+      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
+    }
     let key_name: &str = &self.key_name.clone().unwrap_or_else(|| context.key_name());
+    let gpg_key_id = self.gpg_key_id.clone().or_else(|| context.gpg_key_id());
 
     assert!(!path.is_empty(), "Path or prefix must be provided");
     assert!(!vault_location.is_empty(), "Vault location must be provided");
@@ -50,6 +60,7 @@ impl ShowSecret {
       Some(vault_location),
       Some(keys_location),
       Some(key_name),
+      gpg_key_id.as_deref(),
     )?;
 
     let mut table = Table::new();

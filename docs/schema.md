@@ -27,6 +27,7 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | vault_location | String | ./.mk/vault | false | Secret vault location used for `secrets_path` and `${{ secrets.NAME }}` resolution. |
 | keys_location | String | ~/.config/mk/priv | false | Private key directory used for secret decryption. |
 | key_name | String | default | false | Private key name used for secret decryption. |
+| gpg_key_id | String | - | false | GPG key ID or fingerprint. When set, mk delegates all vault crypto to the system `gpg` binary, enabling YubiKey and passphrase-protected keys. |
 | use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
 | use_cargo | Bool or UseCargo | false | false | This allows mk to use cargo commands as tasks. |
 | container_runtime | auto / docker / podman | auto | false | Default container runtime for container commands. |
@@ -62,6 +63,7 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | vault_location | String | inherited | false | Override the secret vault location for this task. |
 | keys_location | String | inherited | false | Override the private key directory for this task. |
 | key_name | String | inherited | false | Override the private key name for this task. |
+| gpg_key_id | String | inherited | false | Override the GPG key ID for this task. When set, delegates vault crypto to the system `gpg` binary. |
 | shell | String | sh | false | The shell to call for command execution. |
 | parallel | bool | false | false | Run local_run commands in parallel. |
 | execution | TaskExecution | - | false | Richer execution settings for parallel mode. |

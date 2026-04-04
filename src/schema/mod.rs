@@ -86,6 +86,7 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
       context.secret_vault_location.as_deref(),
       context.secret_keys_location.as_deref(),
       context.secret_key_name.as_deref(),
+      context.secret_gpg_key_id.as_deref(),
     )
   } else if value.starts_with("outputs.") {
     let name = value.trim_start_matches("outputs.");

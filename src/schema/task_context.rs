@@ -41,6 +41,7 @@ pub struct TaskContext {
   pub secret_vault_location: Option<String>,
   pub secret_keys_location: Option<String>,
   pub secret_key_name: Option<String>,
+  pub secret_gpg_key_id: Option<String>,
   pub shell: Option<Arc<Shell>>,
   pub container_runtime: Option<ContainerRuntime>,
   pub ignore_errors: Option<bool>,
@@ -65,6 +66,7 @@ impl TaskContext {
       secret_vault_location: None,
       secret_keys_location: None,
       secret_key_name: None,
+      secret_gpg_key_id: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -89,6 +91,7 @@ impl TaskContext {
       secret_vault_location: None,
       secret_keys_location: None,
       secret_key_name: None,
+      secret_gpg_key_id: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -113,6 +116,7 @@ impl TaskContext {
       secret_vault_location: task_root.vault_location.clone(),
       secret_keys_location: task_root.keys_location.clone(),
       secret_key_name: task_root.key_name.clone(),
+      secret_gpg_key_id: task_root.gpg_key_id.clone(),
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -142,6 +146,7 @@ impl TaskContext {
       secret_vault_location: task_root.vault_location.clone(),
       secret_keys_location: task_root.keys_location.clone(),
       secret_key_name: task_root.key_name.clone(),
+      secret_gpg_key_id: task_root.gpg_key_id.clone(),
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -165,6 +170,7 @@ impl TaskContext {
       secret_vault_location: context.secret_vault_location.clone(),
       secret_keys_location: context.secret_keys_location.clone(),
       secret_key_name: context.secret_key_name.clone(),
+      secret_gpg_key_id: context.secret_gpg_key_id.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: context.ignore_errors,
@@ -188,6 +194,7 @@ impl TaskContext {
       secret_vault_location: context.secret_vault_location.clone(),
       secret_keys_location: context.secret_keys_location.clone(),
       secret_key_name: context.secret_key_name.clone(),
+      secret_gpg_key_id: context.secret_gpg_key_id.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: Some(ignore_errors),
@@ -222,6 +229,10 @@ impl TaskContext {
 
   pub fn set_secret_key_name(&mut self, key_name: impl Into<String>) {
     self.secret_key_name = Some(key_name.into());
+  }
+
+  pub fn set_secret_gpg_key_id(&mut self, gpg_key_id: impl Into<String>) {
+    self.secret_gpg_key_id = Some(gpg_key_id.into());
   }
 
   pub fn set_container_runtime(&mut self, runtime: &ContainerRuntime) {

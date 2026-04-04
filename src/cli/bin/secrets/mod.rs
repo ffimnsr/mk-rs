@@ -24,6 +24,12 @@ pub struct Secrets {
 
   #[arg(long, help = "The key name")]
   key_name: Option<String>,
+
+  #[arg(
+    long,
+    help = "GPG key ID or fingerprint for hardware/passphrase-protected keys (delegates crypto to the system gpg binary). Cannot be combined with --key-name."
+  )]
+  gpg_key_id: Option<String>,
 }
 
 /// The available subcommands for the secrets command
@@ -59,6 +65,18 @@ impl Secrets {
 
     if let Some(vault_location) = &self.vault_location {
       context.set_vault_location(vault_location);
+    }
+
+    if self.key_name.is_some() && self.gpg_key_id.is_some() {
+      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
+    }
+
+    if let Some(key_name) = &self.key_name {
+      context.set_key_name(key_name);
+    }
+
+    if let Some(gpg_key_id) = &self.gpg_key_id {
+      context.set_gpg_key_id(gpg_key_id);
     }
 
     match &self.command {

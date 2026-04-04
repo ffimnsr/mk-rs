@@ -128,6 +128,10 @@ pub struct TaskArgs {
   #[serde(default)]
   pub key_name: Option<String>,
 
+  /// GPG key ID or fingerprint for hardware/passphrase-protected keys (delegates to system gpg)
+  #[serde(default)]
+  pub gpg_key_id: Option<String>,
+
   /// The shell to use when running the task
   #[serde(default)]
   pub shell: Option<Shell>,
@@ -229,6 +233,10 @@ impl TaskArgs {
       if let Some(key_name) = &context.task_root.key_name {
         context.set_secret_key_name(key_name.clone());
       }
+
+      if let Some(gpg_key_id) = &context.task_root.gpg_key_id {
+        context.set_secret_gpg_key_id(gpg_key_id.clone());
+      }
     }
 
     if let Some(vault_location) = &self.vault_location {
@@ -243,6 +251,10 @@ impl TaskArgs {
       context.set_secret_key_name(key_name.clone());
     }
 
+    if let Some(gpg_key_id) = &self.gpg_key_id {
+      context.set_secret_gpg_key_id(gpg_key_id.clone());
+    }
+
     // Load environment variables from root and task environments and env files.
     if !context.is_nested {
       let config_base_dir = self.config_base_dir(context);
@@ -254,6 +266,7 @@ impl TaskArgs {
         context.secret_vault_location.as_deref(),
         context.secret_keys_location.as_deref(),
         context.secret_key_name.as_deref(),
+        context.secret_gpg_key_id.as_deref(),
       )?;
       context.extend_env_vars(root_env);
       context.extend_env_vars(root_env_files);
@@ -546,6 +559,7 @@ impl TaskArgs {
       context.secret_vault_location.as_deref(),
       context.secret_keys_location.as_deref(),
       context.secret_key_name.as_deref(),
+      context.secret_gpg_key_id.as_deref(),
     )
   }
 

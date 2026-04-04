@@ -116,7 +116,7 @@ enum Command {
     json: bool,
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
-  Secrets(Secrets),
+  Secrets(Box<Secrets>),
   // Update does not require a config file.
   #[command(about = "Check for mk (make) updates")]
   Update,

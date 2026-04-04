@@ -511,6 +511,70 @@ tasks:
 
 Set `retrigger: true` on a non-interactive local command to allow pressing `R` while it is running to stop and start it again manually. This is intended for long-running processes such as `go run .` without enabling file watching.
 
+### Using a YubiKey or hardware-backed GPG key
+
+mk supports vault encryption and decryption via the system `gpg` binary, which allows you to use any hardware security key supported by GnuPG — including YubiKey with OpenPGP applet, Nitrokey, and similar devices. Passphrase-protected software GPG keys are also supported this way.
+
+**Prerequisites**
+
+- GnuPG installed (`gpg` in PATH)
+- `gpg-agent` running (it starts automatically on most systems)
+- For YubiKey: `scdaemon` and the OpenPGP applet configured on the card; PIN is entered via `pinentry` automatically
+
+**Step 1 — Register your GPG key with mk**
+
+```bash
+mk secrets key import --gpg <YOUR_KEY_ID_OR_FINGERPRINT>
+```
+
+This validates the key is present in your local GPG keyring and saves a reference in `~/.config/mk/priv/`. The private key material never leaves the hardware.
+
+**Step 2 — Initialize a vault linked to your GPG key**
+
+```bash
+mk secrets vault init --gpg-key-id <YOUR_KEY_ID> --vault-location ./.mk/vault
+```
+
+This creates the vault directory and writes a `.vault-meta.toml` file that records the GPG key ID. All subsequent commands on this vault automatically use GPG without needing `--gpg-key-id` flags.
+
+**Step 3 — Store and retrieve secrets normally**
+
+```bash
+# Store (encrypts with your GPG public key; no PIN needed here)
+cat .env | mk secrets vault store app/production/env
+
+# Retrieve (gpg-agent prompts for your YubiKey PIN/passphrase via pinentry)
+mk secrets vault show app/production/env
+
+# List
+mk secrets vault list
+
+# Export to file
+mk secrets vault export app/production/env > .env
+```
+
+**Using `gpg_key_id` in tasks.yaml**
+
+Set `gpg_key_id` at the root or per-task level so tasks can decrypt secrets automatically:
+
+```yaml
+vault_location: ./.mk/vault
+gpg_key_id: YOUR_KEY_FINGERPRINT
+
+tasks:
+  deploy:
+    secrets_path:
+      - app/production/env
+    environment:
+      DB_PASS: ${{ secrets.app/database/password }}
+    commands:
+      - command: ./deploy.sh
+```
+
+**Note on `key_name` and `gpg_key_id`**
+
+When `gpg_key_id` is set, the built-in PGP engine is not used — `key_name` and `keys_location` are ignored and the system `gpg` binary handles all cryptographic operations. If both are present in your config, `gpg_key_id` takes precedence.
+
 ## Config Schema
 
 The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).

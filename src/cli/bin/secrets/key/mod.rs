@@ -7,11 +7,13 @@ use super::context::Context;
 
 pub use export_key::ExportKey;
 pub use generate_key::GenerateKey;
+pub use import_key::ImportKey;
 pub use list_keys::ListKeys;
 pub use purge_key::PurgeKey;
 
 mod export_key;
 mod generate_key;
+mod import_key;
 mod list_keys;
 mod purge_key;
 
@@ -53,6 +55,10 @@ enum KeyCommand {
   /// Export a private key
   #[command(visible_aliases = ["export", "e"], about = "Export selected private key")]
   ExportKey(ExportKey),
+
+  /// Import a GPG key from the local keyring (enables YubiKey and passphrase-protected key support)
+  #[command(visible_aliases = ["import"], about = "Import a GPG key reference from the local keyring")]
+  ImportKey(ImportKey),
 }
 
 impl Key {
@@ -75,6 +81,7 @@ impl KeyCommand {
       KeyCommand::ListKeys(args) => args.execute(context),
       KeyCommand::PurgeKey(args) => args.execute(context),
       KeyCommand::ExportKey(args) => args.execute(context),
+      KeyCommand::ImportKey(args) => args.execute(context),
     }
   }
 }

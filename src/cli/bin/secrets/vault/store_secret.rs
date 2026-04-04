@@ -12,6 +12,10 @@ use std::path::Path;
 
 use clap::Args;
 use mk_lib::file::ToUtf8 as _;
+use mk_lib::secrets::{
+  encrypt_with_gpg,
+  read_vault_gpg_key_id,
+};
 use pgp::composed::{
   ArmorOptions,
   Deserializable,
@@ -42,6 +46,12 @@ pub struct StoreSecret {
 
   #[arg(short, long, help = "The key name")]
   key_name: Option<String>,
+
+  #[arg(
+    long,
+    help = "GPG key ID or fingerprint for hardware/passphrase-protected keys. Cannot be combined with --key-name."
+  )]
+  gpg_key_id: Option<String>,
 
   /// If the secret already exists, it will be overwritten
   #[arg(short, long, help = "Force overwrite the secret")]
@@ -77,7 +87,11 @@ impl StoreSecret {
       .keys_location
       .clone()
       .unwrap_or_else(|| context.keys_location());
+    if self.key_name.is_some() && self.gpg_key_id.is_some() {
+      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
+    }
     let key_name: &str = &self.key_name.clone().unwrap_or_else(|| context.key_name());
+    let gpg_key_id = self.gpg_key_id.clone().or_else(|| context.gpg_key_id());
 
     assert!(!path.is_empty(), "Path must be provided");
     assert!(!value.is_empty(), "Value must be provided");
@@ -86,7 +100,11 @@ impl StoreSecret {
     assert!(!key_name.is_empty(), "Key name must be provided");
 
     verify_vault(vault_location)?;
-    verify_key(keys_location, key_name)?;
+    // Auto-resolve gpg_key_id from vault metadata when not set by flag or context
+    let gpg_key_id = gpg_key_id.or_else(|| read_vault_gpg_key_id(Path::new(vault_location)));
+    if gpg_key_id.is_none() {
+      verify_key(keys_location, key_name)?;
+    }
 
     let secret_path = Path::new(vault_location).join(path);
     let data_path = secret_path.clone().join("data.asc");
@@ -103,29 +121,37 @@ impl StoreSecret {
     } else {
       fs::create_dir_all(secret_path.clone())?;
 
-      // Open the secret key file
-      let key_name = format!("{}.key", key_name);
-      let key_path = Path::new(keys_location).join(key_name);
-      let mut secret_key_string = File::open(key_path)?;
-      let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
-      signed_secret_key.verify()?;
+      if let Some(gpg_id) = &gpg_key_id {
+        // GPG path: encrypt via system gpg binary (supports YubiKey and passphrase-protected keys)
+        let encrypted = encrypt_with_gpg(gpg_id, value.as_bytes())?;
+        let mut writer = File::create(data_path)?;
+        writer.write_all(&encrypted)?;
+        writer.flush()?;
+      } else {
+        // Built-in pgp path: key file must exist in keys_location
+        let key_name = format!("{}.key", key_name);
+        let key_path = Path::new(keys_location).join(key_name);
+        let mut secret_key_string = File::open(key_path)?;
+        let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
+        signed_secret_key.verify()?;
 
-      // Get the public key (signed form implements PublicKeyTrait)
-      let pubkey = signed_secret_key.signed_public_key();
+        // Get the public key (signed form implements PublicKeyTrait)
+        let pubkey = signed_secret_key.signed_public_key();
 
-      // Encrypt the value using MessageBuilder and write armored output
-      let mut rng = thread_rng();
-      let builder = pgp::composed::MessageBuilder::from_bytes("", value.into_bytes())
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-      // Add recipient public key(s)
-      let mut builder = builder;
-      builder.encrypt_to_key(&mut rng, &pubkey)?;
-      let armored = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
+        // Encrypt the value using MessageBuilder and write armored output
+        let mut rng = thread_rng();
+        let builder = pgp::composed::MessageBuilder::from_bytes("", value.into_bytes())
+          .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+        // Add recipient public key(s)
+        let mut builder = builder;
+        builder.encrypt_to_key(&mut rng, &pubkey)?;
+        let armored = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
 
-      // Save the armored encrypted message to a file
-      let mut writer = File::create(data_path)?;
-      write!(writer, "{}", armored)?;
-      writer.flush()?;
+        // Save the armored encrypted message to a file
+        let mut writer = File::create(data_path)?;
+        write!(writer, "{}", armored)?;
+        writer.flush()?;
+      }
 
       println!("Secret stored at {}", secret_path.to_utf8()?);
     }

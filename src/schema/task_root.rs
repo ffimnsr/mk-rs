@@ -73,6 +73,12 @@ pub struct TaskRoot {
   #[serde(default)]
   pub key_name: Option<String>,
 
+  /// The GPG key ID or fingerprint to use for secret encryption/decryption via the system gpg binary.
+  /// When set, mk delegates all vault crypto operations to `gpg` instead of the built-in PGP engine,
+  /// enabling hardware keys (e.g. YubiKey) and passphrase-protected keys.
+  #[serde(default)]
+  pub gpg_key_id: Option<String>,
+
   /// This allows mk to use npm scripts as tasks
   #[serde(default)]
   pub use_npm: Option<UseNpm>,
@@ -130,6 +136,7 @@ impl TaskRoot {
       vault_location: None,
       keys_location: None,
       key_name: None,
+      gpg_key_id: None,
       use_npm: None,
       use_cargo: None,
       container_runtime: None,
@@ -292,6 +299,7 @@ fn apply_extends(file: &Path, stack: &mut Vec<PathBuf>, mut root: TaskRoot) -> a
   base.vault_location = root.vault_location.or(base.vault_location);
   base.keys_location = root.keys_location.or(base.keys_location);
   base.key_name = root.key_name.or(base.key_name);
+  base.gpg_key_id = root.gpg_key_id.or(base.gpg_key_id);
   base.use_npm = root.use_npm.or(base.use_npm);
   base.use_cargo = root.use_cargo.or(base.use_cargo);
   base.container_runtime = root.container_runtime.or(base.container_runtime);
@@ -337,6 +345,7 @@ fn rename_tasks(
 
 #[cfg(test)]
 mod test {
+  use assert_fs::TempDir;
   use super::*;
   use crate::schema::{
     CommandRunner,
@@ -528,6 +537,85 @@ mod test {
     assert_eq!(task_root.vault_location.as_deref(), Some("./.mk/vault"));
     assert_eq!(task_root.keys_location.as_deref(), Some("./.mk/keys"));
     assert_eq!(task_root.key_name.as_deref(), Some("team"));
+    assert_eq!(task_root.gpg_key_id, None);
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_gpg_key_id_deserialized() -> anyhow::Result<()> {
+    let yaml = "
+      gpg_key_id: 0xABCD1234EFGH5678
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    assert_eq!(
+      task_root.gpg_key_id.as_deref(),
+      Some("0xABCD1234EFGH5678")
+    );
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_gpg_key_id_absent_defaults_to_none() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    assert_eq!(task_root.gpg_key_id, None);
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_apply_extends_gpg_key_id() -> anyhow::Result<()> {
+    // Parent has a gpg_key_id; child does not → parent value propagates.
+    let dir = TempDir::new().unwrap();
+    let parent_path = dir.path().join("parent.yaml");
+    let child_path = dir.path().join("child.yaml");
+
+    std::fs::write(
+      &parent_path,
+      "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n",
+    )?;
+    std::fs::write(
+      &child_path,
+      "extends: parent.yaml\ntasks:\n  child_task: echo child\n",
+    )?;
+
+    let root = TaskRoot::from_file(child_path.to_str().unwrap())?;
+    assert_eq!(root.gpg_key_id.as_deref(), Some("PARENT_KEY"));
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_apply_extends_child_gpg_key_id_overrides() -> anyhow::Result<()> {
+    // Child has its own gpg_key_id → it overrides the parent.
+    let dir = TempDir::new().unwrap();
+    let parent_path = dir.path().join("parent.yaml");
+    let child_path = dir.path().join("child.yaml");
+
+    std::fs::write(
+      &parent_path,
+      "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n",
+    )?;
+    std::fs::write(
+      &child_path,
+      "extends: parent.yaml\ngpg_key_id: CHILD_KEY\ntasks:\n  child_task: echo child\n",
+    )?;
+
+    let root = TaskRoot::from_file(child_path.to_str().unwrap())?;
+    assert_eq!(root.gpg_key_id.as_deref(), Some("CHILD_KEY"));
 
     Ok(())
   }
