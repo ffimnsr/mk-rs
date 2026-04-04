@@ -1,2 +1,2 @@
 [target.powerpc64-unknown-linux-gnu.env]
-passthrough = ["CFLAGS_powerpc64_unknown_linux_gnu=-mabi=elfv1"]
+set = { "OPENSSL_NO_ASM" = "1" }
