@@ -9,9 +9,11 @@ use std::process::{
   Stdio,
 };
 use std::thread;
+#[cfg(unix)]
 use std::time::Duration;
 
 use anyhow::Context as _;
+#[cfg(unix)]
 use console::Term;
 use indicatif::ProgressDrawTarget;
 use serde::Deserialize;
@@ -29,10 +31,11 @@ use crate::handle_output;
 use crate::schema::{
   get_output_handler,
   interpolate_template_string,
-  ExecutionInterrupted,
   Shell,
   TaskContext,
 };
+#[cfg(unix)]
+use crate::schema::ExecutionInterrupted;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalRun {

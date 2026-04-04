@@ -37,7 +37,6 @@ jobs:
       TARGET_FLAGS: ""
       TARGET_DIR: ./target
       RUST_BACKTRACE: 1
-      CROSS_VERSION: v0.2.5
     strategy:
       fail-fast: false
       matrix:
@@ -101,15 +100,18 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: llvm-tools, rustc-dev
-      - name: Use cross compiler
+      - name: Set up QEMU
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+        uses: docker/setup-qemu-action@v3
+      - name: Install cross
+        if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: Set cross environment
+        if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+        shell: bash
         run: |
-          dir="$RUNNER_TEMP/cross-download"
-          mkdir "$dir"
-          echo "$dir" >> $GITHUB_PATH
-          cd "$dir"
-          curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
-          tar xf cross-x86_64-unknown-linux-musl.tar.gz
           echo "CARGO=cross" >> $GITHUB_ENV
           echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
           echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
@@ -118,21 +120,18 @@ jobs:
           echo "cargo command is: ${{ env.CARGO }}"
           echo "target flag is: ${{ env.TARGET_FLAGS }}"
           echo "target dir is: ${{ env.TARGET_DIR }}"
-      - name: Build binary and dependency crates (native)
-        if: matrix.target == ''
-        run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
-      - name: Build binary and dependency crates (cross)
+      - name: Build binary
         if: matrix.target != 'x86_64-pc-windows-gnu'
         run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
-      - name: Build binary and dependency crates (win-gnu)
+      - name: Build binary (win-gnu)
         if: matrix.target == 'x86_64-pc-windows-gnu'
         shell: msys2 {0}
         run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
-      - name: Run tests (native)
-        if: matrix.target == ''
+      - name: Run tests
+        if: matrix.target != 'x86_64-pc-windows-gnu' && (matrix.os != 'ubuntu-latest' || matrix.target == '')
         run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
       - name: Run tests (cross)
-        if: matrix.target != 'x86_64-pc-windows-gnu'
+        if: matrix.os == 'ubuntu-latest' && matrix.target != ''
         run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
       - name: Run tests (win-gnu)
         if: matrix.target == 'x86_64-pc-windows-gnu'
