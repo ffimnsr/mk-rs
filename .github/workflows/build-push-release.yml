@@ -78,12 +78,12 @@ jobs:
             os: ubuntu-latest
             rust: stable
             target: x86_64-unknown-linux-musl
-            strip: x86_64-linux-musl-strip
+            strip: strip
           - build: stable-x86-gnu
             os: ubuntu-latest
             rust: stable
             target: i686-unknown-linux-gnu
-            strip: x86_64-linux-gnu-strip
+            strip: i686-linux-gnu-strip
           - build: stable-arm-gnueabihf
             os: ubuntu-latest
             rust: stable
@@ -183,6 +183,8 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.strip != ''
         run: |
           case "${{ matrix.target }}" in
+            i686-unknown-linux-gnu)
+              sudo apt-get install -y --no-install-recommends binutils-i686-linux-gnu ;;
             arm-unknown-linux-gnueabihf|armv7-unknown-linux-gnueabihf)
               sudo apt-get install -y --no-install-recommends binutils-arm-linux-gnueabihf ;;
             aarch64-unknown-linux-gnu)
