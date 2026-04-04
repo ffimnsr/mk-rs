@@ -345,12 +345,12 @@ fn rename_tasks(
 
 #[cfg(test)]
 mod test {
-  use assert_fs::TempDir;
   use super::*;
   use crate::schema::{
     CommandRunner,
     TaskDependency,
   };
+  use assert_fs::TempDir;
 
   #[test]
   fn test_task_root_1() -> anyhow::Result<()> {
@@ -553,10 +553,7 @@ mod test {
     ";
 
     let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
-    assert_eq!(
-      task_root.gpg_key_id.as_deref(),
-      Some("0xABCD1234EFGH5678")
-    );
+    assert_eq!(task_root.gpg_key_id.as_deref(), Some("0xABCD1234EFGH5678"));
 
     Ok(())
   }
@@ -583,10 +580,7 @@ mod test {
     let parent_path = dir.path().join("parent.yaml");
     let child_path = dir.path().join("child.yaml");
 
-    std::fs::write(
-      &parent_path,
-      "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n",
-    )?;
+    std::fs::write(&parent_path, "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n")?;
     std::fs::write(
       &child_path,
       "extends: parent.yaml\ntasks:\n  child_task: echo child\n",
@@ -605,10 +599,7 @@ mod test {
     let parent_path = dir.path().join("parent.yaml");
     let child_path = dir.path().join("child.yaml");
 
-    std::fs::write(
-      &parent_path,
-      "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n",
-    )?;
+    std::fs::write(&parent_path, "gpg_key_id: PARENT_KEY\ntasks:\n  dummy: echo ok\n")?;
     std::fs::write(
       &child_path,
       "extends: parent.yaml\ngpg_key_id: CHILD_KEY\ntasks:\n  child_task: echo child\n",

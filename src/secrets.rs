@@ -389,10 +389,7 @@ mod tests {
     write_vault_meta(vault_dir, "ABC123DEF456").unwrap();
 
     // Read it back
-    assert_eq!(
-      read_vault_gpg_key_id(vault_dir),
-      Some("ABC123DEF456".to_string())
-    );
+    assert_eq!(read_vault_gpg_key_id(vault_dir), Some("ABC123DEF456".to_string()));
   }
 
   #[test]
@@ -403,10 +400,7 @@ mod tests {
     write_vault_meta(vault_dir, "FIRST_KEY").unwrap();
     write_vault_meta(vault_dir, "SECOND_KEY").unwrap();
 
-    assert_eq!(
-      read_vault_gpg_key_id(vault_dir),
-      Some("SECOND_KEY".to_string())
-    );
+    assert_eq!(read_vault_gpg_key_id(vault_dir), Some("SECOND_KEY".to_string()));
   }
 
   #[test]
