@@ -20,7 +20,7 @@ jobs:
   check-pass:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -82,13 +82,13 @@ jobs:
             rust: nightly-x86_64-gnu
             target: x86_64-pc-windows-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Install packages (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           ci/ubuntu-install-packages
       - name: Install packages (Windows GNU)
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@v2.31.0
         if: matrix.os == 'windows-latest' && matrix.target == 'x86_64-pc-windows-gnu'
         with:
           msystem: UCRT64
@@ -102,7 +102,7 @@ jobs:
           components: llvm-tools, rustc-dev
       - name: Set up QEMU
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       - name: Install cross
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
         uses: taiki-e/install-action@v2
@@ -140,7 +140,7 @@ jobs:
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -151,7 +151,7 @@ jobs:
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:

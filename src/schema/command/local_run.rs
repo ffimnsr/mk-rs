@@ -28,14 +28,14 @@ use crate::defaults::{
   default_verbose,
 };
 use crate::handle_output;
+#[cfg(unix)]
+use crate::schema::ExecutionInterrupted;
 use crate::schema::{
   get_output_handler,
   interpolate_template_string,
   Shell,
   TaskContext,
 };
-#[cfg(unix)]
-use crate::schema::ExecutionInterrupted;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct LocalRun {
