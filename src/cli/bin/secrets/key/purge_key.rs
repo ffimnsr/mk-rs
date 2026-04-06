@@ -30,9 +30,9 @@ impl PurgeKey {
     let file_path = Path::new(location).join(filename_with_ext);
     if file_path.exists() {
       fs::remove_file(file_path)?;
-      println!("Key {name} deleted successfully.");
+      println!("Key '{name}' removed successfully.");
     } else {
-      println!("Key {name} does not exist.");
+      println!("Key '{name}' not found. List available keys with: mk secrets key list");
     }
 
     Ok(())

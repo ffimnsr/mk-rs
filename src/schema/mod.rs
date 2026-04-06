@@ -76,7 +76,7 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
     let value = context
       .env_vars
       .get(value)
-      .ok_or_else(|| anyhow::anyhow!("Failed to find environment variable"))?;
+      .ok_or_else(|| anyhow::anyhow!("Environment variable '{}' is not defined", value))?;
     Ok(value.to_string())
   } else if value.starts_with("secrets.") {
     let path = value.trim_start_matches("secrets.");
@@ -90,9 +90,12 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
     )
   } else if value.starts_with("outputs.") {
     let name = value.trim_start_matches("outputs.");
-    context
-      .get_task_output(name)?
-      .ok_or_else(|| anyhow::anyhow!("Failed to find task output - {}", name))
+    context.get_task_output(name)?.ok_or_else(|| {
+      anyhow::anyhow!(
+        "Task output '{}' is not available. Ensure the task that produces it runs before this one.",
+        name
+      )
+    })
   } else {
     Ok(value.to_string())
   }

@@ -69,7 +69,9 @@ impl Key {
 
     match &self.command {
       Some(command) => command.run(context),
-      None => Err(anyhow::anyhow!("No subcommand provided")),
+      None => Err(anyhow::anyhow!(
+        "No key subcommand given. Run 'mk secrets key --help' to see available subcommands."
+      )),
     }
   }
 }

@@ -115,8 +115,8 @@ pub fn load_secret_values(
   let secret_path = config.vault_location.join(path);
   if !secret_path.exists() || !secret_path.is_dir() {
     anyhow::bail!(
-      "Secret path does not exist: {}",
-      secret_path.to_utf8().unwrap_or("<non-utf8-path>")
+      "Secret '{}' not found in vault. List available secrets with: mk secrets vault list",
+      path
     );
   }
 
@@ -158,7 +158,10 @@ pub fn load_secret_values(
   }
 
   if values.is_empty() {
-    anyhow::bail!("No secrets found for path: {path}");
+    anyhow::bail!(
+      "No secrets found for path '{}'. List available secrets with: mk secrets vault list",
+      path
+    );
   }
 
   Ok(values)
@@ -182,8 +185,14 @@ pub fn load_secret_value(
   )?;
   match values.as_slice() {
     [value] => Ok(value.clone()),
-    [] => anyhow::bail!("No secrets found for path: {path}"),
-    _ => anyhow::bail!("Secret path resolved to multiple values: {path}"),
+    [] => anyhow::bail!(
+      "No secrets found for path '{}'. List available secrets with: mk secrets vault list",
+      path
+    ),
+    _ => anyhow::bail!(
+      "Secret path '{}' resolved to multiple values; use a more specific identifier",
+      path
+    ),
   }
 }
 
@@ -202,8 +211,8 @@ pub fn list_secret_paths(
 
   if !root.exists() || !root.is_dir() {
     anyhow::bail!(
-      "Secret path does not exist: {}",
-      root.to_utf8().unwrap_or("<non-utf8-path>")
+      "Secret prefix '{}' not found in vault. List available secrets with: mk secrets vault list",
+      path_prefix.unwrap_or("<unknown>")
     );
   }
 
@@ -326,7 +335,10 @@ fn default_keys_location() -> PathBuf {
 
 fn verify_vault(vault_location: &Path) -> anyhow::Result<()> {
   if !vault_location.exists() || !vault_location.is_dir() {
-    anyhow::bail!("The store does not exist");
+    anyhow::bail!(
+      "Vault not found at '{}'. Initialize it first with: mk secrets vault init",
+      vault_location.to_utf8().unwrap_or("<non-utf8-path>")
+    );
   }
 
   Ok(())
@@ -334,12 +346,20 @@ fn verify_vault(vault_location: &Path) -> anyhow::Result<()> {
 
 fn load_secret_key(config: &SecretConfig) -> anyhow::Result<SignedSecretKey> {
   if !config.keys_location.exists() || !config.keys_location.is_dir() {
-    anyhow::bail!("The keys location does not exist");
+    anyhow::bail!(
+      "Keys directory not found at '{}'. Generate a key first with: mk secrets key gen",
+      config.keys_location.to_utf8().unwrap_or("<non-utf8-path>")
+    );
   }
 
   let key_path = config.keys_location.join(format!("{}.key", config.key_name));
   if !key_path.exists() || !key_path.is_file() {
-    anyhow::bail!("The key does not exist");
+    anyhow::bail!(
+      "Key '{}' not found in '{}'. Generate it with: mk secrets key gen --name {}",
+      config.key_name,
+      config.keys_location.to_utf8().unwrap_or("<non-utf8-path>"),
+      config.key_name
+    );
   }
 
   let mut secret_key_string = File::open(key_path)?;
@@ -351,9 +371,13 @@ fn load_secret_key(config: &SecretConfig) -> anyhow::Result<SignedSecretKey> {
 fn collect_secret_paths(vault_root: &Path, dir: &Path, secret_paths: &mut Vec<String>) -> anyhow::Result<()> {
   let data_path = dir.join("data.asc");
   if data_path.exists() && data_path.is_file() {
-    let relative = dir
-      .strip_prefix(vault_root)
-      .map_err(|_| anyhow::anyhow!("Failed to resolve secret path relative to vault"))?;
+    let relative = dir.strip_prefix(vault_root).map_err(|_| {
+      anyhow::anyhow!(
+        "Failed to resolve secret path '{}' relative to vault root '{}'",
+        dir.display(),
+        vault_root.display()
+      )
+    })?;
     secret_paths.push(relative.to_utf8().unwrap_or("<non-utf8-path>").to_string());
   }
 

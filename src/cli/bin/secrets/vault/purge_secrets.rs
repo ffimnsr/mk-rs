@@ -33,9 +33,12 @@ impl PurgeSecret {
     let data_path = path.join("data.asc");
     if path.exists() && path.is_dir() && data_path.exists() && data_path.is_file() {
       fs::remove_dir_all(path.clone())?;
-      println!("Secret purged at {}", path.to_utf8()?);
+      println!("Secret '{}' removed from vault.", self.path);
     } else {
-      println!("Secret not found at {}", path.to_utf8()?);
+      println!(
+        "Secret '{}' not found in vault. List available secrets with: mk secrets vault list",
+        self.path
+      );
     }
     Ok(())
   }

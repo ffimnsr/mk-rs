@@ -63,7 +63,9 @@ impl Vault {
 
     match &self.command {
       Some(command) => command.run(context),
-      None => Err(anyhow::anyhow!("No subcommand provided")),
+      None => Err(anyhow::anyhow!(
+        "No vault subcommand given. Run 'mk secrets vault --help' to see available subcommands."
+      )),
     }
   }
 }
@@ -84,7 +86,10 @@ impl VaultCommand {
 fn verify_vault(vault_location: &str) -> anyhow::Result<()> {
   let path = Path::new(vault_location);
   if !path.exists() || !path.is_dir() {
-    anyhow::bail!("The store does not exist");
+    anyhow::bail!(
+      "Vault not found at '{}'. Initialize it first with: mk secrets vault init",
+      vault_location
+    );
   }
 
   Ok(())
@@ -93,13 +98,21 @@ fn verify_vault(vault_location: &str) -> anyhow::Result<()> {
 fn verify_key(keys_location: &str, key_name: &str) -> anyhow::Result<()> {
   let keys_path = Path::new(keys_location);
   if !keys_path.exists() || !keys_path.is_dir() {
-    anyhow::bail!("The keys location does not exist");
+    anyhow::bail!(
+      "Keys directory not found at '{}'. Generate a key first with: mk secrets key gen",
+      keys_location
+    );
   }
 
-  let key_name = format!("{key_name}.key",);
-  let key_path = keys_path.join(key_name);
+  let key_filename = format!("{key_name}.key");
+  let key_path = keys_path.join(&key_filename);
   if !key_path.exists() || !key_path.is_file() {
-    anyhow::bail!("The key does not exist");
+    anyhow::bail!(
+      "Key '{}' not found in '{}'. Generate it with: mk secrets key gen --name {}",
+      key_name,
+      keys_location,
+      key_name
+    );
   }
 
   Ok(())

@@ -183,9 +183,12 @@ fn load_task_root(file_path: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<
     "lua" => load_lua_file(file_path, stack),
     "json" => load_json_file(file_path, stack),
     "toml" => load_toml_file(file_path, stack),
-    "json5" => anyhow::bail!("JSON5 files are not supported yet"),
-    "makefile" | "mk" => anyhow::bail!("Makefiles are not supported yet"),
-    _ => anyhow::bail!("Unsupported file extension - {}", file_extension),
+    "json5" => anyhow::bail!("JSON5 files are not supported yet. Use YAML, TOML, JSON, or Lua instead."),
+    "makefile" | "mk" => anyhow::bail!("Makefiles are not supported. Use a tasks.yaml file instead."),
+    _ => anyhow::bail!(
+      "Unsupported config file extension '{}'. Supported formats: yaml, yml, toml, json, lua.",
+      file_extension
+    ),
   }?;
 
   if root.include.is_some() {

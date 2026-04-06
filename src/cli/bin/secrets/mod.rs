@@ -85,7 +85,9 @@ impl Secrets {
       Some(SecretsCommand::ListKeys(list_keys)) => list_keys.execute(&context),
       Some(SecretsCommand::InitVault(init_store)) => init_store.execute(&context),
       Some(SecretsCommand::ExportSecret(export_secret)) => export_secret.execute(&context),
-      None => Err(anyhow::anyhow!("No subcommand provided")),
+      None => Err(anyhow::anyhow!(
+        "No secrets subcommand given. Run 'mk secrets --help' to see available subcommands."
+      )),
     }
   }
 }

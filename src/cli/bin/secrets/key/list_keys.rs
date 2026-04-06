@@ -50,7 +50,10 @@ impl ListKeys {
         .collect::<Vec<_>>();
 
       if entries.is_empty() {
-        println!("No keys found in location");
+        println!(
+          "No keys found at '{}'. Generate one with: mk secrets key gen",
+          location
+        );
         return Ok(());
       }
 
@@ -76,7 +79,10 @@ impl ListKeys {
       println!();
       table.printstd();
     } else {
-      println!("Location does not exist or is not a directory");
+      println!(
+        "Keys directory '{}' does not exist. Generate a key first with: mk secrets key gen",
+        location
+      );
     }
 
     Ok(())

@@ -115,10 +115,12 @@ impl Planner {
       anyhow::bail!("Circular dependency detected - {}", task_name);
     }
 
-    let task = root
-      .tasks
-      .get(task_name)
-      .ok_or_else(|| anyhow::anyhow!("Task not found - {}", task_name))?;
+    let task = root.tasks.get(task_name).ok_or_else(|| {
+      anyhow::anyhow!(
+        "Task '{}' not found. Run 'mk list' to see available tasks.",
+        task_name
+      )
+    })?;
 
     let planned_task = match task {
       Task::String(command) => PlannedTask {

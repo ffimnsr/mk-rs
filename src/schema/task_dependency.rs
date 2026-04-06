@@ -49,11 +49,12 @@ pub fn run_task_by_name(context: &TaskContext, task_name: &str) -> anyhow::Resul
     anyhow::bail!("Circular dependency detected - {}", task_name);
   }
 
-  let task = context
-    .task_root
-    .tasks
-    .get(task_name)
-    .ok_or_else(|| anyhow::anyhow!("Task not found - {}", task_name))?;
+  let task = context.task_root.tasks.get(task_name).ok_or_else(|| {
+    anyhow::anyhow!(
+      "Task '{}' not found. Run 'mk list' to see available tasks.",
+      task_name
+    )
+  })?;
 
   log::trace!("Task: {:?}", task);
 

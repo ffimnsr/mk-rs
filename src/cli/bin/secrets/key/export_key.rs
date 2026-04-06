@@ -53,7 +53,10 @@ impl ExportKey {
 
       println!("Key {name} exported to {output}.");
     } else {
-      println!("Key {name} does not exist.");
+      println!(
+        "Key '{}' not found. List available keys with: mk secrets key list",
+        name
+      );
     }
 
     Ok(())

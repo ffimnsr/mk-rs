@@ -55,7 +55,8 @@ impl GenerateKey {
     let file_path = location.join(filename_with_ext);
     if file_path.exists() && !self.force {
       return Err(anyhow::anyhow!(
-        "File {} already exists. Aborting.",
+        "Key '{}' already exists at '{}'. Use --force to overwrite.",
+        name,
         file_path.to_utf8()?
       ));
     }

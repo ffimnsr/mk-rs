@@ -17,11 +17,15 @@ pub enum ContainerRuntime {
 impl ContainerRuntime {
   pub fn resolve(runtime: Option<&ContainerRuntime>) -> anyhow::Result<PathBuf> {
     match runtime.unwrap_or(&ContainerRuntime::Auto) {
-      ContainerRuntime::Auto => which("docker")
-        .or_else(|_| which("podman"))
-        .map_err(|_| anyhow::anyhow!("Failed to find docker or podman")),
-      ContainerRuntime::Docker => which("docker").map_err(|_| anyhow::anyhow!("Failed to find docker")),
-      ContainerRuntime::Podman => which("podman").map_err(|_| anyhow::anyhow!("Failed to find podman")),
+      ContainerRuntime::Auto => which("docker").or_else(|_| which("podman")).map_err(|_| {
+        anyhow::anyhow!(
+          "No container runtime found. Install Docker or Podman and ensure it is available in PATH."
+        )
+      }),
+      ContainerRuntime::Docker => which("docker")
+        .map_err(|_| anyhow::anyhow!("Docker not found. Install Docker and ensure it is available in PATH.")),
+      ContainerRuntime::Podman => which("podman")
+        .map_err(|_| anyhow::anyhow!("Podman not found. Install Podman and ensure it is available in PATH.")),
     }
   }
 

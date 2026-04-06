@@ -66,13 +66,19 @@ impl StoreSecret {
       None => {
         let stdin = io::stdin();
         if stdin.is_terminal() {
-          return Err(anyhow::anyhow!("No value provided"));
+          return Err(anyhow::anyhow!(
+            "No secret value provided. Pass a value as the second argument or pipe it via stdin."
+          ));
         }
 
         let mut buffer = String::new();
         let mut handle = stdin.lock();
         match handle.read_to_string(&mut buffer) {
-          Ok(0) => return Err(anyhow::anyhow!("No value provided")),
+          Ok(0) => {
+            return Err(anyhow::anyhow!(
+              "No secret value provided. Pass a value as the second argument or pipe it via stdin."
+            ))
+          },
           Ok(_) => buffer.trim().to_string(),
           Err(e) => return Err(anyhow::anyhow!("Failed to read from stdin: {}", e)),
         }
