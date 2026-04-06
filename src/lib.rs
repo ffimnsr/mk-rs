@@ -41,3 +41,9 @@ pub use schema::{
   ActiveTasks,
   CompletedTasks,
 };
+
+/// Generate the JSON Schema for the task configuration file as a pretty-printed JSON string.
+pub fn generate_schema() -> anyhow::Result<String> {
+  let schema = schemars::schema_for!(schema::TaskRoot);
+  Ok(serde_json::to_string_pretty(&schema)?)
+}

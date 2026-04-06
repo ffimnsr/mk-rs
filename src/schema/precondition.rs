@@ -1,4 +1,5 @@
 use anyhow::Context as _;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use std::io::{
   BufRead as _,
@@ -16,7 +17,7 @@ use crate::schema::get_output_handler;
 
 /// This struct represents a precondition that must be met before a task can be
 /// executed.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct Precondition {
   /// The command to run
   pub command: String,

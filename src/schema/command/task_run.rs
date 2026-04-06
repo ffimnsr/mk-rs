@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::defaults::{
@@ -9,7 +10,7 @@ use crate::schema::{
   TaskContext,
 };
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct TaskRun {
   /// The name of the task to run
   pub task: String,

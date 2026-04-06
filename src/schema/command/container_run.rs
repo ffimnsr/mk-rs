@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use std::thread;
 
 use anyhow::Context;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::defaults::{
@@ -20,7 +21,7 @@ use crate::schema::{
   TaskContext,
 };
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContainerRun {
   /// The command to run in the container
   pub container_command: Vec<String>,

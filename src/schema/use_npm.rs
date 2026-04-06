@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Context as _;
 use hashbrown::HashMap;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::defaults::default_node_package_manager;
@@ -33,7 +34,7 @@ pub struct NpmPackage {
   pub package_manager: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct UseNpmArgs {
   /// The package manager to use
   #[serde(default)]
@@ -44,8 +45,9 @@ pub struct UseNpmArgs {
   pub work_dir: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
+/// Enable npm scripts as tasks. Either `true` or an object with optional settings.
 pub enum UseNpm {
   Bool(bool),
   UseNpm(Box<UseNpmArgs>),

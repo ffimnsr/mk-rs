@@ -1,6 +1,7 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct IncludeArgs {
   pub name: String,
 
@@ -8,7 +9,7 @@ pub struct IncludeArgs {
   pub overwrite: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Include {
   String(String),

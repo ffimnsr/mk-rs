@@ -5,6 +5,7 @@ use indicatif::{
   ProgressStyle,
 };
 use rand::Rng as _;
+use schemars::JsonSchema;
 use serde::{
   Deserialize,
   Serialize,
@@ -55,14 +56,14 @@ fn default_fail_fast() -> bool {
   true
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
   Sequential,
   Parallel,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TaskExecution {
   #[serde(default)]
   pub mode: Option<ExecutionMode>,
@@ -74,7 +75,7 @@ pub struct TaskExecution {
   pub fail_fast: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct TaskCache {
   #[serde(default = "default_cache_enabled")]
   pub enabled: bool,
@@ -83,7 +84,7 @@ pub struct TaskCache {
 /// This struct represents a task that can be executed. A task can contain multiple
 /// commands that are executed sequentially. A task can also have preconditions that
 /// must be met before the task can be executed.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct TaskArgs {
   /// The commands to run
   pub commands: Vec<CommandRunner>,
@@ -97,6 +98,7 @@ pub struct TaskArgs {
   pub depends_on: Vec<TaskDependency>,
 
   /// The labels for the task
+  #[schemars(with = "std::collections::HashMap<String, String>")]
   #[serde(default)]
   pub labels: HashMap<String, String>,
 
@@ -105,6 +107,7 @@ pub struct TaskArgs {
   pub description: String,
 
   /// The environment variables to set before running the task
+  #[schemars(with = "std::collections::HashMap<String, String>")]
   #[serde(default, deserialize_with = "deserialize_environment")]
   pub environment: HashMap<String, String>,
 
@@ -166,8 +169,9 @@ pub struct TaskArgs {
   pub verbose: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
+/// A task definition: either a command string shorthand or a full task object.
 pub enum Task {
   String(String),
   Task(Box<TaskArgs>),

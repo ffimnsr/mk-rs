@@ -16,6 +16,7 @@ use anyhow::Context as _;
 #[cfg(unix)]
 use console::Term;
 use indicatif::ProgressDrawTarget;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 #[cfg(unix)]
@@ -37,7 +38,7 @@ use crate::schema::{
   TaskContext,
 };
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct LocalRun {
   /// The command to run
   pub command: String,

@@ -1,0 +1,10 @@
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json": [
+      "tasks.yaml",
+      "tasks.yml",
+      "*.tasks.yaml",
+      "*.tasks.yml"
+    ]
+  }
+}

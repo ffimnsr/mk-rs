@@ -1,4 +1,5 @@
 use hashbrown::HashMap;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::utils::resolve_path;
@@ -10,15 +11,16 @@ use super::{
   TaskArgs,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct UseCargoArgs {
   /// The working directory to run the command in
   #[serde(default)]
   pub work_dir: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
+/// Enable cargo commands as tasks. Either `true` or an object with optional settings.
 pub enum UseCargo {
   Bool(bool),
   UseCargo(Box<UseCargoArgs>),

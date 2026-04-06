@@ -1,13 +1,15 @@
 use std::path::PathBuf;
 
+use schemars::JsonSchema;
 use serde::{
   Deserialize,
   Serialize,
 };
 use which::which;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+/// The container runtime to use.
 pub enum ContainerRuntime {
   Auto,
   Docker,

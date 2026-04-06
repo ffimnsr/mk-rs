@@ -4,6 +4,7 @@ use mlua::{
   Lua,
   LuaSerdeExt,
 };
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use std::fs::File;
@@ -29,7 +30,7 @@ use crate::utils::{
   resolve_path,
 };
 
-const MK_COMMANDS: [&str; 10] = [
+const MK_COMMANDS: [&str; 11] = [
   "run",
   "list",
   "completion",
@@ -40,16 +41,19 @@ const MK_COMMANDS: [&str; 10] = [
   "validate",
   "plan",
   "clean-cache",
+  "schema",
 ];
 
 /// This struct represents the root of the task schema. It contains all the tasks
 /// that can be executed.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct TaskRoot {
   /// The tasks that can be executed
+  #[schemars(with = "std::collections::HashMap<String, Task>")]
   pub tasks: HashMap<String, Task>,
 
   /// The environment variables to set before running any task
+  #[schemars(with = "std::collections::HashMap<String, String>")]
   #[serde(default, deserialize_with = "deserialize_environment")]
   pub environment: HashMap<String, String>,
 
@@ -100,6 +104,7 @@ pub struct TaskRoot {
   pub extends: Option<String>,
 
   /// Absolute path to the config file used to load this root
+  #[schemars(skip)]
   #[serde(skip)]
   pub source_path: Option<PathBuf>,
 }

@@ -7,9 +7,10 @@ use std::thread;
 use crate::handle_output;
 use crate::schema::get_output_handler;
 use anyhow::Context;
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use super::TaskContext;
-use serde::Deserialize;
 
 mod container_build;
 mod container_run;
@@ -20,8 +21,9 @@ mod task_run;
 pub use container_runtime::ContainerRuntime;
 pub use local_run::LocalRun;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 #[serde(untagged)]
+/// A single command entry in a task. Can be a shell string or a structured runner object.
 pub enum CommandRunner {
   ContainerBuild(container_build::ContainerBuild),
   ContainerRun(container_run::ContainerRun),

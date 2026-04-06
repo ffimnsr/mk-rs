@@ -8,6 +8,7 @@ use std::thread;
 
 use anyhow::Context as _;
 use git2::Repository;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::defaults::default_verbose;
@@ -24,7 +25,7 @@ use crate::{
   run_shell_command,
 };
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContainerBuildArgs {
   /// The image name to build
   pub image_name: String,
@@ -65,7 +66,7 @@ pub struct ContainerBuildArgs {
   pub runtime: Option<ContainerRuntime>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContainerBuild {
   /// The command to run in the container
   pub container_build: ContainerBuildArgs,

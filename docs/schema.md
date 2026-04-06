@@ -1,9 +1,59 @@
 # Config Schema
 
+## Editor Integration
+
+The task configuration format has a published JSON Schema at `docs/schema.json` that editors can use for autocompletion and validation.
+
+### VS Code (yaml extension)
+
+Install the [YAML extension by Red Hat](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml), then add to your workspace `.vscode/settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json": [
+      "tasks.yaml",
+      "tasks.yml",
+      "*.tasks.yaml",
+      "*.tasks.yml"
+    ]
+  }
+}
+```
+
+Or reference the schema inline at the top of any tasks file:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json
+tasks:
+  build:
+    commands:
+      - cargo build
+```
+
+### JetBrains IDEs
+
+In JetBrains IDEs (IntelliJ, GoLand, etc.), open **Preferences → Languages & Frameworks → Schemas and DTDs → JSON Schema Mappings**, add a new entry pointing to the schema URL and set the file pattern to `tasks.yaml`.
+
+### Neovim (yaml-language-server)
+
+Add a modeline comment at the top of your tasks file:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json
+```
+
+### Generate the schema locally
+
+```bash
+mk schema > schema.json
+```
+
 ## CLI Commands
 
 | Command | Description |
 | --- | --- |
+| `mk schema` | Print the JSON Schema for the task configuration file. |
 | `mk validate` | Validate task configuration without executing tasks. |
 | `mk validate --json` | Emit validation results in JSON format. |
 | `mk plan <task>` | Show the resolved dependency and command plan for a task. |

@@ -1,0 +1,846 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskRoot",
+  "description": "This struct represents the root of the task schema. It contains all the tasks that can be executed.",
+  "type": "object",
+  "required": [
+    "tasks"
+  ],
+  "properties": {
+    "tasks": {
+      "description": "The tasks that can be executed",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Task"
+      }
+    },
+    "environment": {
+      "description": "The environment variables to set before running any task",
+      "default": {},
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "env_file": {
+      "description": "The environment files to load before running any task",
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "secrets_path": {
+      "description": "Secret paths to load as dotenv-style environment entries before running any task",
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "vault_location": {
+      "description": "The path to the secret vault",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "keys_location": {
+      "description": "The path to the private keys used for secret decryption",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "key_name": {
+      "description": "The key name to use for secret decryption",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "gpg_key_id": {
+      "description": "The GPG key ID or fingerprint to use for secret encryption/decryption via the system gpg binary. When set, mk delegates all vault crypto operations to `gpg` instead of the built-in PGP engine, enabling hardware keys (e.g. YubiKey) and passphrase-protected keys.",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "use_npm": {
+      "description": "This allows mk to use npm scripts as tasks",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/UseNpm"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "use_cargo": {
+      "description": "This allows mk to use cargo commands as tasks",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/UseCargo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "container_runtime": {
+      "description": "Default container runtime to use for container commands",
+      "default": null,
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ContainerRuntime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "include": {
+      "description": "Includes additional files to be merged into the current file",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/Include"
+      }
+    },
+    "extends": {
+      "description": "Extend another root task file",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "definitions": {
+    "Task": {
+      "description": "A task definition: either a command string shorthand or a full task object.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/TaskArgs"
+        }
+      ]
+    },
+    "TaskArgs": {
+      "description": "This struct represents a task that can be executed. A task can contain multiple commands that are executed sequentially. A task can also have preconditions that must be met before the task can be executed.",
+      "type": "object",
+      "required": [
+        "commands"
+      ],
+      "properties": {
+        "commands": {
+          "description": "The commands to run",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommandRunner"
+          }
+        },
+        "preconditions": {
+          "description": "The preconditions that must be met before the task can be executed",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Precondition"
+          }
+        },
+        "depends_on": {
+          "description": "The tasks that must be executed before this task can be executed",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TaskDependency"
+          }
+        },
+        "labels": {
+          "description": "The labels for the task",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "description": "The description of the task",
+          "default": "",
+          "type": "string"
+        },
+        "environment": {
+          "description": "The environment variables to set before running the task",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "env_file": {
+          "description": "The environment files to load before running the task",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secrets_path": {
+          "description": "Secret paths to load as dotenv-style environment entries before running the task",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "vault_location": {
+          "description": "The path to the secret vault",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keys_location": {
+          "description": "The path to the private keys used for secret decryption",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_name": {
+          "description": "The key name to use for secret decryption",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gpg_key_id": {
+          "description": "GPG key ID or fingerprint for hardware/passphrase-protected keys (delegates to system gpg)",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "description": "The shell to use when running the task",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Shell"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parallel": {
+          "description": "Run the commands in parallel It should only work if the task are local_run commands",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "execution": {
+          "description": "Richer execution configuration",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TaskExecution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache": {
+          "description": "Task caching configuration",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TaskCache"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputs": {
+          "description": "Files or glob patterns that affect task output",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "description": "Files produced by the task",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ignore_errors": {
+          "description": "Ignore errors if the task fails",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "CommandRunner": {
+      "description": "A single command entry in a task. Can be a shell string or a structured runner object.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ContainerBuild"
+        },
+        {
+          "$ref": "#/definitions/ContainerRun"
+        },
+        {
+          "$ref": "#/definitions/LocalRun"
+        },
+        {
+          "$ref": "#/definitions/TaskRun"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ContainerBuild": {
+      "type": "object",
+      "required": [
+        "container_build"
+      ],
+      "properties": {
+        "container_build": {
+          "description": "The command to run in the container",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ContainerBuildArgs"
+            }
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "ContainerBuildArgs": {
+      "type": "object",
+      "required": [
+        "context",
+        "image_name"
+      ],
+      "properties": {
+        "image_name": {
+          "description": "The image name to build",
+          "type": "string"
+        },
+        "context": {
+          "description": "Defines the path to a directory to build the container",
+          "type": "string"
+        },
+        "containerfile": {
+          "description": "The containerfile or dockerfile to use",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "description": "The tags to apply to the container image",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "build_args": {
+          "description": "Build arguments to pass to the container",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "labels": {
+          "description": "Labels to apply to the container image",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "sbom": {
+          "description": "Generate a Software Bill of Materials (SBOM) for the container image",
+          "default": false,
+          "type": "boolean"
+        },
+        "no_cache": {
+          "description": "Do not use cache when building the container",
+          "default": false,
+          "type": "boolean"
+        },
+        "force_rm": {
+          "description": "Always remove intermediate containers",
+          "default": false,
+          "type": "boolean"
+        },
+        "runtime": {
+          "description": "The container runtime to use",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ContainerRuntime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ContainerRuntime": {
+      "description": "The container runtime to use.",
+      "type": "string",
+      "enum": [
+        "auto",
+        "docker",
+        "podman"
+      ]
+    },
+    "ContainerRun": {
+      "type": "object",
+      "required": [
+        "container_command",
+        "image"
+      ],
+      "properties": {
+        "container_command": {
+          "description": "The command to run in the container",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "image": {
+          "description": "The container image to use",
+          "type": "string"
+        },
+        "mounted_paths": {
+          "description": "The mounted paths to bind mount into the container",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtime": {
+          "description": "The container runtime to use",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ContainerRuntime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ignore_errors": {
+          "description": "Ignore errors if the command fails",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "LocalRun": {
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "description": "The command to run",
+          "type": "string"
+        },
+        "shell": {
+          "description": "The shell to use to run the command",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Shell"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "test": {
+          "description": "The test to run before running command If the test fails, the command will not run",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "work_dir": {
+          "description": "The working directory to run the command in",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interactive": {
+          "description": "Interactive mode If true, the command will be interactive accepting user input",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "retrigger": {
+          "description": "Allow pressing `R` to manually stop and restart a non-interactive command.",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ignore_errors": {
+          "description": "Ignore errors if the command fails",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "save_output_as": {
+          "description": "Save the command stdout to a task-scoped output name",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "Shell": {
+      "description": "The shell to use. Either a string name (e.g. \"bash\") or an object with `command` and optional `args`.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/ShellArgs"
+        }
+      ]
+    },
+    "ShellArgs": {
+      "description": "Shell command with optional flags.",
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "description": "The shell command to run",
+          "type": "string"
+        },
+        "args": {
+          "description": "The flags to pass to the shell command",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "TaskRun": {
+      "type": "object",
+      "required": [
+        "task"
+      ],
+      "properties": {
+        "task": {
+          "description": "The name of the task to run",
+          "type": "string"
+        },
+        "ignore_errors": {
+          "description": "Ignore errors if the task commands fail",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "Precondition": {
+      "description": "This struct represents a precondition that must be met before a task can be executed.",
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "description": "The command to run",
+          "type": "string"
+        },
+        "message": {
+          "description": "The message to display if the command fails",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "description": "The shell to use to run the command",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Shell"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "work_dir": {
+          "description": "The working directory to run the command in",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verbose": {
+          "description": "Show verbose output",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "TaskDependency": {
+      "description": "A task dependency: either a task name string or an object with a `name` field.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/TaskDependencyArgs"
+        }
+      ]
+    },
+    "TaskDependencyArgs": {
+      "description": "This struct represents a task dependency. A task can depend on other tasks. If a task depends on another task, the dependent task must be executed before the dependent task.",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "description": "The name of the task to depend on",
+          "type": "string"
+        }
+      }
+    },
+    "TaskExecution": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExecutionMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_parallel": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "fail_fast": {
+          "default": true,
+          "type": "boolean"
+        }
+      }
+    },
+    "ExecutionMode": {
+      "type": "string",
+      "enum": [
+        "sequential",
+        "parallel"
+      ]
+    },
+    "TaskCache": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        }
+      }
+    },
+    "UseNpm": {
+      "description": "Enable npm scripts as tasks. Either `true` or an object with optional settings.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/UseNpmArgs"
+        }
+      ]
+    },
+    "UseNpmArgs": {
+      "type": "object",
+      "properties": {
+        "package_manager": {
+          "description": "The package manager to use",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "work_dir": {
+          "description": "The working directory to run the command in",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "UseCargo": {
+      "description": "Enable cargo commands as tasks. Either `true` or an object with optional settings.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/UseCargoArgs"
+        }
+      ]
+    },
+    "UseCargoArgs": {
+      "type": "object",
+      "properties": {
+        "work_dir": {
+          "description": "The working directory to run the command in",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Include": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/IncludeArgs"
+        }
+      ]
+    },
+    "IncludeArgs": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "overwrite": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

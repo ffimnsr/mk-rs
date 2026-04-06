@@ -122,6 +122,8 @@ enum Command {
   Update,
   #[command(about = "Remove mk task cache metadata")]
   CleanCache,
+  #[command(about = "Print the JSON Schema for the task configuration file")]
+  Schema,
 }
 
 /// The CLI entry
@@ -169,7 +171,7 @@ impl CliEntry {
 
     let allow_without_config = matches!(
       args.command,
-      Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update)
+      Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update) | Some(Command::Schema)
     );
 
     Ok((config, allow_without_config))
@@ -227,6 +229,10 @@ impl CliEntry {
       Some(Command::CleanCache) => {
         mk_lib::cache::CacheStore::remove_in_dir(&self.task_root.cache_base_dir())?;
         println!("Cache cleared");
+      },
+      Some(Command::Schema) => {
+        let schema = mk_lib::generate_schema()?;
+        println!("{}", schema);
       },
       None => {
         if let Some(task_name) = &self.args.task_name {

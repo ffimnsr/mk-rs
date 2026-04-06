@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::TaskContext;
@@ -5,14 +6,15 @@ use super::TaskContext;
 /// This struct represents a task dependency. A task can depend on other tasks.
 /// If a task depends on another task, the dependent task must be executed before
 /// the dependent task.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct TaskDependencyArgs {
   /// The name of the task to depend on
   pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
+/// A task dependency: either a task name string or an object with a `name` field.
 pub enum TaskDependency {
   String(String),
   TaskDependency(Box<TaskDependencyArgs>),

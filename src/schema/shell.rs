@@ -1,7 +1,9 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 use std::process::Command as ProcessCommand;
 
-#[derive(Debug, Default, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Clone, PartialEq, Eq, JsonSchema)]
+/// Shell command with optional flags.
 pub struct ShellArgs {
   /// The shell command to run
   pub command: String,
@@ -10,8 +12,9 @@ pub struct ShellArgs {
   pub args: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(untagged)]
+/// The shell to use. Either a string name (e.g. "bash") or an object with `command` and optional `args`.
 pub enum Shell {
   String(String),
   Shell(Box<ShellArgs>),
