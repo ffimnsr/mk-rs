@@ -171,7 +171,10 @@ impl CliEntry {
 
     let allow_without_config = matches!(
       args.command,
-      Some(Command::Init { .. }) | Some(Command::Completion { .. }) | Some(Command::Update) | Some(Command::Schema)
+      Some(Command::Init { .. })
+        | Some(Command::Completion { .. })
+        | Some(Command::Update)
+        | Some(Command::Schema)
     );
 
     Ok((config, allow_without_config))

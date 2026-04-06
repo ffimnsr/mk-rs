@@ -372,10 +372,12 @@ fn collect_secret_paths(vault_root: &Path, dir: &Path, secret_paths: &mut Vec<St
   let data_path = dir.join("data.asc");
   if data_path.exists() && data_path.is_file() {
     let relative = dir.strip_prefix(vault_root).map_err(|_| {
+      let dir = dir.to_utf8().unwrap_or("<non-utf8-path>");
+      let vault_root = vault_root.to_utf8().unwrap_or("<non-utf8-path>");
       anyhow::anyhow!(
         "Failed to resolve secret path '{}' relative to vault root '{}'",
-        dir.display(),
-        vault_root.display()
+        dir,
+        vault_root
       )
     })?;
     secret_paths.push(relative.to_utf8().unwrap_or("<non-utf8-path>").to_string());

@@ -60,7 +60,7 @@ pub struct StoreSecret {
 
 impl StoreSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
-    let path: &str = &self.path.clone();
+    let path = self.path.as_str();
     let value: String = match &self.value {
       Some(value) => value.clone(),
       None => {
@@ -85,18 +85,33 @@ impl StoreSecret {
       },
     };
 
-    let vault_location: &str = &self
-      .vault_location
-      .clone()
-      .unwrap_or_else(|| context.vault_location());
-    let keys_location: &str = &self
-      .keys_location
-      .clone()
-      .unwrap_or_else(|| context.keys_location());
+    let context_vault_location;
+    let vault_location = match self.vault_location.as_deref() {
+      Some(vault_location) => vault_location,
+      None => {
+        context_vault_location = context.vault_location();
+        context_vault_location.as_str()
+      },
+    };
+    let context_keys_location;
+    let keys_location = match self.keys_location.as_deref() {
+      Some(keys_location) => keys_location,
+      None => {
+        context_keys_location = context.keys_location();
+        context_keys_location.as_str()
+      },
+    };
     if self.key_name.is_some() && self.gpg_key_id.is_some() {
       anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
     }
-    let key_name: &str = &self.key_name.clone().unwrap_or_else(|| context.key_name());
+    let context_key_name;
+    let key_name = match self.key_name.as_deref() {
+      Some(key_name) => key_name,
+      None => {
+        context_key_name = context.key_name();
+        context_key_name.as_str()
+      },
+    };
     let gpg_key_id = self.gpg_key_id.clone().or_else(|| context.gpg_key_id());
 
     assert!(!path.is_empty(), "Path must be provided");
@@ -113,7 +128,7 @@ impl StoreSecret {
     }
 
     let secret_path = Path::new(vault_location).join(path);
-    let data_path = secret_path.clone().join("data.asc");
+    let data_path = secret_path.join("data.asc");
     if secret_path.exists()
       && secret_path.is_dir()
       && data_path.exists()
@@ -125,7 +140,7 @@ impl StoreSecret {
         secret_path.to_utf8()?
       );
     } else {
-      fs::create_dir_all(secret_path.clone())?;
+      fs::create_dir_all(&secret_path)?;
 
       if let Some(gpg_id) = &gpg_key_id {
         // GPG path: encrypt via system gpg binary (supports YubiKey and passphrase-protected keys)

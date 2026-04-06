@@ -110,7 +110,7 @@ fn test_mk_7() -> anyhow::Result<()> {
   assert
     .failure()
     .code(1)
-    .stderr(predicates::str::contains("Task not found"));
+    .stderr(predicates::str::contains("Task 'u' not found"));
   Ok(())
 }
 
@@ -143,7 +143,7 @@ fn test_mk_10() -> anyhow::Result<()> {
   let assert = cmd.arg("-c").arg(&config_file_path).arg("hello0").assert();
   assert
     .failure()
-    .stderr(predicates::str::contains("Task not found"));
+    .stderr(predicates::str::contains("Task 'hello0' not found"));
   Ok(())
 }
 
@@ -1327,7 +1327,9 @@ fn test_mk_39_failed_command_does_not_publish_output() -> anyhow::Result<()> {
     .arg("build")
     .assert()
     .failure()
-    .stderr(predicates::str::contains("Failed to find task output - version"));
+    .stderr(predicates::str::contains(
+      "Task output 'version' is not available",
+    ));
 
   Ok(())
 }
