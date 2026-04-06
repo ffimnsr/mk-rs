@@ -191,7 +191,7 @@ impl CliEntry {
           anyhow::bail!("Config file already exists. Use `--force` to overwrite");
         }
 
-        let contents = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/init_tasks.yaml"));
+        let contents = Self::build_init_contents();
 
         std::fs::write(config_path, contents)?;
         println!("Config file created at {}", config_path.to_utf8()?);
@@ -309,6 +309,37 @@ impl CliEntry {
     assert!(!task_name.is_empty());
     let context = TaskContext::new_with_options(self.task_root.clone(), force, json_events);
     run_task_by_name(&context, task_name)
+  }
+
+  /// Build the contents of a new tasks.yaml, including a modeline and auto-detected integrations.
+  fn build_init_contents() -> String {
+    let mut out = String::new();
+
+    // yaml-language-server modeline for editor schema support
+    out.push_str("# yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json\n");
+    out.push('\n');
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let has_cargo = cwd.join("Cargo.toml").exists();
+    let has_npm = cwd.join("package.json").exists();
+
+    if has_cargo {
+      out.push_str("use_cargo: true\n");
+      out.push('\n');
+    }
+
+    if has_npm {
+      out.push_str("use_npm: true\n");
+      out.push('\n');
+    }
+
+    out.push_str("tasks:\n");
+    out.push_str("  greet:\n");
+    out.push_str("    commands:\n");
+    out.push_str("      - echo \"Hello, World!\"\n");
+    out.push_str("    description: Sample greet command\n");
+
+    out
   }
 
   /// Print all available tasks
