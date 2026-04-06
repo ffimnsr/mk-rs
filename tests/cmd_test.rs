@@ -894,7 +894,7 @@ fn test_mk_32_plan_reports_effective_base_dir() -> anyhow::Result<()> {
     .success()
     .stdout(predicates::str::contains(format!(
       "\"base_dir\": \"{}\"",
-      expected_base_dir.to_string_lossy()
+      expected_base_dir.to_string_lossy().replace('\\', "\\\\")
     )));
 
   let mut text_cmd = Command::new(cargo::cargo_bin!("mk"));
