@@ -90,7 +90,7 @@ impl UseNpmArgs {
       .unwrap_or_else(|| base_dir.join("package.json"));
 
     if !path.exists() || !path.is_file() {
-      return Err(anyhow::anyhow!("package.json does not exist"));
+      return Ok(HashMap::new());
     }
 
     let file = File::open(&path).context(format!("Failed to open file - {}", path.to_utf8()?))?;

@@ -710,7 +710,14 @@ mod test {
         assert_eq!(local_run.command, "cargo test");
         assert_eq!(
           local_run.work_dir,
-          Some(temp_dir.path().join("crates/app").to_string_lossy().into_owned())
+          Some(
+            temp_dir
+              .path()
+              .join("crates")
+              .join("app")
+              .to_string_lossy()
+              .into_owned()
+          )
         );
       } else {
         panic!("Expected CommandRunner::LocalRun");
