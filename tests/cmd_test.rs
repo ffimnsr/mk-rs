@@ -437,11 +437,11 @@ fn test_mk_22_cache_skips_second_run() -> anyhow::Result<()> {
           - command: cat {} > {} && echo run >> {}
             verbose: false
     ",
-      input_file.to_utf8()?,
-      output_file.to_utf8()?,
-      input_file.to_utf8()?,
-      output_file.to_utf8()?,
-      marker_file.to_utf8()?,
+      common::sh_path(&input_file),
+      common::sh_path(&output_file),
+      common::sh_path(&input_file),
+      common::sh_path(&output_file),
+      common::sh_path(&marker_file),
     ),
   )?;
 
@@ -866,7 +866,7 @@ fn test_mk_31_validate_resolves_relative_paths_from_config_dir() -> anyhow::Resu
 #[test]
 fn test_mk_32_plan_reports_effective_base_dir() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
-  std::fs::create_dir_all(temp_dir.path().join("nested/work"))?;
+  std::fs::create_dir_all(temp_dir.path().join("nested").join("work"))?;
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "nested/tasks.yaml",
@@ -880,7 +880,7 @@ fn test_mk_32_plan_reports_effective_base_dir() -> anyhow::Result<()> {
     ",
   )?;
 
-  let expected_base_dir = temp_dir.path().join("nested/work");
+  let expected_base_dir = temp_dir.path().join("nested").join("work");
 
   let mut json_cmd = Command::new(cargo::cargo_bin!("mk"));
   json_cmd
@@ -1244,7 +1244,7 @@ fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
           - command: printf '%s|%s' \"${{{{ outputs.version }}}}\" \"$IMAGE_TAG\" > {}
             verbose: false
     ",
-      result_file.to_utf8()?
+      common::sh_path(&result_file)
     ),
   )?;
 
@@ -1281,7 +1281,7 @@ fn test_mk_38_capture_multiline_output_trims_trailing_newlines() -> anyhow::Resu
           - command: printf '%s' \"${{{{ outputs.block }}}}\" > {}
             verbose: false
     ",
-      result_file.to_utf8()?
+      common::sh_path(&result_file)
     ),
   )?;
 
@@ -1359,8 +1359,8 @@ fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
           - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
             verbose: false
     ",
-      parent_file.to_utf8()?,
-      child_file.to_utf8()?
+      common::sh_path(&parent_file),
+      common::sh_path(&child_file)
     ),
   )?;
 

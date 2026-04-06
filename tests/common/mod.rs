@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write as _;
+use std::path::Path;
 
 use anyhow::Context as _;
 use assert_fs::TempDir;
@@ -30,4 +31,14 @@ pub fn setup_yaml(temp_dir: &TempDir, file_name: &str, contents: &str) -> anyhow
     .with_context(|| "Failed to convert path to string")?;
 
   Ok(config_file_path.to_string())
+}
+
+/// Convert a path to a forward-slash string suitable for embedding in shell commands.
+///
+/// On Windows, backslash path separators are treated as escape characters by
+/// POSIX shells (bash/sh from MSYS2/Git Bash), which corrupts the path. Using
+/// forward slashes avoids this — both Windows filesystem APIs and MSYS2 shells
+/// accept them.
+pub fn sh_path(path: &Path) -> String {
+  path.to_string_lossy().replace('\\', "/")
 }
