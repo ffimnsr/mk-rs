@@ -4,6 +4,7 @@ use std::hash::{
   Hash,
   Hasher,
 };
+use std::io::Read as _;
 use std::path::{
   Path,
   PathBuf,
@@ -162,12 +163,41 @@ fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
     return Ok(());
   }
 
-  let metadata = fs::metadata(path)?;
+  let metadata = fs::symlink_metadata(path)?;
+
+  if metadata.file_type().is_symlink() {
+    "symlink".hash(hasher);
+    let target = fs::read_link(path)
+      .map(|target| target.to_string_lossy().into_owned())
+      .unwrap_or_else(|_| "<unreadable-symlink>".to_string());
+    target.hash(hasher);
+    return Ok(());
+  }
+
   metadata.len().hash(hasher);
 
   if metadata.is_file() {
-    let bytes = fs::read(path)?;
-    bytes.hash(hasher);
+    let mut file = fs::File::open(path)?;
+    let mut buffer = [0u8; 8192];
+
+    loop {
+      let read = file.read(&mut buffer)?;
+      if read == 0 {
+        break;
+      }
+      hasher.write(&buffer[..read]);
+    }
+  } else if metadata.is_dir() {
+    let mut entries = fs::read_dir(path)?
+      .map(|entry| entry.map(|entry| entry.path()))
+      .collect::<Result<Vec<_>, _>>()?;
+
+    entries.sort();
+
+    for entry in entries {
+      entry.to_string_lossy().hash(hasher);
+      hash_path(&entry, hasher)?;
+    }
   } else {
     let modified = metadata.modified().ok();
     format!("{modified:?}").hash(hasher);

@@ -717,6 +717,62 @@ fn test_mk_28_env_file_content_invalidates_cache() -> anyhow::Result<()> {
   Ok(())
 }
 
+#[test]
+fn test_mk_cache_directory_contents_invalidate_cache_entry() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let data_dir = temp_dir.path().join("data");
+  std::fs::create_dir_all(&data_dir)?;
+  let input_file = data_dir.join("file.txt");
+  let output_file = temp_dir.path().join("output.txt");
+  let marker_file = temp_dir.path().join("marker.txt");
+  std::fs::write(&input_file, "one")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "cache-dir.yaml",
+    "
+    tasks:
+      build:
+        inputs:
+          - data
+        outputs:
+          - output.txt
+        cache:
+          enabled: true
+        commands:
+          - command: cat data/file.txt > output.txt && echo run >> marker.txt
+            verbose: false
+    ",
+  )?;
+
+  let mut first = Command::new(cargo::cargo_bin!("mk"));
+  first
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::write(&input_file, "two")?;
+
+  let mut second = Command::new(cargo::cargo_bin!("mk"));
+  second
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert_eq!(marker.lines().count(), 2);
+  assert_eq!(std::fs::read_to_string(&output_file)?, "two");
+  Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn test_mk_29_container_runtime_inherits_root_default_at_execution() -> anyhow::Result<()> {
