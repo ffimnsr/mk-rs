@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{
   Hash,
@@ -134,6 +135,7 @@ pub fn compute_fingerprint(
   outputs: &[PathBuf],
 ) -> anyhow::Result<String> {
   let mut hasher = DefaultHasher::new();
+  let mut visited = HashSet::new();
 
   task_name.hash(&mut hasher);
   task_debug.hash(&mut hasher);
@@ -146,37 +148,51 @@ pub fn compute_fingerprint(
 
   for path in inputs {
     path.to_string_lossy().hash(&mut hasher);
-    hash_path(path, &mut hasher)?;
+    hash_path(path, &mut hasher, &mut visited)?;
   }
 
   for path in env_files {
     path.to_string_lossy().hash(&mut hasher);
-    hash_path(path, &mut hasher)?;
+    hash_path(path, &mut hasher, &mut visited)?;
   }
 
   Ok(format!("{:016x}", hasher.finish()))
 }
 
-fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
-  if !path.exists() {
-    "missing".hash(hasher);
-    return Ok(());
-  }
-
-  let metadata = fs::symlink_metadata(path)?;
+fn hash_path(path: &Path, hasher: &mut DefaultHasher, visited: &mut HashSet<PathBuf>) -> anyhow::Result<()> {
+  let metadata = match fs::symlink_metadata(path) {
+    Ok(metadata) => metadata,
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+      "missing".hash(hasher);
+      return Ok(());
+    },
+    Err(err) => return Err(err.into()),
+  };
 
   if metadata.file_type().is_symlink() {
     "symlink".hash(hasher);
     let target = fs::read_link(path)
-      .map(|target| target.to_string_lossy().into_owned())
-      .unwrap_or_else(|_| "<unreadable-symlink>".to_string());
-    target.hash(hasher);
+      .map(|target| {
+        if target.is_absolute() {
+          target
+        } else {
+          path.parent().unwrap_or(Path::new("")).join(target)
+        }
+      })
+      .unwrap_or_else(|_| PathBuf::from("<unreadable-symlink>"));
+    target.to_string_lossy().hash(hasher);
+
+    let resolved = fs::canonicalize(&target).unwrap_or(target);
+    if visited.insert(resolved.clone()) {
+      hash_path(&resolved, hasher, visited)?;
+    }
     return Ok(());
   }
 
-  metadata.len().hash(hasher);
-
   if metadata.is_file() {
+    "file".hash(hasher);
+    metadata.len().hash(hasher);
+
     let mut file = fs::File::open(path)?;
     let mut buffer = [0u8; 8192];
 
@@ -188,6 +204,8 @@ fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
       hasher.write(&buffer[..read]);
     }
   } else if metadata.is_dir() {
+    "dir".hash(hasher);
+
     let mut entries = fs::read_dir(path)?
       .map(|entry| entry.map(|entry| entry.path()))
       .collect::<Result<Vec<_>, _>>()?;
@@ -196,9 +214,11 @@ fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
 
     for entry in entries {
       entry.to_string_lossy().hash(hasher);
-      hash_path(&entry, hasher)?;
+      hash_path(&entry, hasher, visited)?;
     }
   } else {
+    "other".hash(hasher);
+    metadata.len().hash(hasher);
     let modified = metadata.modified().ok();
     format!("{modified:?}").hash(hasher);
   }
