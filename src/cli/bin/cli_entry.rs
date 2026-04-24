@@ -16,7 +16,10 @@ use clap::{
 use clap_complete::Shell;
 use console::style;
 use mk_lib::file::DisplayPath as _;
-use mk_lib::label_filter::{matches_all, LabelFilter};
+use mk_lib::label_filter::{
+  matches_all,
+  LabelFilter,
+};
 use mk_lib::schema::{
   run_task_by_name,
   Task,
@@ -108,7 +111,11 @@ enum Command {
     #[arg(long, help = "Emit newline-delimited JSON execution events")]
     json_events: bool,
 
-    #[arg(long = "label", help = "Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    #[arg(
+      long = "label",
+      help = "Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.",
+      value_name = "FILTER"
+    )]
     labels: Vec<String>,
   },
   #[command(visible_aliases = ["ls"], about = "List all available tasks")]
@@ -122,7 +129,11 @@ enum Command {
     #[arg(long, help = "Disable colored list output", conflicts_with_all = ["plain", "json"])]
     no_color: bool,
 
-    #[arg(long = "label", help = "Filter tasks by label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    #[arg(
+      long = "label",
+      help = "Filter tasks by label (KEY or KEY=VALUE). Repeatable; all must match.",
+      value_name = "FILTER"
+    )]
     labels: Vec<String>,
   },
   #[command(visible_aliases = ["comp", "completions"], about = "Generate shell completions")]
@@ -143,7 +154,11 @@ enum Command {
     #[arg(long, help = "Show the plan in JSON format")]
     json: bool,
 
-    #[arg(long = "label", help = "Plan tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    #[arg(
+      long = "label",
+      help = "Plan tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.",
+      value_name = "FILTER"
+    )]
     labels: Vec<String>,
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
@@ -375,7 +390,11 @@ impl CliEntry {
       Some(Command::Validate { json }) => {
         self.validate_config(*json)?;
       },
-      Some(Command::Plan { task_name, json, labels }) => {
+      Some(Command::Plan {
+        task_name,
+        json,
+        labels,
+      }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
         let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
         for name in &names {
@@ -681,7 +700,13 @@ impl CliEntry {
   }
 
   /// Print all available tasks
-  fn print_available_tasks(&self, plain: bool, json: bool, no_color: bool, filters: &[LabelFilter]) -> anyhow::Result<()> {
+  fn print_available_tasks(
+    &self,
+    plain: bool,
+    json: bool,
+    no_color: bool,
+    filters: &[LabelFilter],
+  ) -> anyhow::Result<()> {
     if json {
       let tasks: Vec<_> = self
         .filtered_tasks(filters)
@@ -1022,7 +1047,10 @@ mod tests {
 
   #[test]
   fn hydra_svls_expands_to_secrets_vault_list_secrets() {
-    assert_eq!(expand(&["mk", "svls"]), ["mk", "secrets", "vault", "list-secrets"]);
+    assert_eq!(
+      expand(&["mk", "svls"]),
+      ["mk", "secrets", "vault", "list-secrets"]
+    );
   }
 
   #[test]
@@ -1071,7 +1099,15 @@ mod tests {
   fn hydra_sve_expands_to_secrets_vault_export_secret() {
     assert_eq!(
       expand(&["mk", "sve", "app/token", "--output", "out.txt"]),
-      ["mk", "secrets", "vault", "export-secret", "app/token", "--output", "out.txt"]
+      [
+        "mk",
+        "secrets",
+        "vault",
+        "export-secret",
+        "app/token",
+        "--output",
+        "out.txt"
+      ]
     );
   }
 
@@ -1102,7 +1138,14 @@ mod tests {
   fn hydra_se_expands_to_secrets_export_secret() {
     assert_eq!(
       expand(&["mk", "se", "app/token", "--output", "out.txt"]),
-      ["mk", "secrets", "export-secret", "app/token", "--output", "out.txt"]
+      [
+        "mk",
+        "secrets",
+        "export-secret",
+        "app/token",
+        "--output",
+        "out.txt"
+      ]
     );
   }
 

@@ -3369,7 +3369,10 @@ fn test_mk_70_list_json_includes_labels() -> anyhow::Result<()> {
   assert_eq!(arr[0]["labels"]["area"], "build");
   // beta has empty labels object
   assert_eq!(arr[1]["name"], "beta");
-  assert!(arr[1]["labels"].as_object().map(|m| m.is_empty()).unwrap_or(false));
+  assert!(arr[1]["labels"]
+    .as_object()
+    .map(|m| m.is_empty())
+    .unwrap_or(false));
   Ok(())
 }
 
@@ -3555,7 +3558,9 @@ fn test_mk_71_run_no_name_no_label_errors() -> anyhow::Result<()> {
     .arg("run")
     .assert()
     .failure()
-    .stderr(predicates::str::contains("Provide a task name or at least one --label filter"));
+    .stderr(predicates::str::contains(
+      "Provide a task name or at least one --label filter",
+    ));
   Ok(())
 }
 
@@ -3670,6 +3675,8 @@ fn test_mk_72_plan_no_name_no_label_errors() -> anyhow::Result<()> {
     .arg("plan")
     .assert()
     .failure()
-    .stderr(predicates::str::contains("Provide a task name or at least one --label filter"));
+    .stderr(predicates::str::contains(
+      "Provide a task name or at least one --label filter",
+    ));
   Ok(())
 }

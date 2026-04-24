@@ -38,7 +38,10 @@ mod tests {
   use hashbrown::HashMap;
 
   fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    pairs
+      .iter()
+      .map(|(k, v)| (k.to_string(), v.to_string()))
+      .collect()
   }
 
   #[test]
