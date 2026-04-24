@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::PathBuf;
 
 use assert_cmd::{
   cargo,
@@ -10,10 +11,12 @@ use mk_lib::file::ToUtf8 as _;
 mod common;
 
 fn snapshot_path(name: &str) -> String {
-  format!(
-    "/home/pastel/Projects/playground/rust/mk-rs/tests/snapshots/{}",
-    name
-  )
+  PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .join("tests")
+    .join("snapshots")
+    .join(name)
+    .to_string_lossy()
+    .into_owned()
 }
 
 fn assert_snapshot(name: &str, actual: &str) -> anyhow::Result<()> {
