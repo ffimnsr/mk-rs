@@ -3179,3 +3179,497 @@ fn test_mk_69_secrets_doctor_shows_all_resolved_fields() -> anyhow::Result<()> {
 
   Ok(())
 }
+
+#[test]
+fn test_mk_70_list_label_key_filter_text() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      ci-build:
+        labels:
+          area: ci
+        description: CI build task
+        commands:
+          - command: echo ci
+            verbose: false
+      deploy:
+        labels:
+          area: deploy
+        description: deploy task
+        commands:
+          - command: echo deploy
+            verbose: false
+      lint:
+        description: lint task
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("list")
+    .arg("--plain")
+    .arg("--label")
+    .arg("area")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  assert!(stdout.contains("ci-build"));
+  assert!(stdout.contains("deploy"));
+  assert!(!stdout.contains("lint"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_70_list_label_key_value_filter_text() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      ci-build:
+        labels:
+          area: ci
+        description: CI build task
+        commands:
+          - command: echo ci
+            verbose: false
+      deploy:
+        labels:
+          area: deploy
+        description: deploy task
+        commands:
+          - command: echo deploy
+            verbose: false
+      lint:
+        description: lint task
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("list")
+    .arg("--plain")
+    .arg("--label")
+    .arg("area=ci")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  assert!(stdout.contains("ci-build"));
+  assert!(!stdout.contains("deploy"));
+  assert!(!stdout.contains("lint"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_70_list_label_filter_json() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      ci-build:
+        labels:
+          area: ci
+          kind: test
+        description: CI build task
+        commands:
+          - command: echo ci
+            verbose: false
+      deploy:
+        labels:
+          area: deploy
+        description: deploy task
+        commands:
+          - command: echo deploy
+            verbose: false
+      lint:
+        description: lint task
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("list")
+    .arg("--json")
+    .arg("--label")
+    .arg("area=ci")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  let parsed: serde_json::Value = serde_json::from_str(&stdout)?;
+  let arr = parsed.as_array().expect("expected array");
+  assert_eq!(arr.len(), 1);
+  assert_eq!(arr[0]["name"], "ci-build");
+  assert_eq!(arr[0]["labels"]["area"], "ci");
+  assert_eq!(arr[0]["labels"]["kind"], "test");
+  Ok(())
+}
+
+#[test]
+fn test_mk_70_list_json_includes_labels() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      alpha:
+        labels:
+          area: build
+        description: alpha task
+        commands:
+          - command: echo alpha
+            verbose: false
+      beta:
+        description: beta task
+        commands:
+          - command: echo beta
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("list")
+    .arg("--json")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  let parsed: serde_json::Value = serde_json::from_str(&stdout)?;
+  let arr = parsed.as_array().expect("expected array");
+  assert_eq!(arr.len(), 2);
+  // alpha has labels
+  assert_eq!(arr[0]["name"], "alpha");
+  assert_eq!(arr[0]["labels"]["area"], "build");
+  // beta has empty labels object
+  assert_eq!(arr[1]["name"], "beta");
+  assert!(arr[1]["labels"].as_object().map(|m| m.is_empty()).unwrap_or(false));
+  Ok(())
+}
+
+#[test]
+fn test_mk_70_list_label_multiple_filters_and() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      ci-test:
+        labels:
+          area: ci
+          kind: test
+        description: CI test
+        commands:
+          - command: echo ci-test
+            verbose: false
+      ci-build:
+        labels:
+          area: ci
+          kind: build
+        description: CI build
+        commands:
+          - command: echo ci-build
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("list")
+    .arg("--plain")
+    .arg("--label")
+    .arg("area=ci")
+    .arg("--label")
+    .arg("kind=test")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  assert!(stdout.contains("ci-test"));
+  assert!(!stdout.contains("ci-build"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_71_run_label_filter_runs_matching_tasks() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      ci-test:
+        labels:
+          kind: test
+        description: CI test
+        commands:
+          - command: echo ran-ci-test
+            verbose: false
+      ci-build:
+        labels:
+          kind: build
+        description: CI build
+        commands:
+          - command: echo ran-ci-build
+            verbose: false
+      deploy:
+        description: deploy (no labels)
+        commands:
+          - command: echo ran-deploy
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--label")
+    .arg("kind=test")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  assert!(stdout.contains("ran-ci-test"), "expected ci-test to run");
+  assert!(!stdout.contains("ran-ci-build"), "expected ci-build not to run");
+  assert!(!stdout.contains("ran-deploy"), "expected deploy not to run");
+  Ok(())
+}
+
+#[test]
+fn test_mk_71_run_label_filter_multiple_matches_sorted_order() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      b-task:
+        labels:
+          kind: test
+        description: b task
+        commands:
+          - command: echo ran-b
+            verbose: false
+      a-task:
+        labels:
+          kind: test
+        description: a task
+        commands:
+          - command: echo ran-a
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--label")
+    .arg("kind=test")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  let pos_a = stdout.find("ran-a").expect("ran-a not found");
+  let pos_b = stdout.find("ran-b").expect("ran-b not found");
+  assert!(pos_a < pos_b, "a-task should run before b-task");
+  Ok(())
+}
+
+#[test]
+fn test_mk_71_run_label_filter_no_match_errors() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        description: noop
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--label")
+    .arg("kind=missing")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("No tasks matched"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_71_run_no_name_no_label_errors() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Provide a task name or at least one --label filter"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_72_plan_label_filter_text() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      a-task:
+        labels:
+          kind: test
+        description: a task
+        commands:
+          - command: echo a
+            verbose: false
+      b-task:
+        labels:
+          kind: test
+        description: b task
+        commands:
+          - command: echo b
+            verbose: false
+      other:
+        description: other
+        commands:
+          - command: echo other
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("--label")
+    .arg("kind=test")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  assert!(stdout.contains("a-task"), "a-task should appear in plan");
+  assert!(stdout.contains("b-task"), "b-task should appear in plan");
+  assert!(!stdout.contains("other"), "other should not appear in plan");
+  let pos_a = stdout.find("a-task").expect("a-task not found");
+  let pos_b = stdout.find("b-task").expect("b-task not found");
+  assert!(pos_a < pos_b, "a-task should come before b-task");
+  Ok(())
+}
+
+#[test]
+fn test_mk_72_plan_label_filter_json() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      alpha:
+        labels:
+          kind: ci
+        description: alpha
+        commands:
+          - command: echo alpha
+            verbose: false
+      beta:
+        description: beta (no labels)
+        commands:
+          - command: echo beta
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("--json")
+    .arg("--label")
+    .arg("kind=ci")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+  // One JSON object per matched task — alpha only
+  assert!(stdout.contains("\"alpha\""), "alpha plan expected");
+  assert!(!stdout.contains("\"beta\""), "beta should not appear");
+  Ok(())
+}
+
+#[test]
+fn test_mk_72_plan_no_name_no_label_errors() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Provide a task name or at least one --label filter"));
+  Ok(())
+}

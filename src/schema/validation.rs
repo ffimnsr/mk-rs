@@ -266,7 +266,30 @@ impl TaskRoot {
         );
 
         self.validate_command_outputs(task_name, task, report);
+        self.validate_labels(task_name, task, report);
       },
+    }
+  }
+
+  fn validate_labels(&self, task_name: &str, task: &super::TaskArgs, report: &mut ValidationReport) {
+    for (key, value) in &task.labels {
+      if key.trim().is_empty() {
+        report.push_warning(Some(task_name), Some("labels"), "Label key must not be empty");
+      } else if key.starts_with("mk.") {
+        report.push_warning(
+          Some(task_name),
+          Some("labels"),
+          format!("Label key '{}' uses reserved 'mk.' prefix", key),
+        );
+      }
+
+      if value.trim().is_empty() {
+        report.push_warning(
+          Some(task_name),
+          Some("labels"),
+          format!("Label '{}' has an empty value", key),
+        );
+      }
     }
   }
 
@@ -903,6 +926,94 @@ mod tests {
       "secrets",
       "Legacy secret field 'vault_location' conflicts with `secrets.vault_location`"
     ));
+    Ok(())
+  }
+
+  fn has_warning(report: &ValidationReport, field: &str, message: &str) -> bool {
+    report.issues.iter().any(|issue| {
+      issue.severity == ValidationSeverity::Warning
+        && issue.field.as_deref() == Some(field)
+        && issue.message == message
+    })
+  }
+
+  #[test]
+  fn test_validate_warns_on_empty_label_key() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+          labels:
+            "": present
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_warning(&report, "labels", "Label key must not be empty"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_warns_on_empty_label_value() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+          labels:
+            area: ""
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_warning(&report, "labels", "Label 'area' has an empty value"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_warns_on_reserved_mk_prefix() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+          labels:
+            mk.internal: reserved
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_warning(
+      &report,
+      "labels",
+      "Label key 'mk.internal' uses reserved 'mk.' prefix"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_allows_valid_labels() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+          labels:
+            area: ci
+            kind: test
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!report
+      .issues
+      .iter()
+      .any(|issue| issue.field.as_deref() == Some("labels")));
     Ok(())
   }
 }

@@ -3,8 +3,9 @@ List all available tasks
 Usage: mk list [OPTIONS]
 
 Options:
-  -p, --plain     Show list that does not include headers
-  -j, --json      Show list in JSON format
-      --no-color  Disable colored list output
-  -h, --help      Print help
-  -V, --version   Print version
+  -p, --plain           Show list that does not include headers
+  -j, --json            Show list in JSON format
+      --no-color        Disable colored list output
+      --label <FILTER>  Filter tasks by label (KEY or KEY=VALUE). Repeatable; all must match.
+  -h, --help            Print help
+  -V, --version         Print version

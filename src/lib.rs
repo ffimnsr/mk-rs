@@ -36,6 +36,9 @@ pub mod macros;
 /// The utils module contains the utility functions used in the library
 pub mod utils;
 
+/// Label filter parsing and matching used by CLI commands
+pub mod label_filter;
+
 /// Shared task execution state types
 pub use schema::{
   ActiveTasks,

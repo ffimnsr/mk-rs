@@ -16,6 +16,7 @@ use clap::{
 use clap_complete::Shell;
 use console::style;
 use mk_lib::file::DisplayPath as _;
+use mk_lib::label_filter::{matches_all, LabelFilter};
 use mk_lib::schema::{
   run_task_by_name,
   Task,
@@ -89,10 +90,10 @@ enum Command {
     #[arg(help = "Optional output path for the created config file")]
     output: Option<String>,
   },
-  #[command(visible_aliases = ["r"], arg_required_else_help = true, about = "Run specific tasks")]
+  #[command(visible_aliases = ["r"], about = "Run specific tasks")]
   Run {
-    #[arg(required = true, help = "The task name to run", value_hint = clap::ValueHint::Other)]
-    task_name: String,
+    #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
+    task_name: Option<String>,
 
     #[arg(
       long,
@@ -106,6 +107,9 @@ enum Command {
 
     #[arg(long, help = "Emit newline-delimited JSON execution events")]
     json_events: bool,
+
+    #[arg(long = "label", help = "Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    labels: Vec<String>,
   },
   #[command(visible_aliases = ["ls"], about = "List all available tasks")]
   List {
@@ -117,6 +121,9 @@ enum Command {
 
     #[arg(long, help = "Disable colored list output", conflicts_with_all = ["plain", "json"])]
     no_color: bool,
+
+    #[arg(long = "label", help = "Filter tasks by label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    labels: Vec<String>,
   },
   #[command(visible_aliases = ["comp", "completions"], about = "Generate shell completions")]
   Completion {
@@ -130,11 +137,14 @@ enum Command {
   },
   #[command(about = "Show the resolved execution plan for a task")]
   Plan {
-    #[arg(required = true, help = "The task name to inspect", value_hint = clap::ValueHint::Other)]
-    task_name: String,
+    #[arg(help = "The task name to inspect", value_hint = clap::ValueHint::Other)]
+    task_name: Option<String>,
 
     #[arg(long, help = "Show the plan in JSON format")]
     json: bool,
+
+    #[arg(long = "label", help = "Plan tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.", value_name = "FILTER")]
+    labels: Vec<String>,
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
   Secrets(Box<Secrets>),
@@ -215,12 +225,30 @@ impl CliEntry {
           continue;
         }
 
-        if arg == "svls" {
-          expanded.extend([
-            OsString::from("secrets"),
-            OsString::from("vault"),
-            OsString::from("list-secrets"),
-          ]);
+        // Hydra aliases: single token → multi-word subcommand path.
+        // Ordered longest-match first to avoid prefix ambiguity (e.g. `svls`
+        // before `sv`).  None of these must shadow a top-level clap
+        // visible_alias (`r`, `ls`, `comp`, `completions`, `s`).
+        let hydra: Option<&[&str]> = match arg.to_string_lossy().as_ref() {
+          // secrets vault <subcmd>
+          "svls" | "svl" => Some(&["secrets", "vault", "list-secrets"]),
+          "svi" => Some(&["secrets", "vault", "init-vault"]),
+          "svst" => Some(&["secrets", "vault", "store-secret"]),
+          "svsh" => Some(&["secrets", "vault", "show-secret"]),
+          "svp" => Some(&["secrets", "vault", "purge-secret"]),
+          "sve" => Some(&["secrets", "vault", "export-secret"]),
+          // secrets vault (prefix — remainder passes through unchanged)
+          "sv" => Some(&["secrets", "vault"]),
+          // secrets <subcmd>
+          "sk" => Some(&["secrets", "key"]),
+          "slk" => Some(&["secrets", "list-keys"]),
+          "sd" => Some(&["secrets", "doctor"]),
+          "si" => Some(&["secrets", "init-vault"]),
+          "se" => Some(&["secrets", "export-secret"]),
+          _ => None,
+        };
+        if let Some(tokens) = hydra {
+          expanded.extend(tokens.iter().map(|t| OsString::from(*t)));
           expanded_command = true;
           continue;
         }
@@ -318,19 +346,28 @@ impl CliEntry {
         dry_run,
         force,
         json_events,
+        labels,
       }) => {
+        let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
         if *dry_run {
-          self.print_plan(task_name, false)?;
+          for name in &names {
+            self.print_plan(name, false)?;
+          }
         } else {
-          self.run_task(task_name, *force, *json_events)?;
+          for name in &names {
+            self.run_task(name, *force, *json_events)?;
+          }
         }
       },
       Some(Command::List {
         plain,
         json,
         no_color,
+        labels,
       }) => {
-        self.print_available_tasks(*plain, *json, *no_color)?;
+        let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        self.print_available_tasks(*plain, *json, *no_color, &filters)?;
       },
       Some(Command::Completion { shell }) => {
         self.write_completions(*shell)?;
@@ -338,8 +375,12 @@ impl CliEntry {
       Some(Command::Validate { json }) => {
         self.validate_config(*json)?;
       },
-      Some(Command::Plan { task_name, json }) => {
-        self.print_plan(task_name, *json)?;
+      Some(Command::Plan { task_name, json, labels }) => {
+        let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
+        for name in &names {
+          self.print_plan(name, *json)?;
+        }
       },
       Some(Command::Secrets(secrets)) => {
         secrets.execute(&self.task_root)?;
@@ -439,6 +480,37 @@ impl CliEntry {
     }
 
     Ok(())
+  }
+
+  /// Resolve task names from an optional explicit name or label filters.
+  /// Returns a sorted list of matching task names.
+  fn resolve_run_tasks(
+    &self,
+    task_name: Option<&str>,
+    filters: &[LabelFilter],
+  ) -> anyhow::Result<Vec<String>> {
+    if let Some(name) = task_name {
+      if !filters.is_empty() {
+        anyhow::bail!("Cannot combine a task name with --label filters");
+      }
+      return Ok(vec![name.to_owned()]);
+    }
+
+    if filters.is_empty() {
+      anyhow::bail!("Provide a task name or at least one --label filter");
+    }
+
+    let matched: Vec<String> = self
+      .filtered_tasks(filters)
+      .into_iter()
+      .map(|(name, _)| name.to_owned())
+      .collect();
+
+    if matched.is_empty() {
+      anyhow::bail!("No tasks matched the given label filters");
+    }
+
+    Ok(matched)
   }
 
   /// Run the specified tasks
@@ -593,22 +665,45 @@ impl CliEntry {
     tasks
   }
 
+  fn filtered_tasks<'a>(&'a self, filters: &[LabelFilter]) -> Vec<(&'a str, &'a Task)> {
+    if filters.is_empty() {
+      return self.sorted_tasks();
+    }
+    self
+      .sorted_tasks()
+      .into_iter()
+      .filter(|(_, task)| match task {
+        Task::Task(t) => matches_all(filters, &t.labels),
+        // string shorthand tasks have no labels — never match a label filter
+        Task::String(_) => false,
+      })
+      .collect()
+  }
+
   /// Print all available tasks
-  fn print_available_tasks(&self, plain: bool, json: bool, no_color: bool) -> anyhow::Result<()> {
+  fn print_available_tasks(&self, plain: bool, json: bool, no_color: bool, filters: &[LabelFilter]) -> anyhow::Result<()> {
     if json {
       let tasks: Vec<_> = self
-        .sorted_tasks()
+        .filtered_tasks(filters)
         .into_iter()
         .map(|(name, task)| {
           if let Task::Task(task) = task {
+            let mut labels: Vec<_> = task.labels.iter().collect();
+            labels.sort_by_key(|(k, _)| k.as_str());
+            let labels_obj: serde_json::Map<String, serde_json::Value> = labels
+              .into_iter()
+              .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+              .collect();
             serde_json::json!({
-              "name": name,
               "description": task.description,
+              "labels": labels_obj,
+              "name": name,
             })
           } else {
             serde_json::json!({
-              "name": name,
               "description": "No description provided",
+              "labels": {},
+              "name": name,
             })
           }
         })
@@ -630,7 +725,7 @@ impl CliEntry {
       }
       table.set_format(*consts::FORMAT_CLEAN);
 
-      for (task_name, task) in self.sorted_tasks() {
+      for (task_name, task) in self.filtered_tasks(filters) {
         if let Task::Task(task) = task {
           table.add_row(row![b->task_name, Fg->&task.description]);
         } else {
@@ -912,5 +1007,115 @@ mod tests {
     assert!(candidates.contains(&"tasks.toml"));
     assert!(candidates.contains(&"tasks.json"));
     assert!(candidates.contains(&"tasks.lua"));
+  }
+
+  fn os(s: &str) -> std::ffi::OsString {
+    std::ffi::OsString::from(s)
+  }
+
+  fn expand(args: &[&str]) -> Vec<String> {
+    CliEntry::expand_hydra_aliases(args.iter().map(|s| os(s)))
+      .into_iter()
+      .map(|s| s.to_string_lossy().into_owned())
+      .collect()
+  }
+
+  #[test]
+  fn hydra_svls_expands_to_secrets_vault_list_secrets() {
+    assert_eq!(expand(&["mk", "svls"]), ["mk", "secrets", "vault", "list-secrets"]);
+  }
+
+  #[test]
+  fn hydra_svl_expands_to_secrets_vault_list_secrets() {
+    assert_eq!(expand(&["mk", "svl"]), ["mk", "secrets", "vault", "list-secrets"]);
+  }
+
+  #[test]
+  fn hydra_sv_expands_to_secrets_vault_prefix() {
+    assert_eq!(
+      expand(&["mk", "sv", "show", "mykey"]),
+      ["mk", "secrets", "vault", "show", "mykey"]
+    );
+  }
+
+  #[test]
+  fn hydra_svi_expands_to_secrets_vault_init_vault() {
+    assert_eq!(expand(&["mk", "svi"]), ["mk", "secrets", "vault", "init-vault"]);
+  }
+
+  #[test]
+  fn hydra_svst_expands_to_secrets_vault_store_secret() {
+    assert_eq!(
+      expand(&["mk", "svst", "app/token", "value"]),
+      ["mk", "secrets", "vault", "store-secret", "app/token", "value"]
+    );
+  }
+
+  #[test]
+  fn hydra_svsh_expands_to_secrets_vault_show_secret() {
+    assert_eq!(
+      expand(&["mk", "svsh", "app/token"]),
+      ["mk", "secrets", "vault", "show-secret", "app/token"]
+    );
+  }
+
+  #[test]
+  fn hydra_svp_expands_to_secrets_vault_purge_secret() {
+    assert_eq!(
+      expand(&["mk", "svp", "app/token"]),
+      ["mk", "secrets", "vault", "purge-secret", "app/token"]
+    );
+  }
+
+  #[test]
+  fn hydra_sve_expands_to_secrets_vault_export_secret() {
+    assert_eq!(
+      expand(&["mk", "sve", "app/token", "--output", "out.txt"]),
+      ["mk", "secrets", "vault", "export-secret", "app/token", "--output", "out.txt"]
+    );
+  }
+
+  #[test]
+  fn hydra_sk_expands_to_secrets_key() {
+    assert_eq!(
+      expand(&["mk", "sk", "generate-key"]),
+      ["mk", "secrets", "key", "generate-key"]
+    );
+  }
+
+  #[test]
+  fn hydra_slk_expands_to_secrets_list_keys() {
+    assert_eq!(expand(&["mk", "slk"]), ["mk", "secrets", "list-keys"]);
+  }
+
+  #[test]
+  fn hydra_sd_expands_to_secrets_doctor() {
+    assert_eq!(expand(&["mk", "sd"]), ["mk", "secrets", "doctor"]);
+  }
+
+  #[test]
+  fn hydra_si_expands_to_secrets_init_vault() {
+    assert_eq!(expand(&["mk", "si"]), ["mk", "secrets", "init-vault"]);
+  }
+
+  #[test]
+  fn hydra_se_expands_to_secrets_export_secret() {
+    assert_eq!(
+      expand(&["mk", "se", "app/token", "--output", "out.txt"]),
+      ["mk", "secrets", "export-secret", "app/token", "--output", "out.txt"]
+    );
+  }
+
+  #[test]
+  fn hydra_config_flag_preserved_before_hydra_token() {
+    assert_eq!(
+      expand(&["mk", "-c", "my.yaml", "svls"]),
+      ["mk", "-c", "my.yaml", "secrets", "vault", "list-secrets"]
+    );
+  }
+
+  #[test]
+  fn hydra_unknown_token_passes_through_unchanged() {
+    assert_eq!(expand(&["mk", "run", "my-task"]), ["mk", "run", "my-task"]);
   }
 }

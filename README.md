@@ -145,6 +145,72 @@ Cache hit only skips task command execution.
 
 Current limitation: `mk init` writes YAML templates only. If TOML/JSON/Lua remain first-class config entrypoints, format-specific `mk init` templates should be added later instead of relying on manual conversion.
 
+### Task labels
+
+Tasks can carry arbitrary key-value labels in the `labels` map. Labels are task metadata used for filtering; they do not affect execution order or environment.
+
+```yaml
+tasks:
+  test-unit:
+    labels:
+      area: ci
+      kind: test
+    commands:
+      - command: cargo test
+
+  test-integration:
+    labels:
+      area: ci
+      kind: integration
+    commands:
+      - command: cargo test --test '*'
+
+  build-release:
+    labels:
+      area: ci
+      kind: build
+    commands:
+      - command: cargo build --release
+```
+
+Filter the task list by label:
+
+```bash
+# show all tasks tagged area=ci
+mk list --label area=ci
+
+# show only integration tasks
+mk list --label kind=integration
+
+# AND filters: show tasks matching both area=ci and kind=test
+mk list --label area=ci --label kind=test
+```
+
+Run all tasks matching a label filter:
+
+```bash
+# run every task with kind=test
+mk run --label kind=test
+
+# run tasks that match area=ci AND kind=build
+mk run --label area=ci --label kind=build
+```
+
+Show execution plans for matching tasks:
+
+```bash
+mk plan --label area=ci
+mk plan --label area=ci --json
+```
+
+Notes:
+
+- Multiple `--label` flags are combined as AND; all filters must match for a task to be selected.
+- `mk run --label` runs all matching tasks in deterministic sorted order.
+- Task `labels` are distinct from `container_build.labels`, which are OCI image labels applied during a container build.
+- Label keys starting with `mk.` are reserved; `mk validate` warns if they are used.
+- `mk validate` also warns on empty label keys or empty label values.
+
 ### Shell completion install examples
 
 Dynamic task-name completion is not implemented yet. Static shell completion for subcommands and flags is available now.
@@ -697,16 +763,16 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [x] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
 - [x] Add support for saving and reusing command output (output can be reused on other command inside a task)
 - [ ] Add proper documentation
-- [ ] Add support for cargo env
+- [ ] Add support for cargo env on mk-rs when running task on cargo project
 - [x] Add support for trigger reload when on cargo run
 - [ ] Add fuzzy finder for tasks
 - [ ] Add more unit tests and benchmarks
-- [ ] Add support for npm commands
+- [x] Add support for npm commands
 - [ ] Add fuzzer scripts for code fuzzing
 - [ ] Complete the code coverage
 - [ ] Expand `extends`-based composition beyond local single-parent files
 - [ ] Expand Windows and macOS test coverage and polish platform-specific behavior
-- [ ] Make use of labels
+- [x] Make use of labels
 - [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
 - [ ] Support for lima and nerdctrl
 - [ ] There's still a lot of unknown, if you found a bug please report.
