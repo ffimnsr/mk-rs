@@ -486,6 +486,17 @@ Set `retrigger: true` on a non-interactive local command to allow pressing `R` w
 
 The docs can be found [here](./schema.md).
 
+## Fuzz testing
+
+Use the fuzz runner to exercise config parsing, validation, planning, and label filtering without executing task commands.
+
+```bash
+scripts/fuzz.sh --list
+scripts/fuzz.sh fuzz_config_parse
+scripts/fuzz.sh fuzz_label_filter
+FUZZ_TIME=300 scripts/fuzz.sh all
+```
+
 ## What's on the roadmap?
 
 - [ ] Add lua script as config file
@@ -496,7 +507,7 @@ The docs can be found [here](./schema.md).
 - [ ] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
 - [ ] Add support for npm scripts
-- [ ] Add fuzzer scripts for code fuzzing
+- [x] Add fuzzer scripts for code fuzzing
 - [ ] Import and include yaml from local (relative paths, and absolute) and remote sources
 - [ ] Make sure to support windows and macOS
 - [ ] Make use of labels

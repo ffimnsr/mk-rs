@@ -1,5 +1,5 @@
 [package]
-name = "mk_ext_prettytable-fuzz"
+name = "mk-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -7,15 +7,29 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
+[workspace]
+
 [dependencies]
 libfuzzer-sys = "0.4"
+hashbrown = "0.16.1"
+serde_yaml = { package = "mk_ext_serde_yaml", path = "../crates/serde-yaml" }
+serde_json = "1.0.134"
+toml = "0.8.19"
 
-[dependencies.mk_ext_prettytable]
+[dependencies.mk_lib]
+package = "mk"
 path = ".."
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "fuzz_config_parse"
+path = "fuzz_targets/fuzz_config_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_label_filter"
+path = "fuzz_targets/fuzz_label_filter.rs"
 test = false
 doc = false
 bench = false

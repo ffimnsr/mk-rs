@@ -1,19 +1,18 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
+  "$defs": {
     "CommandRunner": {
       "anyOf": [
         {
-          "$ref": "#/definitions/ContainerBuild"
+          "$ref": "#/$defs/ContainerBuild"
         },
         {
-          "$ref": "#/definitions/ContainerRun"
+          "$ref": "#/$defs/ContainerRun"
         },
         {
-          "$ref": "#/definitions/LocalRun"
+          "$ref": "#/$defs/LocalRun"
         },
         {
-          "$ref": "#/definitions/TaskRun"
+          "$ref": "#/$defs/TaskRun"
         },
         {
           "type": "string"
@@ -24,11 +23,7 @@
     "ContainerBuild": {
       "properties": {
         "container_build": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ContainerBuildArgs"
-            }
-          ],
+          "$ref": "#/$defs/ContainerBuildArgs",
           "description": "The command to run in the container"
         },
         "verbose": {
@@ -98,7 +93,7 @@
         "runtime": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ContainerRuntime"
+              "$ref": "#/$defs/ContainerRuntime"
             },
             {
               "type": "null"
@@ -125,8 +120,8 @@
         }
       },
       "required": [
-        "context",
-        "image_name"
+        "image_name",
+        "context"
       ],
       "type": "object"
     },
@@ -162,7 +157,7 @@
         "runtime": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ContainerRuntime"
+              "$ref": "#/$defs/ContainerRuntime"
             },
             {
               "type": "null"
@@ -208,7 +203,7 @@
           "type": "string"
         },
         {
-          "$ref": "#/definitions/IncludeArgs"
+          "$ref": "#/$defs/IncludeArgs"
         }
       ]
     },
@@ -243,7 +238,7 @@
         },
         "interactive": {
           "default": null,
-          "description": "Interactive mode If true, the command will be interactive accepting user input",
+          "description": "Interactive mode\nIf true, the command will be interactive accepting user input",
           "type": [
             "boolean",
             "null"
@@ -268,7 +263,7 @@
         "shell": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Shell"
+              "$ref": "#/$defs/Shell"
             },
             {
               "type": "null"
@@ -278,7 +273,7 @@
         },
         "test": {
           "default": null,
-          "description": "The test to run before running command If the test fails, the command will not run",
+          "description": "The test to run before running command\nIf the test fails, the command will not run",
           "type": [
             "string",
             "null"
@@ -307,7 +302,7 @@
       "type": "object"
     },
     "Precondition": {
-      "description": "This struct represents a precondition that must be met before a task can be executed.",
+      "description": "This struct represents a precondition that must be met before a task can be\nexecuted.",
       "properties": {
         "command": {
           "description": "The command to run",
@@ -324,7 +319,7 @@
         "shell": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Shell"
+              "$ref": "#/$defs/Shell"
             },
             {
               "type": "null"
@@ -366,7 +361,7 @@
         "backend": {
           "anyOf": [
             {
-              "$ref": "#/definitions/SecretBackend"
+              "$ref": "#/$defs/SecretBackend"
             },
             {
               "type": "null"
@@ -421,7 +416,7 @@
           "type": "string"
         },
         {
-          "$ref": "#/definitions/ShellArgs"
+          "$ref": "#/$defs/ShellArgs"
         }
       ],
       "description": "The shell to use. Either a string name (e.g. \"bash\") or an object with `command` and optional `args`."
@@ -455,18 +450,18 @@
           "type": "string"
         },
         {
-          "$ref": "#/definitions/TaskArgs"
+          "$ref": "#/$defs/TaskArgs"
         }
       ],
       "description": "A task definition: either a command string shorthand or a full task object."
     },
     "TaskArgs": {
-      "description": "This struct represents a task that can be executed. A task can contain multiple commands that are executed sequentially. A task can also have preconditions that must be met before the task can be executed.",
+      "description": "This struct represents a task that can be executed. A task can contain multiple\ncommands that are executed sequentially. A task can also have preconditions that\nmust be met before the task can be executed.",
       "properties": {
         "cache": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TaskCache"
+              "$ref": "#/$defs/TaskCache"
             },
             {
               "type": "null"
@@ -478,14 +473,14 @@
         "commands": {
           "description": "The commands to run",
           "items": {
-            "$ref": "#/definitions/CommandRunner"
+            "$ref": "#/$defs/CommandRunner"
           },
           "type": "array"
         },
         "depends_on": {
           "description": "The tasks that must be executed before this task can be executed",
           "items": {
-            "$ref": "#/definitions/TaskDependency"
+            "$ref": "#/$defs/TaskDependency"
           },
           "type": "array"
         },
@@ -513,7 +508,7 @@
         "execution": {
           "anyOf": [
             {
-              "$ref": "#/definitions/TaskExecution"
+              "$ref": "#/$defs/TaskExecution"
             },
             {
               "type": "null"
@@ -580,7 +575,7 @@
         },
         "parallel": {
           "default": null,
-          "description": "Run the commands in parallel It should only work if the task are local_run commands",
+          "description": "Run the commands in parallel\nIt should only work if the task are local_run commands",
           "type": [
             "boolean",
             "null"
@@ -589,14 +584,14 @@
         "preconditions": {
           "description": "The preconditions that must be met before the task can be executed",
           "items": {
-            "$ref": "#/definitions/Precondition"
+            "$ref": "#/$defs/Precondition"
           },
           "type": "array"
         },
         "secrets": {
           "anyOf": [
             {
-              "$ref": "#/definitions/SecretSettings"
+              "$ref": "#/$defs/SecretSettings"
             },
             {
               "type": "null"
@@ -616,7 +611,7 @@
         "shell": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Shell"
+              "$ref": "#/$defs/Shell"
             },
             {
               "type": "null"
@@ -661,13 +656,13 @@
           "type": "string"
         },
         {
-          "$ref": "#/definitions/TaskDependencyArgs"
+          "$ref": "#/$defs/TaskDependencyArgs"
         }
       ],
       "description": "A task dependency: either a task name string or an object with a `name` field."
     },
     "TaskDependencyArgs": {
-      "description": "This struct represents a task dependency. A task can depend on other tasks. If a task depends on another task, the dependent task must be executed before the dependent task.",
+      "description": "This struct represents a task dependency. A task can depend on other tasks.\nIf a task depends on another task, the dependent task must be executed before\nthe dependent task.",
       "properties": {
         "name": {
           "description": "The name of the task to depend on",
@@ -688,7 +683,7 @@
         "max_parallel": {
           "default": null,
           "format": "uint",
-          "minimum": 0.0,
+          "minimum": 0,
           "type": [
             "integer",
             "null"
@@ -697,7 +692,7 @@
         "mode": {
           "anyOf": [
             {
-              "$ref": "#/definitions/ExecutionMode"
+              "$ref": "#/$defs/ExecutionMode"
             },
             {
               "type": "null"
@@ -742,7 +737,7 @@
           "type": "boolean"
         },
         {
-          "$ref": "#/definitions/UseCargoArgs"
+          "$ref": "#/$defs/UseCargoArgs"
         }
       ],
       "description": "Enable cargo commands as tasks. Either `true` or an object with optional settings."
@@ -766,7 +761,7 @@
           "type": "boolean"
         },
         {
-          "$ref": "#/definitions/UseNpmArgs"
+          "$ref": "#/$defs/UseNpmArgs"
         }
       ],
       "description": "Enable npm scripts as tasks. Either `true` or an object with optional settings."
@@ -793,12 +788,13 @@
       "type": "object"
     }
   },
-  "description": "This struct represents the root of the task schema. It contains all the tasks that can be executed.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "This struct represents the root of the task schema. It contains all the tasks\nthat can be executed.",
   "properties": {
     "container_runtime": {
       "anyOf": [
         {
-          "$ref": "#/definitions/ContainerRuntime"
+          "$ref": "#/$defs/ContainerRuntime"
         },
         {
           "type": "null"
@@ -833,7 +829,7 @@
     },
     "gpg_key_id": {
       "default": null,
-      "description": "The GPG key ID or fingerprint to use for secret encryption/decryption via the system gpg binary. When set, mk delegates all vault crypto operations to `gpg` instead of the built-in PGP engine, enabling hardware keys (e.g. YubiKey) and passphrase-protected keys.",
+      "description": "The GPG key ID or fingerprint to use for secret encryption/decryption via the system gpg binary.\nWhen set, mk delegates all vault crypto operations to `gpg` instead of the built-in PGP engine,\nenabling hardware keys (e.g. YubiKey) and passphrase-protected keys.",
       "type": [
         "string",
         "null"
@@ -842,7 +838,7 @@
     "include": {
       "description": "Includes additional files to be merged into the current file",
       "items": {
-        "$ref": "#/definitions/Include"
+        "$ref": "#/$defs/Include"
       },
       "type": [
         "array",
@@ -868,7 +864,7 @@
     "secrets": {
       "anyOf": [
         {
-          "$ref": "#/definitions/SecretSettings"
+          "$ref": "#/$defs/SecretSettings"
         },
         {
           "type": "null"
@@ -887,7 +883,7 @@
     },
     "tasks": {
       "additionalProperties": {
-        "$ref": "#/definitions/Task"
+        "$ref": "#/$defs/Task"
       },
       "description": "The tasks that can be executed",
       "type": "object"
@@ -895,7 +891,7 @@
     "use_cargo": {
       "anyOf": [
         {
-          "$ref": "#/definitions/UseCargo"
+          "$ref": "#/$defs/UseCargo"
         },
         {
           "type": "null"
@@ -906,7 +902,7 @@
     "use_npm": {
       "anyOf": [
         {
-          "$ref": "#/definitions/UseNpm"
+          "$ref": "#/$defs/UseNpm"
         },
         {
           "type": "null"

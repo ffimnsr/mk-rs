@@ -756,6 +756,17 @@ This creates the vault, writes `.vault-meta.toml`, and adds or updates the `secr
 
 The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 
+## Fuzz testing
+
+Use the fuzz runner to exercise config parsing, validation, planning, and label filtering without executing task commands.
+
+```bash
+scripts/fuzz.sh --list
+scripts/fuzz.sh fuzz_config_parse
+scripts/fuzz.sh fuzz_label_filter
+FUZZ_TIME=300 scripts/fuzz.sh all
+```
+
 ## What's on the roadmap?
 
 - [x] Add global context for environment and output
@@ -768,7 +779,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add fuzzy finder for tasks
 - [ ] Add more unit tests and benchmarks
 - [x] Add support for npm commands
-- [ ] Add fuzzer scripts for code fuzzing
+- [x] Add fuzzer scripts for code fuzzing
 - [ ] Complete the code coverage
 - [ ] Expand `extends`-based composition beyond local single-parent files
 - [ ] Expand Windows and macOS test coverage and polish platform-specific behavior
