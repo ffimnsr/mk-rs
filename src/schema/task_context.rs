@@ -1,5 +1,9 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::{
+  AtomicBool,
+  Ordering,
+};
 use std::sync::{
   Arc,
   Mutex,
@@ -18,6 +22,7 @@ use crate::defaults::{
   default_shell,
   default_verbose,
 };
+use crate::secrets::SecretConfig;
 
 use super::{
   ActiveTasks,
@@ -38,10 +43,7 @@ pub struct TaskContext {
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
   pub task_outputs: Arc<Mutex<HashMap<String, String>>>,
-  pub secret_vault_location: Option<String>,
-  pub secret_keys_location: Option<String>,
-  pub secret_key_name: Option<String>,
-  pub secret_gpg_key_id: Option<String>,
+  pub secret_config: Option<SecretConfig>,
   pub shell: Option<Arc<Shell>>,
   pub container_runtime: Option<ContainerRuntime>,
   pub ignore_errors: Option<bool>,
@@ -51,6 +53,7 @@ pub struct TaskContext {
   pub is_nested: bool,
   pub cache_store: Arc<Mutex<CacheStore>>,
   pub current_task_name: Option<String>,
+  pub cancellation_requested: Arc<AtomicBool>,
 }
 
 impl TaskContext {
@@ -63,10 +66,7 @@ impl TaskContext {
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: None,
-      secret_keys_location: None,
-      secret_key_name: None,
-      secret_gpg_key_id: None,
+      secret_config: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -76,6 +76,7 @@ impl TaskContext {
       is_nested: false,
       cache_store: Arc::new(Mutex::new(CacheStore::default())),
       current_task_name: None,
+      cancellation_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -88,10 +89,7 @@ impl TaskContext {
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: None,
-      secret_keys_location: None,
-      secret_key_name: None,
-      secret_gpg_key_id: None,
+      secret_config: None,
       shell: None,
       container_runtime: None,
       ignore_errors: None,
@@ -101,6 +99,7 @@ impl TaskContext {
       is_nested: false,
       cache_store: Arc::new(Mutex::new(CacheStore::default())),
       current_task_name: None,
+      cancellation_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -113,10 +112,7 @@ impl TaskContext {
       multi: Arc::new(MultiProgress::new()),
       env_vars: HashMap::new(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: task_root.vault_location.clone(),
-      secret_keys_location: task_root.keys_location.clone(),
-      secret_key_name: task_root.key_name.clone(),
-      secret_gpg_key_id: task_root.gpg_key_id.clone(),
+      secret_config: None,
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -126,6 +122,7 @@ impl TaskContext {
       is_nested: false,
       cache_store: Arc::new(Mutex::new(cache_store)),
       current_task_name: None,
+      cancellation_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -143,10 +140,7 @@ impl TaskContext {
       multi,
       env_vars: HashMap::new(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: task_root.vault_location.clone(),
-      secret_keys_location: task_root.keys_location.clone(),
-      secret_key_name: task_root.key_name.clone(),
-      secret_gpg_key_id: task_root.gpg_key_id.clone(),
+      secret_config: None,
       shell: None,
       container_runtime: task_root.container_runtime.clone(),
       ignore_errors: None,
@@ -156,6 +150,7 @@ impl TaskContext {
       is_nested: false,
       cache_store: Arc::new(Mutex::new(cache_store)),
       current_task_name: None,
+      cancellation_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -167,10 +162,7 @@ impl TaskContext {
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: context.secret_vault_location.clone(),
-      secret_keys_location: context.secret_keys_location.clone(),
-      secret_key_name: context.secret_key_name.clone(),
-      secret_gpg_key_id: context.secret_gpg_key_id.clone(),
+      secret_config: context.secret_config.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: context.ignore_errors,
@@ -180,6 +172,7 @@ impl TaskContext {
       is_nested: true,
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
+      cancellation_requested: context.cancellation_requested.clone(),
     }
   }
 
@@ -191,10 +184,7 @@ impl TaskContext {
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
-      secret_vault_location: context.secret_vault_location.clone(),
-      secret_keys_location: context.secret_keys_location.clone(),
-      secret_key_name: context.secret_key_name.clone(),
-      secret_gpg_key_id: context.secret_gpg_key_id.clone(),
+      secret_config: context.secret_config.clone(),
       shell: context.shell.clone(),
       container_runtime: context.container_runtime.clone(),
       ignore_errors: Some(ignore_errors),
@@ -204,6 +194,7 @@ impl TaskContext {
       is_nested: true,
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
+      cancellation_requested: context.cancellation_requested.clone(),
     }
   }
 
@@ -219,20 +210,8 @@ impl TaskContext {
     self.shell = Some(shell);
   }
 
-  pub fn set_secret_vault_location(&mut self, vault_location: impl Into<String>) {
-    self.secret_vault_location = Some(vault_location.into());
-  }
-
-  pub fn set_secret_keys_location(&mut self, keys_location: impl Into<String>) {
-    self.secret_keys_location = Some(keys_location.into());
-  }
-
-  pub fn set_secret_key_name(&mut self, key_name: impl Into<String>) {
-    self.secret_key_name = Some(key_name.into());
-  }
-
-  pub fn set_secret_gpg_key_id(&mut self, gpg_key_id: impl Into<String>) {
-    self.secret_gpg_key_id = Some(gpg_key_id.into());
+  pub fn set_secret_config(&mut self, secret_config: SecretConfig) {
+    self.secret_config = Some(secret_config);
   }
 
   pub fn set_container_runtime(&mut self, runtime: &ContainerRuntime) {
@@ -342,6 +321,18 @@ impl TaskContext {
     self.current_task_name = Some(task_name.to_string());
   }
 
+  pub fn request_cancellation(&self) {
+    self.cancellation_requested.store(true, Ordering::SeqCst);
+  }
+
+  pub fn cancellation_requested(&self) -> bool {
+    self.cancellation_requested.load(Ordering::SeqCst)
+  }
+
+  pub fn clear_cancellation(&self) {
+    self.cancellation_requested.store(false, Ordering::SeqCst);
+  }
+
   pub fn resolve_from_config(&self, value: &str) -> PathBuf {
     self.task_root.resolve_from_config(value)
   }
@@ -355,7 +346,8 @@ mod test {
   fn test_task_context_1() -> anyhow::Result<()> {
     {
       let context = TaskContext::empty();
-      assert_eq!(context.shell().cmd(), "sh".to_string());
+      let expected = if cfg!(windows) { "cmd" } else { "sh" };
+      assert_eq!(context.shell().cmd(), expected.to_string());
       assert!(!context.ignore_errors());
       assert!(context.verbose());
     }

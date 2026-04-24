@@ -41,7 +41,12 @@ use crate::cache::{
 };
 use crate::defaults::default_verbose;
 use crate::run_shell_command;
-use crate::secrets::load_secret_env;
+use crate::secrets::{
+  load_secret_env,
+  merge_optional_secret_settings,
+  resolve_secret_config,
+  SecretSettings,
+};
 use crate::utils::{
   deserialize_environment,
   load_env_files_in_dir,
@@ -119,6 +124,10 @@ pub struct TaskArgs {
   #[serde(default)]
   pub secrets_path: Vec<String>,
 
+  /// Canonical task secret settings block.
+  #[serde(default)]
+  pub secrets: Option<SecretSettings>,
+
   /// The path to the secret vault
   #[serde(default)]
   pub vault_location: Option<String>,
@@ -167,6 +176,16 @@ pub struct TaskArgs {
   /// Show verbose output
   #[serde(default)]
   pub verbose: Option<bool>,
+
+  /// Original legacy secret scalar fields before normalization.
+  #[schemars(skip)]
+  #[serde(skip)]
+  pub(crate) raw_legacy_secret_settings: Option<SecretSettings>,
+
+  /// Original `secrets` block before normalization.
+  #[schemars(skip)]
+  #[serde(skip)]
+  pub(crate) raw_secrets: Option<SecretSettings>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -204,6 +223,56 @@ impl Task {
 }
 
 impl TaskArgs {
+  pub(crate) fn normalized_secret_settings(&self) -> Option<SecretSettings> {
+    merge_optional_secret_settings(
+      Some(SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      )),
+      self.secrets.clone(),
+    )
+    .filter(|settings| !settings.is_empty())
+  }
+
+  pub(crate) fn validation_legacy_secret_settings(&self) -> SecretSettings {
+    self.raw_legacy_secret_settings.clone().unwrap_or_else(|| {
+      SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      )
+    })
+  }
+
+  pub(crate) fn normalize_secret_settings(&mut self) {
+    if self.raw_legacy_secret_settings.is_none() {
+      self.raw_legacy_secret_settings = Some(SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      ));
+    }
+    if self.raw_secrets.is_none() {
+      self.raw_secrets = self.secrets.clone();
+    }
+
+    self.secrets = self.normalized_secret_settings();
+    if let Some(secrets) = &self.secrets {
+      self.vault_location = secrets.vault_location.clone();
+      self.keys_location = secrets.keys_location.clone();
+      self.key_name = secrets.key_name.clone();
+      self.gpg_key_id = secrets.gpg_key_id.clone();
+      self.secrets_path = secrets.secrets_path.clone().unwrap_or_default();
+    }
+  }
+
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     assert!(!self.commands.is_empty());
 
@@ -225,56 +294,21 @@ impl TaskArgs {
       context.set_verbose(*verbose);
     }
 
-    if !context.is_nested {
-      if let Some(vault_location) = &context.task_root.vault_location {
-        context.set_secret_vault_location(vault_location.clone());
-      }
-
-      if let Some(keys_location) = &context.task_root.keys_location {
-        context.set_secret_keys_location(keys_location.clone());
-      }
-
-      if let Some(key_name) = &context.task_root.key_name {
-        context.set_secret_key_name(key_name.clone());
-      }
-
-      if let Some(gpg_key_id) = &context.task_root.gpg_key_id {
-        context.set_secret_gpg_key_id(gpg_key_id.clone());
-      }
-    }
-
-    if let Some(vault_location) = &self.vault_location {
-      context.set_secret_vault_location(vault_location.clone());
-    }
-
-    if let Some(keys_location) = &self.keys_location {
-      context.set_secret_keys_location(keys_location.clone());
-    }
-
-    if let Some(key_name) = &self.key_name {
-      context.set_secret_key_name(key_name.clone());
-    }
-
-    if let Some(gpg_key_id) = &self.gpg_key_id {
-      context.set_secret_gpg_key_id(gpg_key_id.clone());
-    }
+    let config_base_dir = self.config_base_dir(context);
+    let task_secret_config = resolve_secret_config(
+      &config_base_dir,
+      None,
+      self.secrets.as_ref(),
+      context.task_root.secrets.as_ref(),
+    );
+    context.set_secret_config(task_secret_config.clone());
 
     // Load environment variables from root and task environments and env files.
     if !context.is_nested {
-      let config_base_dir = self.config_base_dir(context);
       let root_env = context.task_root.environment.clone();
       let root_env_files = load_env_files_in_dir(&context.task_root.env_file, &config_base_dir)?;
-      let root_secret_env = load_secret_env(
-        &context.task_root.secrets_path,
-        &config_base_dir,
-        context.secret_vault_location.as_deref(),
-        context.secret_keys_location.as_deref(),
-        context.secret_key_name.as_deref(),
-        context.secret_gpg_key_id.as_deref(),
-      )?;
       context.extend_env_vars(root_env);
       context.extend_env_vars(root_env_files);
-      context.extend_env_vars(root_secret_env);
     }
 
     // Load environment variables from the task environment and env files field
@@ -285,15 +319,6 @@ impl TaskArgs {
     context.extend_env_vars(defined_env);
     context.extend_env_vars(additional_env);
     context.extend_env_vars(secret_env);
-
-    if self.should_skip_from_cache(context)? {
-      context.emit_event(&serde_json::json!({
-        "event": "task_skipped",
-        "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
-        "reason": "cache_hit",
-      }))?;
-      return Ok(());
-    }
 
     let mut rng = rand::thread_rng();
     // Spinners can be found here:
@@ -344,6 +369,15 @@ impl TaskArgs {
       } else {
         precondition_pb.finish_with_message(message);
       }
+    }
+
+    if self.should_skip_from_cache(context)? {
+      context.emit_event(&serde_json::json!({
+        "event": "task_skipped",
+        "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
+        "reason": "cache_hit",
+      }))?;
+      return Ok(());
     }
 
     if self.is_parallel() {
@@ -405,6 +439,7 @@ impl TaskArgs {
 
   /// Execute the commands in parallel
   fn execute_commands_parallel(&self, context: &TaskContext) -> anyhow::Result<()> {
+    context.clear_cancellation();
     let (tx, rx): (Sender<CommandResult>, Receiver<CommandResult>) = channel();
     let mut handles = vec![];
     let command_count = self.commands.len();
@@ -439,7 +474,7 @@ impl TaskArgs {
         let context = context.clone();
 
         let handle = thread::spawn(move || {
-          let result = match command.execute(&context) {
+          let result = match command.execute_cancellable(&context) {
             Ok(_) => CommandResult {
               index: i,
               success: true,
@@ -470,6 +505,7 @@ impl TaskArgs {
             failures.push(result.message);
             if fail_fast {
               stop_scheduling = true;
+              context.request_cancellation();
             }
           }
 
@@ -493,6 +529,8 @@ impl TaskArgs {
     for handle in handles {
       handle.join().unwrap();
     }
+
+    context.clear_cancellation();
 
     if !failures.is_empty() {
       command_pb.finish_with_message("Some commands failed");
@@ -557,14 +595,11 @@ impl TaskArgs {
   }
 
   fn load_secret_env(&self, context: &TaskContext) -> anyhow::Result<HashMap<String, String>> {
-    load_secret_env(
-      &self.secrets_path,
-      &self.config_base_dir(context),
-      context.secret_vault_location.as_deref(),
-      context.secret_keys_location.as_deref(),
-      context.secret_key_name.as_deref(),
-      context.secret_gpg_key_id.as_deref(),
-    )
+    let secret_config = context
+      .secret_config
+      .as_ref()
+      .ok_or_else(|| anyhow::anyhow!("Secret config missing from task context"))?;
+    load_secret_env(secret_config)
   }
 
   fn get_env_value(&self, context: &TaskContext, value_in: &str) -> anyhow::Result<String> {
@@ -635,10 +670,7 @@ impl TaskArgs {
     }
 
     let resolved_outputs = self.resolve_output_paths(context)?;
-    let outputs_exist = self
-      .resolve_output_paths(context)?
-      .iter()
-      .all(|output| output.exists());
+    let outputs_exist = resolved_outputs.iter().all(|output| output.exists());
     if !outputs_exist {
       return Ok(false);
     }
@@ -783,17 +815,26 @@ impl TaskArgs {
   }
 
   fn resolve_secret_paths(&self, context: &TaskContext) -> Vec<std::path::PathBuf> {
-    let config_base_dir = self.config_base_dir(context);
     let vault_location = context
-      .secret_vault_location
-      .as_deref()
-      .map(|path| resolve_path(&config_base_dir, path))
-      .unwrap_or_else(|| resolve_path(&config_base_dir, "./.mk/vault"));
+      .secret_config
+      .as_ref()
+      .map(|config| config.vault_location.clone())
+      .unwrap_or_else(|| resolve_path(&self.config_base_dir(context), "./.mk/vault"));
     let mut secret_paths = context
       .task_root
-      .secrets_path
-      .iter()
-      .chain(self.secrets_path.iter())
+      .secrets
+      .as_ref()
+      .and_then(|settings| settings.secrets_path.as_ref())
+      .into_iter()
+      .flatten()
+      .chain(
+        context
+          .secret_config
+          .as_ref()
+          .map(|config| config.secrets_path.iter())
+          .into_iter()
+          .flatten(),
+      )
       .map(|secret_path| vault_location.join(secret_path))
       .collect::<Vec<_>>();
     secret_paths.sort();

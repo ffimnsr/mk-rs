@@ -25,8 +25,13 @@ use super::{
   UseNpm,
 };
 use crate::file::ToUtf8 as _;
+use crate::secrets::{
+  merge_optional_secret_settings,
+  SecretSettings,
+};
 use crate::utils::{
   deserialize_environment,
+  expand_home_path,
   resolve_path,
 };
 
@@ -64,6 +69,10 @@ pub struct TaskRoot {
   /// Secret paths to load as dotenv-style environment entries before running any task
   #[serde(default)]
   pub secrets_path: Vec<String>,
+
+  /// Canonical secret settings block.
+  #[serde(default)]
+  pub secrets: Option<SecretSettings>,
 
   /// The path to the secret vault
   #[serde(default)]
@@ -107,14 +116,24 @@ pub struct TaskRoot {
   #[schemars(skip)]
   #[serde(skip)]
   pub source_path: Option<PathBuf>,
+
+  /// Original legacy secret scalar fields before normalization.
+  #[schemars(skip)]
+  #[serde(skip)]
+  pub(crate) raw_legacy_secret_settings: Option<SecretSettings>,
+
+  /// Original `secrets` block before normalization.
+  #[schemars(skip)]
+  #[serde(skip)]
+  pub(crate) raw_secrets: Option<SecretSettings>,
 }
 
 impl TaskRoot {
-  pub fn from_file(file: &str) -> anyhow::Result<Self> {
-    Self::from_file_with_stack(file, &mut Vec::new())
+  pub fn from_file(file: impl AsRef<Path>) -> anyhow::Result<Self> {
+    Self::from_file_with_stack(file.as_ref(), &mut Vec::new())
   }
 
-  fn from_file_with_stack(file: &str, stack: &mut Vec<PathBuf>) -> anyhow::Result<Self> {
+  fn from_file_with_stack(file: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<Self> {
     let file_path = normalize_task_file_path(file)?;
 
     if let Some(index) = stack.iter().position(|path| path == &file_path) {
@@ -138,6 +157,7 @@ impl TaskRoot {
       environment: HashMap::new(),
       env_file: Vec::new(),
       secrets_path: Vec::new(),
+      secrets: None,
       vault_location: None,
       keys_location: None,
       key_name: None,
@@ -148,6 +168,8 @@ impl TaskRoot {
       include: None,
       extends: None,
       source_path: None,
+      raw_legacy_secret_settings: None,
+      raw_secrets: None,
     }
   }
 
@@ -166,12 +188,71 @@ impl TaskRoot {
   pub fn resolve_from_config(&self, value: &str) -> PathBuf {
     resolve_path(&self.config_base_dir(), value)
   }
+
+  pub fn normalized_secret_settings(&self) -> Option<SecretSettings> {
+    merge_optional_secret_settings(
+      Some(SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      )),
+      self.secrets.clone(),
+    )
+    .filter(|settings| !settings.is_empty())
+  }
+
+  pub(crate) fn validation_legacy_secret_settings(&self) -> SecretSettings {
+    self.raw_legacy_secret_settings.clone().unwrap_or_else(|| {
+      SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      )
+    })
+  }
+
+  fn normalize_secret_settings(&mut self) {
+    if self.raw_legacy_secret_settings.is_none() {
+      self.raw_legacy_secret_settings = Some(SecretSettings::from_legacy(
+        self.vault_location.clone(),
+        self.keys_location.clone(),
+        self.key_name.clone(),
+        self.gpg_key_id.clone(),
+        self.secrets_path.clone(),
+      ));
+    }
+    if self.raw_secrets.is_none() {
+      self.raw_secrets = self.secrets.clone();
+    }
+
+    self.secrets = self.normalized_secret_settings();
+    if let Some(secrets) = &self.secrets {
+      self.vault_location = secrets.vault_location.clone();
+      self.keys_location = secrets.keys_location.clone();
+      self.key_name = secrets.key_name.clone();
+      self.gpg_key_id = secrets.gpg_key_id.clone();
+      self.secrets_path = secrets.secrets_path.clone().unwrap_or_default();
+    }
+
+    for task in self.tasks.values_mut() {
+      if let Task::Task(task) = task {
+        task.normalize_secret_settings();
+      }
+    }
+  }
 }
 
-fn normalize_task_file_path(file: &str) -> anyhow::Result<PathBuf> {
-  let file_path = Path::new(file);
+fn normalize_task_file_path(file: &Path) -> anyhow::Result<PathBuf> {
+  let file_path = file
+    .to_str()
+    .and_then(expand_home_path)
+    .unwrap_or_else(|| file.to_path_buf());
   if file_path.is_absolute() {
-    Ok(file_path.to_path_buf())
+    Ok(file_path)
   } else {
     Ok(std::env::current_dir()?.join(file_path))
   }
@@ -200,6 +281,7 @@ fn load_task_root(file_path: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<
     anyhow::bail!("`include` is no longer supported. Use `extends` instead.");
   }
 
+  root.normalize_secret_settings();
   root.source_path = Some(file_path.to_path_buf());
   process_task_sources(&mut root)?;
 
@@ -298,22 +380,43 @@ fn apply_extends(file: &Path, stack: &mut Vec<PathBuf>, mut root: TaskRoot) -> a
   };
 
   let parent_path = file.parent().unwrap_or_else(|| Path::new(".")).join(parent);
-  let mut base = TaskRoot::from_file_with_stack(parent_path.to_string_lossy().as_ref(), stack)?;
+  let mut base = TaskRoot::from_file_with_stack(&parent_path, stack)?;
+  let base_secrets = base.normalized_secret_settings();
+  let root_secrets = root.normalized_secret_settings();
+  let merged_secrets =
+    merge_optional_secret_settings(base_secrets.clone(), root_secrets.clone()).map(|mut secrets| {
+      let mut merged_paths = base_secrets
+        .as_ref()
+        .and_then(|settings| settings.secrets_path.clone())
+        .unwrap_or_default();
+      if let Some(child_paths) = root_secrets.and_then(|settings| settings.secrets_path) {
+        merged_paths.extend(child_paths);
+      }
+      if !merged_paths.is_empty() {
+        secrets.secrets_path = Some(merged_paths);
+      }
+      secrets
+    });
 
   base.tasks.extend(root.tasks.drain());
   base.environment.extend(root.environment.drain());
   base.env_file.extend(root.env_file);
-  base.secrets_path.extend(root.secrets_path);
-  base.vault_location = root.vault_location.or(base.vault_location);
-  base.keys_location = root.keys_location.or(base.keys_location);
-  base.key_name = root.key_name.or(base.key_name);
-  base.gpg_key_id = root.gpg_key_id.or(base.gpg_key_id);
+  base.secrets = merged_secrets;
+  if let Some(secrets) = &base.secrets {
+    base.vault_location = secrets.vault_location.clone();
+    base.keys_location = secrets.keys_location.clone();
+    base.key_name = secrets.key_name.clone();
+    base.gpg_key_id = secrets.gpg_key_id.clone();
+    base.secrets_path = secrets.secrets_path.clone().unwrap_or_default();
+  }
   base.use_npm = root.use_npm.or(base.use_npm);
   base.use_cargo = root.use_cargo.or(base.use_cargo);
   base.container_runtime = root.container_runtime.or(base.container_runtime);
   base.include = root.include.or(base.include);
   base.extends = None;
   base.source_path = root.source_path.or(base.source_path);
+  base.raw_legacy_secret_settings = None;
+  base.raw_secrets = None;
 
   Ok(base)
 }
@@ -541,6 +644,8 @@ mod test {
 
     let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
 
+    let secrets = task_root.normalized_secret_settings().unwrap();
+    assert_eq!(secrets.key_name.as_deref(), Some("team"));
     assert_eq!(task_root.secrets_path, vec!["app/common"]);
     assert_eq!(task_root.vault_location.as_deref(), Some("./.mk/vault"));
     assert_eq!(task_root.keys_location.as_deref(), Some("./.mk/keys"));
@@ -562,7 +667,37 @@ mod test {
 
     let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
     assert_eq!(task_root.gpg_key_id.as_deref(), Some("0xABCD1234EFGH5678"));
+    assert_eq!(
+      task_root.normalized_secret_settings().unwrap().backend.as_ref(),
+      Some(&crate::secrets::SecretBackend::Gpg)
+    );
 
+    Ok(())
+  }
+
+  #[test]
+  fn test_task_root_secrets_block_deserialized() -> anyhow::Result<()> {
+    let yaml = "
+      secrets:
+        backend: gpg
+        vault_location: ./.mk/vault
+        keys_location: ./.mk/keys
+        key_name: team
+        gpg_key_id: TEAMKEY
+        secrets_path:
+          - app/common
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let secrets = task_root.normalized_secret_settings().unwrap();
+    assert_eq!(secrets.backend, Some(crate::secrets::SecretBackend::Gpg));
+    assert_eq!(secrets.gpg_key_id.as_deref(), Some("TEAMKEY"));
+    assert_eq!(secrets.vault_location.as_deref(), Some("./.mk/vault"));
+    assert_eq!(secrets.secrets_path, Some(vec!["app/common".to_string()]));
     Ok(())
   }
 
@@ -594,7 +729,7 @@ mod test {
       "extends: parent.yaml\ntasks:\n  child_task: echo child\n",
     )?;
 
-    let root = TaskRoot::from_file(child_path.to_str().unwrap())?;
+    let root = TaskRoot::from_file(&child_path)?;
     assert_eq!(root.gpg_key_id.as_deref(), Some("PARENT_KEY"));
 
     Ok(())
@@ -613,7 +748,7 @@ mod test {
       "extends: parent.yaml\ngpg_key_id: CHILD_KEY\ntasks:\n  child_task: echo child\n",
     )?;
 
-    let root = TaskRoot::from_file(child_path.to_str().unwrap())?;
+    let root = TaskRoot::from_file(&child_path)?;
     assert_eq!(root.gpg_key_id.as_deref(), Some("CHILD_KEY"));
 
     Ok(())
@@ -709,7 +844,7 @@ mod test {
       ",
     )?;
 
-    let task_root = TaskRoot::from_file(config_path.to_str().unwrap())?;
+    let task_root = TaskRoot::from_file(&config_path)?;
 
     assert!(task_root.tasks.contains_key("test"));
 
@@ -756,7 +891,7 @@ mod test {
       ",
     )?;
 
-    let error = TaskRoot::from_file(config_path.to_str().unwrap()).unwrap_err();
+    let error = TaskRoot::from_file(&config_path).unwrap_err();
     assert!(error
       .to_string()
       .contains("`include` is no longer supported. Use `extends` instead."));
@@ -793,8 +928,25 @@ mod test {
         ",
     )?;
 
-    let error = TaskRoot::from_file(a_path.to_str().unwrap()).unwrap_err();
+    let error = TaskRoot::from_file(&a_path).unwrap_err();
     assert!(error.to_string().contains("Circular extends detected:"));
+    Ok(())
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn test_task_root_from_non_utf8_path() -> anyhow::Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let temp_dir = TempDir::new()?;
+    let file_name = OsString::from_vec(vec![0x66, 0x6f, 0x80, 0x6f, 0x2e, 0x79, 0x61, 0x6d, 0x6c]);
+    let config_path = temp_dir.path().join(file_name);
+    std::fs::write(&config_path, "tasks:\n  hello: echo ok\n")?;
+
+    let root = TaskRoot::from_file(&config_path)?;
+    assert!(root.tasks.contains_key("hello"));
+
     Ok(())
   }
 }

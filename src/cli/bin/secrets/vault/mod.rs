@@ -83,18 +83,6 @@ impl VaultCommand {
   }
 }
 
-fn verify_vault(vault_location: &str) -> anyhow::Result<()> {
-  let path = Path::new(vault_location);
-  if !path.exists() || !path.is_dir() {
-    anyhow::bail!(
-      "Vault not found at '{}'. Initialize it first with: mk secrets vault init",
-      vault_location
-    );
-  }
-
-  Ok(())
-}
-
 fn verify_key(keys_location: &str, key_name: &str) -> anyhow::Result<()> {
   let keys_path = Path::new(keys_location);
   if !keys_path.exists() || !keys_path.is_dir() {

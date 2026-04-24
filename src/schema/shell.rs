@@ -22,7 +22,7 @@ pub enum Shell {
 
 impl Default for Shell {
   fn default() -> Self {
-    Shell::String("sh".to_string())
+    Shell::String(default_shell_command().to_string())
   }
 }
 
@@ -95,23 +95,97 @@ impl ShellArgs {
   pub fn shell_args(&self) -> Vec<String> {
     let command = self.command.clone();
     let args = self.args.clone().unwrap_or_default();
-    let posix_shell = ["sh", "bash", "zsh", "fish"];
+    let Some(eval_flag) = shell_eval_flag(&command) else {
+      return args;
+    };
 
-    // If the shell is not a POSIX shell, we don't need to add the `-c` flag
-    // to the command. We can just return the arguments as is.
-    if !posix_shell.contains(&command.as_str()) {
+    if args.iter().any(|arg| arg.eq_ignore_ascii_case(eval_flag)) {
       return args;
     }
 
-    // If the shell is a POSIX shell, we need to add the `-c` flag
-    // to the command. If it's already present, we don't need to add it.
-    if args.iter().any(|arg| arg == "-c") {
-      return args;
-    }
-
-    // If the `-c` flag is not present, we need to add it
     let mut args = args;
-    args.push("-c".to_string());
+    args.push(eval_flag.to_string());
     args
+  }
+}
+
+fn default_shell_command() -> &'static str {
+  if cfg!(windows) {
+    "cmd"
+  } else {
+    "sh"
+  }
+}
+
+fn shell_eval_flag(command: &str) -> Option<&'static str> {
+  let shell = command
+    .rsplit(['/', '\\'])
+    .next()
+    .unwrap_or(command)
+    .to_ascii_lowercase();
+
+  match shell.as_str() {
+    "sh" | "bash" | "zsh" | "fish" => Some("-c"),
+    "cmd" | "cmd.exe" => Some("/C"),
+    "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => Some("-Command"),
+    _ => None,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{
+    default_shell_command,
+    Shell,
+    ShellArgs,
+  };
+
+  #[test]
+  fn shell_default_matches_platform() {
+    let shell = Shell::default();
+    assert_eq!(shell.cmd(), default_shell_command().to_string());
+  }
+
+  #[test]
+  fn posix_shell_adds_dash_c() {
+    let args = ShellArgs {
+      command: "bash".to_string(),
+      args: None,
+    };
+
+    assert_eq!(args.shell_args(), vec!["-c".to_string()]);
+  }
+
+  #[test]
+  fn cmd_shell_adds_slash_c() {
+    let args = ShellArgs {
+      command: "cmd.exe".to_string(),
+      args: None,
+    };
+
+    assert_eq!(args.shell_args(), vec!["/C".to_string()]);
+  }
+
+  #[test]
+  fn powershell_adds_command_flag() {
+    let args = ShellArgs {
+      command: "pwsh".to_string(),
+      args: Some(vec!["-NoProfile".to_string()]),
+    };
+
+    assert_eq!(
+      args.shell_args(),
+      vec!["-NoProfile".to_string(), "-Command".to_string()]
+    );
+  }
+
+  #[test]
+  fn existing_eval_flag_is_preserved() {
+    let args = ShellArgs {
+      command: "cmd".to_string(),
+      args: Some(vec!["/C".to_string()]),
+    };
+
+    assert_eq!(args.shell_args(), vec!["/C".to_string()]);
   }
 }

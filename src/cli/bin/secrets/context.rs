@@ -1,63 +1,88 @@
-use std::env;
-use std::path::PathBuf;
+use std::path::{
+  Path,
+  PathBuf,
+};
+
+use mk_lib::schema::TaskRoot;
+use mk_lib::secrets::{
+  resolve_secret_config,
+  SecretBackend,
+  SecretConfig,
+  SecretSettings,
+};
 
 pub(super) struct Context {
-  keys_location: Option<String>,
-  vault_location: Option<String>,
-  key_name: Option<String>,
-  gpg_key_id: Option<String>,
+  settings: SecretSettings,
+  base_dir: PathBuf,
+  root_settings: Option<SecretSettings>,
+  active_config_path: Option<PathBuf>,
 }
 
 impl Context {
-  pub fn new() -> Self {
+  pub fn new(task_root: &TaskRoot) -> Self {
     Self {
-      keys_location: None,
-      vault_location: None,
-      key_name: None,
-      gpg_key_id: None,
+      settings: SecretSettings::default(),
+      base_dir: task_root.config_base_dir(),
+      root_settings: task_root.normalized_secret_settings(),
+      active_config_path: task_root.source_path.clone(),
     }
   }
 
   pub fn set_keys_location(&mut self, keys_location: &str) {
-    self.keys_location = Some(keys_location.to_string());
+    self.settings.keys_location = Some(keys_location.to_string());
   }
 
   pub fn set_vault_location(&mut self, vault_location: &str) {
-    self.vault_location = Some(vault_location.to_string());
+    self.settings.vault_location = Some(vault_location.to_string());
   }
 
   pub fn set_key_name(&mut self, key_name: &str) {
-    self.key_name = Some(key_name.to_string());
+    self.settings.key_name = Some(key_name.to_string());
+    self.settings.backend = Some(SecretBackend::BuiltInPgp);
   }
 
   pub fn set_gpg_key_id(&mut self, gpg_key_id: &str) {
-    self.gpg_key_id = Some(gpg_key_id.to_string());
+    self.settings.gpg_key_id = Some(gpg_key_id.to_string());
+    self.settings.backend = Some(SecretBackend::Gpg);
+  }
+
+  pub fn settings(&self) -> &SecretSettings {
+    &self.settings
+  }
+
+  pub fn resolved_config(&self) -> SecretConfig {
+    self.resolve_with_settings(&self.settings)
+  }
+
+  pub fn resolve_with_settings(&self, settings: &SecretSettings) -> SecretConfig {
+    resolve_secret_config(&self.base_dir, Some(settings), None, self.root_settings.as_ref())
+  }
+
+  pub fn active_config_path(&self) -> Option<&Path> {
+    self.active_config_path.as_deref()
+  }
+
+  pub fn config_base_dir(&self) -> &Path {
+    &self.base_dir
+  }
+
+  pub fn root_settings(&self) -> Option<&SecretSettings> {
+    self.root_settings.as_ref()
   }
 
   pub fn keys_location(&self) -> String {
-    self.keys_location.clone().unwrap_or_else(|| {
-      let home_dir = if cfg!(target_os = "windows") {
-        env::var("USERPROFILE").unwrap_or_else(|_| "./.mk/priv".to_string())
-      } else {
-        env::var("HOME").unwrap_or_else(|_| "./.mk/priv".to_string())
-      };
-      let mut path = PathBuf::from(home_dir);
-      path.push(".config");
-      path.push("mk");
-      path.push("priv");
-      path.to_string_lossy().to_string()
-    })
+    self.resolved_config().keys_location.to_string_lossy().to_string()
   }
 
   pub fn vault_location(&self) -> String {
-    self.vault_location.clone().unwrap_or("./.mk/vault".to_string())
+    self
+      .resolved_config()
+      .vault_location
+      .to_string_lossy()
+      .to_string()
   }
 
   pub fn key_name(&self) -> String {
-    self.key_name.clone().unwrap_or("default".to_string())
-  }
-
-  pub fn gpg_key_id(&self) -> Option<String> {
-    self.gpg_key_id.clone()
+    self.resolved_config().key_name
   }
 }

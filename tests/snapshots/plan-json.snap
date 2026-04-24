@@ -1,0 +1,45 @@
+{
+  "root_task": "build",
+  "steps": [
+    {
+      "base_dir": "<TMPDIR>",
+      "commands": [
+        {
+          "command": "echo check",
+          "interactive": false,
+          "retrigger": false,
+          "shell": "sh",
+          "type": "local_run",
+          "work_dir": null
+        }
+      ],
+      "dependencies": [],
+      "description": null,
+      "execution_mode": "sequential",
+      "max_parallel": null,
+      "name": "check",
+      "skipped_reason": null
+    },
+    {
+      "base_dir": "<TMPDIR>",
+      "commands": [
+        {
+          "command": "echo build",
+          "interactive": false,
+          "retrigger": false,
+          "shell": "sh",
+          "type": "local_run",
+          "work_dir": null
+        }
+      ],
+      "dependencies": [
+        "check"
+      ],
+      "description": "build task",
+      "execution_mode": "sequential",
+      "max_parallel": null,
+      "name": "build",
+      "skipped_reason": null
+    }
+  ]
+}

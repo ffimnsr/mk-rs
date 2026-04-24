@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use clap::Args;
 use console::style;
 use mk_lib::secrets::list_secret_paths;
@@ -18,17 +16,27 @@ pub struct ListSecrets {
 
   #[arg(short, long, help = "The path to the secret vault")]
   vault_location: Option<String>,
+
+  #[arg(short, long, help = "Print plain output without headers")]
+  plain: bool,
 }
 
 impl ListSecrets {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path = self.path.as_deref();
-    let vault_location = self
-      .vault_location
-      .clone()
-      .unwrap_or_else(|| context.vault_location());
+    let mut cli_overrides = context.settings().clone();
+    if let Some(vault_location) = &self.vault_location {
+      cli_overrides.vault_location = Some(vault_location.clone());
+    }
+    let secret_config = context.resolve_with_settings(&cli_overrides);
+    let secret_paths = list_secret_paths(path, &secret_config)?;
+    if self.plain {
+      for secret_path in secret_paths {
+        println!("{}", secret_path);
+      }
+      return Ok(());
+    }
 
-    let secret_paths = list_secret_paths(path, Path::new("."), Some(&vault_location))?;
     let mut table = Table::new();
     table.set_format(*consts::FORMAT_CLEAN);
     table.set_titles(row![Fbb->"Name"]);

@@ -88,9 +88,136 @@ main() {
     # Print success message and check $PATH.
     echo ""
     echo "mk is installed!"
-    if ! echo ":${PATH}:" | grep -Fq ":${BIN_DIR}:"; then
-        echo "Note: ${BIN_DIR} is not on your \$PATH. mk will not work unless it is added to \$PATH."
+    maybe_add_bin_dir_to_path
+    maybe_install_completion "${BIN_DIR}/${_bin_name}"
+}
+
+maybe_add_bin_dir_to_path() {
+    if path_contains "${BIN_DIR}"; then
+        return 0
     fi
+
+    echo "Note: ${BIN_DIR} is not on your \$PATH. mk will not work unless it is added to \$PATH."
+    if ! is_interactive; then
+        return 0
+    fi
+
+    local _shell _config _quoted_dir _line
+    _shell="$(detect_shell)"
+    _config="$(shell_config_file "${_shell}")"
+    if [ -z "${_config}" ]; then
+        echo "Could not detect a supported shell startup file for PATH update."
+        return 0
+    fi
+
+    if ! prompt_yes_no "Add ${BIN_DIR} to PATH in ${_config}?"; then
+        return 0
+    fi
+
+    _quoted_dir="$(quote_shell "${BIN_DIR}")"
+    case "${_shell}" in
+    fish) _line="fish_add_path -g ${_quoted_dir}" ;;
+    *) _line="export PATH=${_quoted_dir}:\$PATH" ;;
+    esac
+
+    append_line_once "${_config}" "${_line}"
+    echo "Added PATH update to ${_config}"
+}
+
+maybe_install_completion() {
+    local _mk_bin="$1"
+
+    if ! is_interactive; then
+        return 0
+    fi
+
+    local _shell _config _quoted_mk _line
+    _shell="$(detect_shell)"
+    _config="$(shell_config_file "${_shell}")"
+    if [ -z "${_config}" ]; then
+        return 0
+    fi
+
+    case "${_shell}" in
+    bash | zsh | fish) ;;
+    *) return 0 ;;
+    esac
+
+    if ! prompt_yes_no "Install mk shell completion for ${_shell} in ${_config}?"; then
+        return 0
+    fi
+
+    _quoted_mk="$(quote_shell "${_mk_bin}")"
+    case "${_shell}" in
+    bash)
+        _line="[ -x ${_quoted_mk} ] && source <(${_quoted_mk} completion bash)"
+        ;;
+    zsh)
+        _line="autoload -Uz compinit && compinit; [ -x ${_quoted_mk} ] && source <(${_quoted_mk} completion zsh)"
+        ;;
+    fish)
+        _line="test -x ${_quoted_mk}; and ${_quoted_mk} completion fish | source"
+        ;;
+    esac
+
+    append_line_once "${_config}" "${_line}"
+    echo "Added completion setup to ${_config}"
+}
+
+path_contains() {
+    printf "%s" ":${PATH}:" | grep -Fq ":$1:"
+}
+
+is_interactive() {
+    [ -t 0 ] && [ -t 1 ]
+}
+
+prompt_yes_no() {
+    local _question="$1"
+    local _answer
+
+    printf "%s [y/N] " "${_question}"
+    read -r _answer || return 1
+    case "${_answer}" in
+    y | Y | yes | YES | Yes) return 0 ;;
+    *) return 1 ;;
+    esac
+}
+
+detect_shell() {
+    local _shell
+    _shell="$(basename "${SHELL:-sh}")"
+    echo "${_shell%.exe}"
+}
+
+shell_config_file() {
+    case "$1" in
+    bash) echo "${HOME}/.bashrc" ;;
+    zsh) echo "${HOME}/.zshrc" ;;
+    fish) echo "${HOME}/.config/fish/config.fish" ;;
+    ksh) echo "${HOME}/.kshrc" ;;
+    sh | dash) echo "${HOME}/.profile" ;;
+    *) echo "" ;;
+    esac
+}
+
+append_line_once() {
+    local _file="$1"
+    local _line="$2"
+    local _dir
+
+    _dir="$(dirname "${_file}")"
+    ensure mkdir -p -- "${_dir}"
+    if [ ! -f "${_file}" ]; then
+        ensure touch "${_file}"
+    fi
+    if ! grep -qxF "${_line}" "${_file}"; then
+        printf "\n%s\n" "${_line}" >>"${_file}" || err "could not write to ${_file}"
+    fi
+}
+
+quote_shell() {
+    printf "%s" "$1" | sed "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/"
 }
 
 # Parse the arguments passed and set variables accordingly.

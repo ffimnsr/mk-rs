@@ -91,12 +91,13 @@ Commands:
   init        Initialize a sample tasks.yaml file in the current directory
   run         Run specific tasks [aliases: r]
   list        List all available tasks [aliases: ls]
-  completion  Generate shell completions [aliases: comp]
+  completion  Generate shell completions [aliases: comp, completions]
   validate    Validate task configuration without executing tasks
   plan        Show the resolved execution plan for a task
   secrets     Access stored secrets [aliases: s]
-  update
+  update      Check for mk (make) updates
   clean-cache Remove mk task cache metadata
+  schema      Print the JSON Schema for the task configuration file
   help        Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -119,7 +120,8 @@ mk run <task_name>
 ```
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
-When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, and `mk.toml`.
+When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, `mk.toml`, `tasks.toml`, `tasks.json`, `tasks.lua`, `.mk/tasks.toml`, `.mk/tasks.json`, and `.mk/tasks.lua`.
+`mk init` writes YAML sample configs only. Use `.yaml` or `.yml` output paths.
 
 Recent workflow features:
 
@@ -127,8 +129,65 @@ Recent workflow features:
 - `mk plan <task>` and `mk run <task> --dry-run` show the resolved execution plan.
 - `mk run <task> --json-events` emits newline-delimited JSON task and command events.
 - Tasks can opt into incremental caching with `inputs`, `outputs`, and `cache.enabled`.
+- Cached tasks that depend on other tasks should declare dependency-produced files in `inputs` so cache invalidation sees dependency side effects.
 - Container commands can select `runtime: docker|podman|auto`.
 - Local `command:` steps can save stdout with `save_output_as` and reuse it later via `${{ outputs.NAME }}`.
+
+### Cache semantics
+
+Cache hit only skips task command execution.
+
+- Dependencies still run before cache evaluation.
+- Preconditions still run before cache evaluation.
+- Cache validity only sees declared task state: task definition, environment, env files, secrets paths, declared `inputs`, and declared `outputs`.
+- Cache validity does not infer hidden side effects from `depends_on`. If dependency output matters, declare that file in `inputs`.
+- If `cache.enabled` is set with `depends_on` but no `inputs`, `mk validate` warns because stale cache hits are easy to create.
+
+Current limitation: `mk init` writes YAML templates only. If TOML/JSON/Lua remain first-class config entrypoints, format-specific `mk init` templates should be added later instead of relying on manual conversion.
+
+### Shell completion install examples
+
+Dynamic task-name completion is not implemented yet. Static shell completion for subcommands and flags is available now.
+
+```bash
+# Bash: generate completion and load it from ~/.bashrc
+mkdir -p ~/.local/share/bash-completion/completions
+mk completion bash > ~/.local/share/bash-completion/completions/mk
+grep -qxF '[[ -r ~/.local/share/bash-completion/completions/mk ]] && source ~/.local/share/bash-completion/completions/mk' ~/.bashrc || \
+  echo '[[ -r ~/.local/share/bash-completion/completions/mk ]] && source ~/.local/share/bash-completion/completions/mk' >> ~/.bashrc
+
+# Zsh: generate completion and load it from ~/.zshrc
+mkdir -p ~/.zfunc
+mk completion zsh > ~/.zfunc/_mk
+grep -qxF 'fpath=(~/.zfunc $fpath)' ~/.zshrc || echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc
+grep -qxF 'autoload -Uz compinit && compinit' ~/.zshrc || echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+
+# Fish: generate completion and Fish will load it automatically
+mkdir -p ~/.config/fish/completions
+mk completion fish > ~/.config/fish/completions/mk.fish
+
+# PowerShell: generate completion and load it from $PROFILE
+mkdir -p "$(dirname \"$PROFILE\")"
+mk completion powershell > "$HOME/mk-completion.ps1"
+if (-not (Select-String -Path $PROFILE -SimpleMatch '. "$HOME/mk-completion.ps1"' -Quiet)) {
+  Add-Content -Path $PROFILE -Value '. "$HOME/mk-completion.ps1"'
+}
+```
+
+Open new shell after writing startup-file changes, or source profile manually:
+
+```bash
+source ~/.bashrc
+source ~/.zshrc
+```
+
+```fish
+source ~/.config/fish/config.fish
+```
+
+```powershell
+. $PROFILE
+```
 
 ### Makefile and task.yaml comparison
 
@@ -447,19 +506,47 @@ mk secrets vault export app/development/jobserver > .env
 
 Secrets can also be consumed directly from `tasks.yaml`.
 
-Use `secrets_path` when the decrypted secret is dotenv content:
+Use `secrets.secrets_path` when the decrypted secret is dotenv content:
 
 ```yaml
-vault_location: ./.mk/vault
-keys_location: ./.mk/keys
-key_name: default
+secrets:
+  vault_location: ./.mk/vault
+  keys_location: ./.mk/keys
+  key_name: default
 
 tasks:
   deploy:
-    secrets_path:
-      - app/development/env
+    secrets:
+      secrets_path:
+        - app/development/env
     commands:
       - command: env | grep '^NODE_ENV='
+```
+
+Root-level `secrets:` applies to all tasks. A per-task `secrets:` block overrides individual fields for that task only:
+
+```yaml
+secrets:
+  vault_location: ./.mk/vault
+  keys_location: ~/.config/mk/priv
+  key_name: default
+
+tasks:
+  deploy:
+    # inherits root secrets settings
+    secrets:
+      secrets_path:
+        - app/production/env
+    commands:
+      - command: ./deploy.sh
+  dev:
+    # overrides key_name for this task only
+    secrets:
+      key_name: dev-key
+      secrets_path:
+        - app/development/env
+    commands:
+      - command: ./dev-start.sh
 ```
 
 If `app/development/env` decrypts to:
@@ -474,6 +561,11 @@ those values are merged into the task environment before commands run.
 Use `${{ secrets.NAME }}` when the decrypted secret should become a single environment value:
 
 ```yaml
+secrets:
+  vault_location: ./.mk/vault
+  keys_location: ./.mk/keys
+  key_name: default
+
 tasks:
   migrate:
     environment:
@@ -481,6 +573,16 @@ tasks:
     commands:
       - command: ./migrate.sh
 ```
+
+**Inspecting resolved settings: `mk secrets doctor`**
+
+Run `mk secrets doctor` to see the fully resolved secret configuration and where each value came from:
+
+```bash
+mk secrets doctor
+```
+
+Output shows the active config file path, resolved backend, vault path, keys path, key name, GPG key ID, and the source (config, vault metadata, or default) for each field. Useful for diagnosing why a wrong vault or key is being used.
 
 Use `save_output_as` to capture a command stdout value for later commands in the same task:
 
@@ -553,27 +655,36 @@ mk secrets vault list
 mk secrets vault export app/production/env > .env
 ```
 
-**Using `gpg_key_id` in tasks.yaml**
+**Using `gpg_key_id` in tasks.yaml (via `secrets:` block)**
 
-Set `gpg_key_id` at the root or per-task level so tasks can decrypt secrets automatically:
+Set `backend: gpg` and `gpg_key_id` in the root `secrets:` block so tasks decrypt automatically:
 
 ```yaml
-vault_location: ./.mk/vault
-gpg_key_id: YOUR_KEY_FINGERPRINT
+secrets:
+  backend: gpg
+  vault_location: ./.mk/vault
+  gpg_key_id: YOUR_KEY_FINGERPRINT
 
 tasks:
   deploy:
-    secrets_path:
-      - app/production/env
+    secrets:
+      secrets_path:
+        - app/production/env
     environment:
       DB_PASS: ${{ secrets.app/database/password }}
     commands:
       - command: ./deploy.sh
 ```
 
-**Note on `key_name` and `gpg_key_id`**
+**Write vault settings back to config: `mk secrets vault init --write-config`**
 
-When `gpg_key_id` is set, the built-in PGP engine is not used — `key_name` and `keys_location` are ignored and the system `gpg` binary handles all cryptographic operations. If both are present in your config, `gpg_key_id` takes precedence.
+After initializing a vault, add `--write-config` to record the vault settings in your config file automatically:
+
+```bash
+mk secrets vault init --write-config --gpg-key-id YOUR_KEY_ID --vault-location ./.mk/vault
+```
+
+This creates the vault, writes `.vault-meta.toml`, and adds or updates the `secrets:` block in `tasks.yaml`. Unrelated config content is preserved. Only YAML config files are supported for mutation.
 
 ## Config Schema
 
@@ -594,7 +705,7 @@ The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
 - [ ] Add fuzzer scripts for code fuzzing
 - [ ] Complete the code coverage
 - [ ] Expand `extends`-based composition beyond local single-parent files
-- [ ] Make sure to support windows and macOS
+- [ ] Expand Windows and macOS test coverage and polish platform-specific behavior
 - [ ] Make use of labels
 - [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
 - [ ] Support for lima and nerdctrl

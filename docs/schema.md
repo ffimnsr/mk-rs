@@ -73,11 +73,7 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | tasks | HashMap<String, Task> | - | true | Contains list of tasks keyed by task name. |
 | environment | HashMap<String, String> | {} | false | Environment variables applied to all tasks. |
 | env_file | String[] | [] | false | Environment files applied to all tasks. |
-| secrets_path | String[] | [] | false | Secret paths whose decrypted values are parsed as dotenv content and merged into the environment. |
-| vault_location | String | ./.mk/vault | false | Secret vault location used for `secrets_path` and `${{ secrets.NAME }}` resolution. |
-| keys_location | String | ~/.config/mk/priv | false | Private key directory used for secret decryption. |
-| key_name | String | default | false | Private key name used for secret decryption. |
-| gpg_key_id | String | - | false | GPG key ID or fingerprint. When set, mk delegates all vault crypto to the system `gpg` binary, enabling YubiKey and passphrase-protected keys. |
+| secrets | SecretSettings | - | false | Secret vault settings block. Prefer this over legacy scalar fields. |
 | use_npm | Bool or UseNpm | false | false | This allows mk to use npm scripts as tasks. |
 | use_cargo | Bool or UseCargo | false | false | This allows mk to use cargo commands as tasks. |
 | container_runtime | auto / docker / podman | auto | false | Default container runtime for container commands. |
@@ -98,6 +94,31 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 
 `include` is deprecated and unsupported. Use `extends` instead. Loading a config that still declares `include` fails fast.
 
+### SecretSettings
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| backend | pgp / gpg | pgp | false | Crypto backend. `pgp` uses the built-in PGP engine; `gpg` delegates all vault crypto to the system `gpg` binary. |
+| vault_location | String | ./.mk/vault | false | Secret vault directory path. Relative paths resolve from the config file directory. |
+| keys_location | String | ~/.config/mk/priv | false | Private key directory used for decryption with the built-in PGP backend. |
+| key_name | String | default | false | Private key name used with the built-in PGP backend. |
+| gpg_key_id | String | - | false | GPG key ID or fingerprint. Required when `backend = "gpg"`. |
+| secrets_path | String[] | [] | false | Secret paths whose decrypted values are parsed as dotenv content and merged into the environment. |
+
+#### Legacy root-level secret fields
+
+The following root-level scalar fields are still accepted for backward compatibility but are deprecated. Use the `secrets` block instead.
+
+| Name | Type | Description |
+| --- | --- | --- |
+| vault_location | String | Equivalent to `secrets.vault_location`. |
+| keys_location | String | Equivalent to `secrets.keys_location`. |
+| key_name | String | Equivalent to `secrets.key_name`. |
+| gpg_key_id | String | Equivalent to `secrets.gpg_key_id`. |
+| secrets_path | String[] | Equivalent to `secrets.secrets_path`. |
+
+Validation errors when a deprecated root-level field and the `secrets` block both set the same field to different values.
+
 ### Task
 
 | Name | Type | Default Value | Required | Description |
@@ -109,11 +130,7 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 | description | String | \<empty-string\> | false | The description of the task. |
 | environment | HashMap<String, String> | {} | false | The environment variables to set before running the task. |
 | env_file | String[] | [] | false | The environment files to load before running the task. |
-| secrets_path | String[] | [] | false | Secret paths whose decrypted values are parsed as dotenv content and merged into the task environment. |
-| vault_location | String | inherited | false | Override the secret vault location for this task. |
-| keys_location | String | inherited | false | Override the private key directory for this task. |
-| key_name | String | inherited | false | Override the private key name for this task. |
-| gpg_key_id | String | inherited | false | Override the GPG key ID for this task. When set, delegates vault crypto to the system `gpg` binary. |
+| secrets | SecretSettings | inherited | false | Per-task secret settings override. Fields present here take precedence over the root `secrets` block. |
 | shell | String | sh | false | The shell to call for command execution. |
 | parallel | bool | false | false | Run local_run commands in parallel. |
 | execution | TaskExecution | - | false | Richer execution settings for parallel mode. |
@@ -126,11 +143,12 @@ Relative `extends`, `env_file`, command `work_dir`, container build `context`, a
 Task environment values also support `${{ secrets.path/to/secret }}` in addition to `${{ env.NAME }}`. Secret templates decrypt the referenced secret and inject the raw value.
 
 ```yaml
-vault_location: ./.mk/vault
-keys_location: ./.mk/keys
-key_name: team
-secrets_path:
-  - app/common
+secrets:
+  vault_location: ./.mk/vault
+  keys_location: ./.mk/keys
+  key_name: team
+  secrets_path:
+    - app/common
 
 tasks:
   deploy:
@@ -139,6 +157,18 @@ tasks:
     commands:
       - command: ./deploy.sh
 ```
+
+#### Secret Precedence
+
+When resolving secret settings, mk applies values in the following order (highest priority first):
+
+1. **CLI flags** — `--vault-location`, `--keys-location`, `--key-name`, `--gpg-key-id`
+2. **Task `secrets` block** — per-task override in `tasks.<name>.secrets`
+3. **Root `secrets` block** — defaults declared at the top-level `secrets:` key
+4. **Vault metadata** — values stored in `.vault-meta.toml` inside the vault directory
+5. **Built-in defaults** — vault `./.mk/vault`, keys `~/.config/mk/priv`, key name `default`, backend `pgp`
+
+Any tier may be absent; the resolver falls through to the next. A value at a higher tier always wins.
 
 #### TaskExecution
 

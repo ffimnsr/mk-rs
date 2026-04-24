@@ -14,6 +14,11 @@ use super::{
   UseCargo,
   UseNpm,
 };
+use crate::secrets::{
+  merge_optional_secret_settings,
+  SecretBackend,
+  SecretSettings,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidationIssue {
@@ -60,6 +65,35 @@ impl ValidationReport {
       .iter()
       .any(|issue| issue.severity == ValidationSeverity::Error)
   }
+
+  pub fn sort_issues(&mut self) {
+    self.issues.sort_by(|left, right| {
+      severity_rank(&left.severity)
+        .cmp(&severity_rank(&right.severity))
+        .then_with(|| {
+          left
+            .task
+            .as_deref()
+            .unwrap_or("")
+            .cmp(right.task.as_deref().unwrap_or(""))
+        })
+        .then_with(|| {
+          left
+            .field
+            .as_deref()
+            .unwrap_or("")
+            .cmp(right.field.as_deref().unwrap_or(""))
+        })
+        .then_with(|| left.message.cmp(&right.message))
+    });
+  }
+}
+
+fn severity_rank(severity: &ValidationSeverity) -> u8 {
+  match severity {
+    ValidationSeverity::Error => 0,
+    ValidationSeverity::Warning => 1,
+  }
 }
 
 impl TaskRoot {
@@ -73,6 +107,7 @@ impl TaskRoot {
     }
 
     self.validate_cycles(&mut report);
+    report.sort_issues();
 
     report
   }
@@ -94,6 +129,15 @@ impl TaskRoot {
       None,
       Some("container_runtime"),
       self.container_runtime.as_ref(),
+      report,
+    );
+
+    self.validate_legacy_secret_settings_usage(None, &self.validation_legacy_secret_settings(), report);
+
+    self.validate_secret_setting_combinations(
+      None,
+      self.raw_secrets.as_ref().or(self.secrets.as_ref()),
+      &self.validation_legacy_secret_settings(),
       report,
     );
   }
@@ -193,13 +237,162 @@ impl TaskRoot {
           );
         }
 
+        if task.cache.as_ref().map(|cache| cache.enabled).unwrap_or(false)
+          && !task.depends_on.is_empty()
+          && task.inputs.is_empty()
+        {
+          report.push_warning(
+            Some(task_name),
+            Some("inputs"),
+            "Cached task depends_on other tasks but declares no inputs; dependency side effects may bypass cache invalidation",
+          );
+        }
+
         for command in &task.commands {
           self.validate_command(task_name, command, report);
         }
 
+        self.validate_legacy_secret_settings_usage(
+          Some(task_name),
+          &task.validation_legacy_secret_settings(),
+          report,
+        );
+
+        self.validate_secret_setting_combinations(
+          Some(task_name),
+          task.raw_secrets.as_ref().or(task.secrets.as_ref()),
+          &task.validation_legacy_secret_settings(),
+          report,
+        );
+
         self.validate_command_outputs(task_name, task, report);
       },
     }
+  }
+
+  fn validate_secret_setting_combinations(
+    &self,
+    task_name: Option<&str>,
+    secrets_block: Option<&SecretSettings>,
+    legacy: &SecretSettings,
+    report: &mut ValidationReport,
+  ) {
+    self.validate_legacy_secret_conflicts(task_name, secrets_block, legacy, report);
+
+    let effective = merge_optional_secret_settings(Some(legacy.clone()), secrets_block.cloned());
+    let Some(effective) = effective.filter(|settings| !settings.is_empty()) else {
+      return;
+    };
+
+    let backend = effective.resolved_backend();
+    let explicit_key_name = secrets_block
+      .and_then(|settings| settings.key_name.as_ref())
+      .or(legacy.key_name.as_ref());
+    let explicit_keys_location = secrets_block
+      .and_then(|settings| settings.keys_location.as_ref())
+      .or(legacy.keys_location.as_ref());
+
+    match backend {
+      SecretBackend::Gpg => {
+        if effective.gpg_key_id.is_none() {
+          report.push_error(
+            task_name,
+            Some("secrets.gpg_key_id"),
+            "GPG backend requires gpg_key_id",
+          );
+        }
+
+        if explicit_key_name.is_some() || explicit_keys_location.is_some() {
+          report.push_error(
+            task_name,
+            Some("secrets"),
+            "GPG backend cannot be combined with PGP-only settings: key_name, keys_location",
+          );
+        }
+      },
+      SecretBackend::BuiltInPgp => {
+        if effective.key_name.is_none() {
+          report.push_error(
+            task_name,
+            Some("secrets.key_name"),
+            "PGP backend requires key_name",
+          );
+        }
+
+        if effective.keys_location.is_none() && !pgp_default_keys_location_applies() {
+          report.push_error(
+            task_name,
+            Some("secrets.keys_location"),
+            "PGP backend requires keys_location when no default applies",
+          );
+        }
+      },
+    }
+  }
+
+  fn validate_legacy_secret_conflicts(
+    &self,
+    task_name: Option<&str>,
+    secrets_block: Option<&SecretSettings>,
+    legacy: &SecretSettings,
+    report: &mut ValidationReport,
+  ) {
+    let Some(secrets_block) = secrets_block else {
+      return;
+    };
+
+    validate_secret_field_conflict(
+      task_name,
+      "vault_location",
+      legacy.vault_location.as_ref(),
+      secrets_block.vault_location.as_ref(),
+      report,
+    );
+    validate_secret_field_conflict(
+      task_name,
+      "keys_location",
+      legacy.keys_location.as_ref(),
+      secrets_block.keys_location.as_ref(),
+      report,
+    );
+    validate_secret_field_conflict(
+      task_name,
+      "key_name",
+      legacy.key_name.as_ref(),
+      secrets_block.key_name.as_ref(),
+      report,
+    );
+    validate_secret_field_conflict(
+      task_name,
+      "gpg_key_id",
+      legacy.gpg_key_id.as_ref(),
+      secrets_block.gpg_key_id.as_ref(),
+      report,
+    );
+    validate_secret_field_conflict(
+      task_name,
+      "secrets_path",
+      legacy.secrets_path.as_ref(),
+      secrets_block.secrets_path.as_ref(),
+      report,
+    );
+  }
+
+  fn validate_legacy_secret_settings_usage(
+    &self,
+    task_name: Option<&str>,
+    legacy: &SecretSettings,
+    report: &mut ValidationReport,
+  ) {
+    if legacy.is_empty() {
+      return;
+    }
+
+    report.push_warning(
+      task_name,
+      Some("secrets"),
+      "Legacy secret fields are deprecated; prefer the `secrets` block",
+    );
   }
 
   fn validate_command(&self, task_name: &str, command: &CommandRunner, report: &mut ValidationReport) {
@@ -522,6 +715,29 @@ impl TaskRoot {
   }
 }
 
+fn validate_secret_field_conflict<T: PartialEq>(
+  task_name: Option<&str>,
+  field_name: &str,
+  legacy: Option<&T>,
+  secrets_block: Option<&T>,
+  report: &mut ValidationReport,
+) {
+  if legacy.is_some() && secrets_block.is_some() && legacy != secrets_block {
+    report.push_error(
+      task_name,
+      Some("secrets"),
+      format!(
+        "Legacy secret field '{}' conflicts with `secrets.{}`",
+        field_name, field_name
+      ),
+    );
+  }
+}
+
+fn pgp_default_keys_location_applies() -> bool {
+  true
+}
+
 fn command_uses_task_outputs(command: &CommandRunner) -> bool {
   match command {
     CommandRunner::LocalRun(local_run) => {
@@ -545,6 +761,14 @@ fn has_default_containerfile(context_path: &Path) -> bool {
 mod tests {
   use super::*;
 
+  fn has_error(report: &ValidationReport, field: &str, message: &str) -> bool {
+    report.issues.iter().any(|issue| {
+      issue.severity == ValidationSeverity::Error
+        && issue.field.as_deref() == Some(field)
+        && issue.message == message
+    })
+  }
+
   #[test]
   fn test_validate_retrigger_requires_non_interactive_local_run() -> anyhow::Result<()> {
     let yaml = r#"
@@ -564,6 +788,121 @@ mod tests {
         && issue.message == "retrigger is only supported for non-interactive local commands"
     }));
 
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_gpg_backend_without_gpg_key_id() -> anyhow::Result<()> {
+    let yaml = r#"
+      secrets:
+        backend: gpg
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "secrets.gpg_key_id",
+      "GPG backend requires gpg_key_id"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_pgp_backend_without_key_name() -> anyhow::Result<()> {
+    let yaml = r#"
+      secrets:
+        backend: built_in_pgp
+        keys_location: ./.mk/keys
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "secrets.key_name",
+      "PGP backend requires key_name"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_allows_pgp_backend_without_keys_location_when_default_applies() -> anyhow::Result<()> {
+    let yaml = r#"
+      secrets:
+        backend: built_in_pgp
+        key_name: team
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!report
+      .issues
+      .iter()
+      .any(|issue| issue.field.as_deref() == Some("secrets.keys_location")));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_gpg_backend_with_pgp_only_settings() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        demo:
+          secrets:
+            backend: gpg
+            gpg_key_id: TEAMKEY
+            key_name: team
+            keys_location: ./.mk/keys
+          commands:
+            - command: echo ready
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "secrets",
+      "GPG backend cannot be combined with PGP-only settings: key_name, keys_location"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_conflicting_legacy_and_secrets_block_values() -> anyhow::Result<()> {
+    let yaml = r#"
+      vault_location: ./.mk/legacy-vault
+      secrets:
+        vault_location: ./.mk/new-vault
+      tasks:
+        demo:
+          commands:
+            - command: echo ready
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "secrets",
+      "Legacy secret field 'vault_location' conflicts with `secrets.vault_location`"
+    ));
     Ok(())
   }
 }

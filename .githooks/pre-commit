@@ -1,23 +1,29 @@
 #!/usr/bin/env bash
 
-# Run checks before committing
-echo "Checking if the code is compilable"
-cargo check --all-targets --all-features
-if [ $? -ne 0 ]; then
-  echo >&2 "Please fix the errors before committing."
-  exit 1
-fi
+set -euo pipefail
 
-echo "Checking if the code is formatted"
-cargo fmt --all --check
-if [ $? -ne 0 ]; then
-  echo >&2 "Please run 'cargo fmt' and commit the formatting changes."
-  exit 1
-fi
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
 
-echo "Checking for code warnings"
-cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
-if [ $? -ne 0 ]; then
-  echo >&2 "Please run 'cargo clippy' and fix the warnings."
-  exit 1
+source "$repo_root/.githooks/rust-check-scope.sh"
+
+reset_check_scope
+collect_check_scope < <(git diff --cached --name-only --diff-filter=ACMR)
+build_scope_args "${MK_PRE_COMMIT_FULL:-0}"
+
+if [[ "$needs_rust_checks" -eq 1 || "${MK_PRE_COMMIT_FULL:-0}" == "1" ]]; then
+    echo "[pre-commit] format check"
+    cargo fmt --all --check
+
+    if [[ "${#scope_args[@]}" -eq 0 ]]; then
+        scope_args=(--workspace)
+    fi
+
+    echo "[pre-commit] compile check (${scope_args[*]})"
+    cargo check "${scope_args[@]}" --all-targets --all-features
+
+    echo "[pre-commit] lint (${scope_args[*]})"
+    cargo clippy "${scope_args[@]}" --all-features --all-targets --tests --benches -- -Dclippy::all
+else
+    echo "[pre-commit] no Rust changes staged; skipping cargo checks"
 fi

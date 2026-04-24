@@ -1,0 +1,10 @@
+Generate shell completions
+
+Usage: mk completion <SHELL>
+
+Arguments:
+  <SHELL>  The shell to generate completions for [possible values: bash, elvish, fish, powershell, zsh]
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

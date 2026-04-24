@@ -1,0 +1,16 @@
+{
+  "issues": [
+    {
+      "field": "depends_on",
+      "message": "Missing dependency: missing",
+      "severity": "error",
+      "task": "zebra"
+    },
+    {
+      "field": "inputs",
+      "message": "Cached task depends_on other tasks but declares no inputs; dependency side effects may bypass cache invalidation",
+      "severity": "warning",
+      "task": "zebra"
+    }
+  ]
+}

@@ -34,6 +34,14 @@ pub enum CommandRunner {
 
 impl CommandRunner {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
+    self.execute_inner(context, false)
+  }
+
+  pub fn execute_cancellable(&self, context: &TaskContext) -> anyhow::Result<()> {
+    self.execute_inner(context, true)
+  }
+
+  fn execute_inner(&self, context: &TaskContext, allow_cancellation: bool) -> anyhow::Result<()> {
     context.emit_event(&serde_json::json!({
       "event": "command_started",
       "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
@@ -43,6 +51,7 @@ impl CommandRunner {
     let result = match self {
       CommandRunner::ContainerBuild(container_build) => container_build.execute(context),
       CommandRunner::ContainerRun(container_run) => container_run.execute(context),
+      CommandRunner::LocalRun(local_run) if allow_cancellation => local_run.execute_cancellable(context),
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
       CommandRunner::CommandRun(command) => self.execute_command(context, command),

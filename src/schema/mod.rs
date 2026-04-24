@@ -82,11 +82,10 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
     let path = value.trim_start_matches("secrets.");
     load_secret_value(
       path,
-      &context.task_root.config_base_dir(),
-      context.secret_vault_location.as_deref(),
-      context.secret_keys_location.as_deref(),
-      context.secret_key_name.as_deref(),
-      context.secret_gpg_key_id.as_deref(),
+      context
+        .secret_config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Secret config missing from task context"))?,
     )
   } else if value.starts_with("outputs.") {
     let name = value.trim_start_matches("outputs.");

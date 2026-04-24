@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::Context as _;
 use clap::Args;
-use mk_lib::file::ToUtf8 as _;
+use mk_lib::file::DisplayPath as _;
 
 use crate::secrets::context::Context;
 
@@ -59,7 +59,7 @@ impl ImportKey {
     let mut meta_file = fs::File::create(&meta_path)?;
     writeln!(meta_file, "{gpg_key_id}")?;
     meta_file.flush()?;
-    println!("Key reference saved to {}", meta_path.to_utf8()?);
+    println!("Key reference saved to {}", meta_path.display_lossy());
 
     // Export and store the public key (ASCII-armored) for auditing / re-encryption
     let pub_path = location_path.join(format!("{name}.pub"));
@@ -74,7 +74,7 @@ impl ImportKey {
     let mut pub_file = fs::File::create(&pub_path)?;
     pub_file.write_all(&export.stdout)?;
     pub_file.flush()?;
-    println!("Public key exported to {}", pub_path.to_utf8()?);
+    println!("Public key exported to {}", pub_path.display_lossy());
 
     println!();
     println!("To use this key, add the following to your tasks.yaml:");

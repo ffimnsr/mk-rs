@@ -85,7 +85,8 @@ where
 }
 
 pub(crate) fn resolve_path(base_dir: &Path, value: &str) -> PathBuf {
-  let path = Path::new(value);
+  let expanded = expand_home_path(value);
+  let path = expanded.as_deref().unwrap_or_else(|| Path::new(value));
   let joined = if path.is_absolute() {
     path.to_path_buf()
   } else {
@@ -93,6 +94,30 @@ pub(crate) fn resolve_path(base_dir: &Path, value: &str) -> PathBuf {
   };
 
   normalize_path(&joined)
+}
+
+pub(crate) fn expand_home_path(value: &str) -> Option<PathBuf> {
+  if value == "~" {
+    return home_dir();
+  }
+
+  if let Some(rest) = value.strip_prefix("~/") {
+    return home_dir().map(|home| home.join(rest));
+  }
+
+  None
+}
+
+fn home_dir() -> Option<PathBuf> {
+  #[cfg(windows)]
+  {
+    std::env::var_os("USERPROFILE").map(PathBuf::from)
+  }
+
+  #[cfg(not(windows))]
+  {
+    std::env::var_os("HOME").map(PathBuf::from)
+  }
 }
 
 pub(crate) fn normalize_path(path: &Path) -> PathBuf {
@@ -146,4 +171,22 @@ pub(crate) fn parse_env_contents(contents: &str) -> HashMap<String, String> {
   }
 
   env_vars
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn resolve_path_expands_home_directory() {
+    let home = std::env::temp_dir().join("mk-utils-home");
+    unsafe {
+      std::env::set_var("HOME", &home);
+    }
+    let resolved = resolve_path(Path::new("/tmp/project"), "~/.mk-test-env");
+    assert_eq!(resolved, home.join(".mk-test-env"));
+    unsafe {
+      std::env::remove_var("HOME");
+    }
+  }
 }

@@ -20,6 +20,7 @@ use pgp::composed::{
   Message,
   SignedSecretKey,
 };
+use schemars::JsonSchema;
 use serde::{
   Deserialize,
   Serialize,
@@ -33,29 +34,174 @@ use crate::utils::{
 
 const VAULT_META_FILE: &str = ".vault-meta.toml";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretValueSource {
+  Cli,
+  Task,
+  Root,
+  VaultMeta,
+  Default,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SecretBackend {
+  #[default]
+  BuiltInPgp,
+  Gpg,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+pub struct SecretSettings {
+  #[serde(default)]
+  pub backend: Option<SecretBackend>,
+
+  #[serde(default)]
+  pub vault_location: Option<String>,
+
+  #[serde(default)]
+  pub keys_location: Option<String>,
+
+  #[serde(default)]
+  pub key_name: Option<String>,
+
+  #[serde(default)]
+  pub gpg_key_id: Option<String>,
+
+  #[serde(default)]
+  pub secrets_path: Option<Vec<String>>,
+}
+
+impl SecretSettings {
+  pub fn is_empty(&self) -> bool {
+    self.backend.is_none()
+      && self.vault_location.is_none()
+      && self.keys_location.is_none()
+      && self.key_name.is_none()
+      && self.gpg_key_id.is_none()
+      && self.secrets_path.is_none()
+  }
+
+  pub fn merge(&self, overlay: &Self) -> Self {
+    let mut merged = self.clone();
+    if overlay.backend.is_some() {
+      merged.backend = overlay.backend.clone();
+    }
+    if overlay.vault_location.is_some() {
+      merged.vault_location = overlay.vault_location.clone();
+    }
+    if overlay.keys_location.is_some() {
+      merged.keys_location = overlay.keys_location.clone();
+    }
+    if overlay.key_name.is_some() {
+      merged.key_name = overlay.key_name.clone();
+    }
+    if overlay.gpg_key_id.is_some() {
+      merged.gpg_key_id = overlay.gpg_key_id.clone();
+    }
+    if overlay.secrets_path.is_some() {
+      merged.secrets_path = overlay.secrets_path.clone();
+    }
+    merged.with_inferred_backend()
+  }
+
+  pub fn with_inferred_backend(mut self) -> Self {
+    if self.backend.is_none() && self.gpg_key_id.is_some() {
+      self.backend = Some(SecretBackend::Gpg);
+    }
+    self
+  }
+
+  pub fn resolved_backend(&self) -> SecretBackend {
+    infer_secret_backend(self.backend.clone(), self.gpg_key_id.as_deref())
+  }
+
+  pub fn from_legacy(
+    vault_location: Option<String>,
+    keys_location: Option<String>,
+    key_name: Option<String>,
+    gpg_key_id: Option<String>,
+    secrets_path: Vec<String>,
+  ) -> Self {
+    let secrets_path = if secrets_path.is_empty() {
+      None
+    } else {
+      Some(secrets_path)
+    };
+
+    Self {
+      backend: None,
+      vault_location,
+      keys_location,
+      key_name,
+      gpg_key_id,
+      secrets_path,
+    }
+    .with_inferred_backend()
+  }
+}
+
+pub fn merge_optional_secret_settings(
+  base: Option<SecretSettings>,
+  overlay: Option<SecretSettings>,
+) -> Option<SecretSettings> {
+  match (base, overlay) {
+    (Some(base), Some(overlay)) => Some(base.merge(&overlay)),
+    (None, Some(overlay)) => Some(overlay.with_inferred_backend()),
+    (Some(base), None) => Some(base.with_inferred_backend()),
+    (None, None) => None,
+  }
+}
+
+pub fn infer_secret_backend(explicit: Option<SecretBackend>, gpg_key_id: Option<&str>) -> SecretBackend {
+  explicit.unwrap_or_else(|| {
+    if gpg_key_id.is_some() {
+      SecretBackend::Gpg
+    } else {
+      SecretBackend::BuiltInPgp
+    }
+  })
+}
+
 /// Metadata stored inside a vault directory that describes how the vault should be accessed.
 /// Written by `mk secrets vault init --gpg-key-id` so subsequent commands
 /// (store, show, export, …) pick up the GPG key automatically without flags.
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct VaultMeta {
+  /// Explicit backend used to access this vault.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub backend: Option<SecretBackend>,
+
+  /// Path to key directory for built-in PGP vaults.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub keys_location: Option<String>,
+
+  /// Key name for built-in PGP vaults.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub key_name: Option<String>,
+
   /// GPG key ID or fingerprint used to encrypt/decrypt secrets in this vault
   #[serde(skip_serializing_if = "Option::is_none")]
   pub gpg_key_id: Option<String>,
 }
 
+pub fn read_vault_meta(vault_location: &Path) -> Option<VaultMeta> {
+  let content = fs::read_to_string(vault_location.join(VAULT_META_FILE)).ok()?;
+  toml::from_str(&content).ok()
+}
+
 /// Read the GPG key ID stored in a vault's metadata file, if present.
 /// Returns `None` when the file does not exist or cannot be parsed.
 pub fn read_vault_gpg_key_id(vault_location: &Path) -> Option<String> {
-  let content = fs::read_to_string(vault_location.join(VAULT_META_FILE)).ok()?;
-  let meta: VaultMeta = toml::from_str(&content).ok()?;
-  meta.gpg_key_id
+  read_vault_meta(vault_location)?.gpg_key_id
 }
 
-/// Write (or overwrite) the vault's metadata file with the supplied GPG key ID.
-pub fn write_vault_meta(vault_location: &Path, gpg_key_id: &str) -> anyhow::Result<()> {
-  let meta = VaultMeta {
-    gpg_key_id: Some(gpg_key_id.to_string()),
-  };
+pub fn read_vault_backend(vault_location: &Path) -> Option<SecretBackend> {
+  read_vault_meta(vault_location)?.backend
+}
+
+/// Write (or overwrite) the vault's metadata file with the supplied settings.
+pub fn write_vault_meta(vault_location: &Path, meta: &VaultMeta) -> anyhow::Result<()> {
   let content = toml::to_string_pretty(&meta).context("Failed to serialize vault metadata")?;
   let meta_path = vault_location.join(VAULT_META_FILE);
   let mut file = File::create(&meta_path)?;
@@ -66,50 +212,169 @@ pub fn write_vault_meta(vault_location: &Path, gpg_key_id: &str) -> anyhow::Resu
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretConfig {
+  pub backend: SecretBackend,
   pub vault_location: PathBuf,
   pub keys_location: PathBuf,
   pub key_name: String,
   pub gpg_key_id: Option<String>,
+  pub secrets_path: Vec<String>,
+  pub backend_source: SecretValueSource,
+  pub vault_location_source: SecretValueSource,
+  pub keys_location_source: SecretValueSource,
+  pub key_name_source: SecretValueSource,
+  pub gpg_key_id_source: Option<SecretValueSource>,
+  pub secrets_path_source: Option<SecretValueSource>,
+  pub vault_meta_used: bool,
 }
 
 impl SecretConfig {
-  pub fn resolve(
-    base_dir: &Path,
-    vault_location: Option<&str>,
-    keys_location: Option<&str>,
-    key_name: Option<&str>,
-    gpg_key_id: Option<&str>,
-  ) -> Self {
-    let vault_location = vault_location
-      .map(|path| resolve_path(base_dir, path))
-      .unwrap_or_else(|| default_vault_location(base_dir));
-    let keys_location = keys_location
-      .map(|path| resolve_path(base_dir, path))
-      .unwrap_or_else(default_keys_location);
-    let key_name = key_name.unwrap_or("default").to_string();
-    // Resolve gpg_key_id: explicit argument > vault metadata file
-    let gpg_key_id = gpg_key_id
-      .map(|s| s.to_string())
-      .or_else(|| read_vault_gpg_key_id(&vault_location));
-
-    Self {
-      vault_location,
-      keys_location,
-      key_name,
-      gpg_key_id,
-    }
+  pub fn with_secrets_path(mut self, secrets_path: Vec<String>, source: Option<SecretValueSource>) -> Self {
+    self.secrets_path = secrets_path;
+    self.secrets_path_source = source;
+    self
   }
 }
 
-pub fn load_secret_values(
-  path: &str,
+fn pick_setting<'a, T: ?Sized>(
+  cli_value: Option<&'a T>,
+  task_value: Option<&'a T>,
+  root_value: Option<&'a T>,
+  meta_value: Option<&'a T>,
+  default_value: &'a T,
+) -> (&'a T, SecretValueSource) {
+  if let Some(value) = cli_value {
+    return (value, SecretValueSource::Cli);
+  }
+  if let Some(value) = task_value {
+    return (value, SecretValueSource::Task);
+  }
+  if let Some(value) = root_value {
+    return (value, SecretValueSource::Root);
+  }
+  if let Some(value) = meta_value {
+    return (value, SecretValueSource::VaultMeta);
+  }
+  (default_value, SecretValueSource::Default)
+}
+
+pub fn resolve_secret_config(
   base_dir: &Path,
-  vault_location: Option<&str>,
-  keys_location: Option<&str>,
-  key_name: Option<&str>,
-  gpg_key_id: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
-  let config = SecretConfig::resolve(base_dir, vault_location, keys_location, key_name, gpg_key_id);
+  cli_overrides: Option<&SecretSettings>,
+  task_settings: Option<&SecretSettings>,
+  root_settings: Option<&SecretSettings>,
+) -> SecretConfig {
+  let default_vault_location = default_vault_location(base_dir);
+  let cli_vault_location = cli_overrides.and_then(|settings| settings.vault_location.as_deref());
+  let task_vault_location = task_settings.and_then(|settings| settings.vault_location.as_deref());
+  let root_vault_location = root_settings.and_then(|settings| settings.vault_location.as_deref());
+
+  let vault_location = cli_vault_location
+    .or(task_vault_location)
+    .or(root_vault_location)
+    .map(|path| resolve_path(base_dir, path))
+    .unwrap_or_else(|| default_vault_location.clone());
+  let vault_location_source = if cli_vault_location.is_some() {
+    SecretValueSource::Cli
+  } else if task_vault_location.is_some() {
+    SecretValueSource::Task
+  } else if root_vault_location.is_some() {
+    SecretValueSource::Root
+  } else {
+    SecretValueSource::Default
+  };
+
+  let vault_meta = read_vault_meta(&vault_location);
+
+  let default_backend = SecretBackend::BuiltInPgp;
+  let (backend_value, backend_source) = pick_setting(
+    cli_overrides.and_then(|settings| settings.backend.as_ref()),
+    task_settings.and_then(|settings| settings.backend.as_ref()),
+    root_settings.and_then(|settings| settings.backend.as_ref()),
+    vault_meta.as_ref().and_then(|meta| meta.backend.as_ref()),
+    &default_backend,
+  );
+
+  let default_keys_location = default_keys_location();
+  let default_keys_location_str = default_keys_location.to_string_lossy().to_string();
+  let (keys_location, keys_location_source) = pick_setting(
+    cli_overrides.and_then(|settings| settings.keys_location.as_deref()),
+    task_settings.and_then(|settings| settings.keys_location.as_deref()),
+    root_settings.and_then(|settings| settings.keys_location.as_deref()),
+    vault_meta.as_ref().and_then(|meta| meta.keys_location.as_deref()),
+    default_keys_location_str.as_str(),
+  );
+
+  let default_key_name = String::from("default");
+  let (key_name, key_name_source) = pick_setting(
+    cli_overrides.and_then(|settings| settings.key_name.as_deref()),
+    task_settings.and_then(|settings| settings.key_name.as_deref()),
+    root_settings.and_then(|settings| settings.key_name.as_deref()),
+    vault_meta.as_ref().and_then(|meta| meta.key_name.as_deref()),
+    default_key_name.as_str(),
+  );
+
+  let gpg_key_id = cli_overrides
+    .and_then(|settings| settings.gpg_key_id.as_ref())
+    .map(|value| (value.clone(), SecretValueSource::Cli))
+    .or_else(|| {
+      task_settings
+        .and_then(|settings| settings.gpg_key_id.as_ref())
+        .map(|value| (value.clone(), SecretValueSource::Task))
+    })
+    .or_else(|| {
+      root_settings
+        .and_then(|settings| settings.gpg_key_id.as_ref())
+        .map(|value| (value.clone(), SecretValueSource::Root))
+    })
+    .or_else(|| {
+      vault_meta
+        .as_ref()
+        .and_then(|meta| meta.gpg_key_id.as_ref())
+        .map(|value| (value.clone(), SecretValueSource::VaultMeta))
+    });
+
+  let secrets_path = task_settings
+    .and_then(|settings| {
+      settings
+        .secrets_path
+        .clone()
+        .map(|paths| (paths, SecretValueSource::Task))
+    })
+    .or_else(|| {
+      root_settings.and_then(|settings| {
+        settings
+          .secrets_path
+          .clone()
+          .map(|paths| (paths, SecretValueSource::Root))
+      })
+    });
+
+  let backend = infer_secret_backend(
+    Some(backend_value.clone()),
+    gpg_key_id.as_ref().map(|(value, _)| value.as_str()),
+  );
+
+  SecretConfig {
+    backend,
+    vault_location,
+    keys_location: resolve_path(base_dir, keys_location),
+    key_name: key_name.to_string(),
+    gpg_key_id: gpg_key_id.as_ref().map(|(value, _)| value.clone()),
+    secrets_path: secrets_path
+      .as_ref()
+      .map(|(paths, _)| paths.clone())
+      .unwrap_or_default(),
+    backend_source,
+    vault_location_source,
+    keys_location_source,
+    key_name_source,
+    gpg_key_id_source: gpg_key_id.as_ref().map(|(_, source)| *source),
+    secrets_path_source: secrets_path.as_ref().map(|(_, source)| *source),
+    vault_meta_used: vault_meta.is_some(),
+  }
+}
+
+pub fn load_secret_values(path: &str, config: &SecretConfig) -> anyhow::Result<Vec<String>> {
   verify_vault(&config.vault_location)?;
 
   let secret_path = config.vault_location.join(path);
@@ -133,9 +398,9 @@ pub fn load_secret_values(
     .collect::<Vec<_>>();
   data_paths.sort();
 
-  let use_gpg = config.gpg_key_id.is_some();
+  let use_gpg = matches!(config.backend, SecretBackend::Gpg);
   let signed_secret_key = if !use_gpg {
-    Some(load_secret_key(&config)?)
+    Some(load_secret_key(config)?)
   } else {
     check_gpg_available()?;
     None
@@ -144,7 +409,13 @@ pub fn load_secret_values(
   let mut values = Vec::with_capacity(data_paths.len());
   for data_path in data_paths {
     let value = if use_gpg {
-      decrypt_with_gpg(&data_path)?
+      decrypt_with_gpg(
+        &data_path,
+        config
+          .gpg_key_id
+          .as_deref()
+          .ok_or_else(|| anyhow::anyhow!("GPG backend selected but no gpg_key_id is configured"))?,
+      )?
     } else {
       let key = signed_secret_key.as_ref().unwrap();
       let mut data_file = std::io::BufReader::new(File::open(&data_path)?);
@@ -167,22 +438,8 @@ pub fn load_secret_values(
   Ok(values)
 }
 
-pub fn load_secret_value(
-  path: &str,
-  base_dir: &Path,
-  vault_location: Option<&str>,
-  keys_location: Option<&str>,
-  key_name: Option<&str>,
-  gpg_key_id: Option<&str>,
-) -> anyhow::Result<String> {
-  let values = load_secret_values(
-    path,
-    base_dir,
-    vault_location,
-    keys_location,
-    key_name,
-    gpg_key_id,
-  )?;
+pub fn load_secret_value(path: &str, config: &SecretConfig) -> anyhow::Result<String> {
+  let values = load_secret_values(path, config)?;
   match values.as_slice() {
     [value] => Ok(value.clone()),
     [] => anyhow::bail!(
@@ -196,12 +453,7 @@ pub fn load_secret_value(
   }
 }
 
-pub fn list_secret_paths(
-  path_prefix: Option<&str>,
-  base_dir: &Path,
-  vault_location: Option<&str>,
-) -> anyhow::Result<Vec<String>> {
-  let config = SecretConfig::resolve(base_dir, vault_location, None, None, None);
+pub fn list_secret_paths(path_prefix: Option<&str>, config: &SecretConfig) -> anyhow::Result<Vec<String>> {
   verify_vault(&config.vault_location)?;
 
   let root = match path_prefix {
@@ -223,25 +475,11 @@ pub fn list_secret_paths(
   Ok(secret_paths)
 }
 
-pub fn load_secret_env(
-  paths: &[String],
-  base_dir: &Path,
-  vault_location: Option<&str>,
-  keys_location: Option<&str>,
-  key_name: Option<&str>,
-  gpg_key_id: Option<&str>,
-) -> anyhow::Result<HashMap<String, String>> {
+pub fn load_secret_env(config: &SecretConfig) -> anyhow::Result<HashMap<String, String>> {
   let mut env_vars = HashMap::new();
 
-  for path in paths {
-    for value in load_secret_values(
-      path,
-      base_dir,
-      vault_location,
-      keys_location,
-      key_name,
-      gpg_key_id,
-    )? {
+  for path in &config.secrets_path {
+    for value in load_secret_values(path, config)? {
       env_vars.extend(parse_env_contents(&value));
     }
   }
@@ -298,7 +536,7 @@ pub fn encrypt_with_gpg(gpg_key_id: &str, plaintext: &[u8]) -> anyhow::Result<Ve
 
 /// Decrypt a vault `data.asc` file using the system `gpg` binary.
 /// GPG-agent handles PIN/passphrase prompts automatically (including YubiKey via pinentry).
-fn decrypt_with_gpg(data_path: &Path) -> anyhow::Result<String> {
+fn decrypt_with_gpg(data_path: &Path, _gpg_key_id: &str) -> anyhow::Result<String> {
   let path_str = data_path
     .to_str()
     .ok_or_else(|| anyhow::anyhow!("Non-UTF-8 path: {:?}", data_path))?;
@@ -333,7 +571,7 @@ fn default_keys_location() -> PathBuf {
   path
 }
 
-fn verify_vault(vault_location: &Path) -> anyhow::Result<()> {
+pub fn verify_vault(vault_location: &Path) -> anyhow::Result<()> {
   if !vault_location.exists() || !vault_location.is_dir() {
     anyhow::bail!(
       "Vault not found at '{}'. Initialize it first with: mk secrets vault init",
@@ -412,10 +650,20 @@ mod tests {
     assert_eq!(read_vault_gpg_key_id(vault_dir), None);
 
     // Write a key ID
-    write_vault_meta(vault_dir, "ABC123DEF456").unwrap();
+    write_vault_meta(
+      vault_dir,
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("ABC123DEF456".to_string()),
+      },
+    )
+    .unwrap();
 
     // Read it back
     assert_eq!(read_vault_gpg_key_id(vault_dir), Some("ABC123DEF456".to_string()));
+    assert_eq!(read_vault_backend(vault_dir), Some(SecretBackend::Gpg));
   }
 
   #[test]
@@ -423,8 +671,26 @@ mod tests {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path();
 
-    write_vault_meta(vault_dir, "FIRST_KEY").unwrap();
-    write_vault_meta(vault_dir, "SECOND_KEY").unwrap();
+    write_vault_meta(
+      vault_dir,
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("FIRST_KEY".to_string()),
+      },
+    )
+    .unwrap();
+    write_vault_meta(
+      vault_dir,
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("SECOND_KEY".to_string()),
+      },
+    )
+    .unwrap();
 
     assert_eq!(read_vault_gpg_key_id(vault_dir), Some("SECOND_KEY".to_string()));
   }
@@ -443,38 +709,156 @@ mod tests {
     assert_eq!(read_vault_gpg_key_id(dir.path()), None);
   }
 
-  // ── SecretConfig::resolve ─────────────────────────────────────────────────
+  #[test]
+  fn test_verify_vault_accepts_existing_directory() {
+    let dir = TempDir::new().unwrap();
+
+    verify_vault(dir.path()).unwrap();
+  }
+
+  #[test]
+  fn test_verify_vault_rejects_missing_directory() {
+    let dir = TempDir::new().unwrap();
+    let missing = dir.path().join("missing-vault");
+
+    let error = verify_vault(&missing).unwrap_err();
+
+    assert!(
+      error.to_string().contains("Vault not found at '"),
+      "unexpected error: {error}"
+    );
+    assert!(
+      error
+        .to_string()
+        .contains("Initialize it first with: mk secrets vault init"),
+      "unexpected error: {error}"
+    );
+  }
+
+  // ── resolve_secret_config ────────────────────────────────────────────────
 
   #[test]
   fn test_secret_config_explicit_gpg_key_id() {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path().to_str().unwrap();
     let base = Path::new(".");
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, None, Some("EXPLICIT_ID"));
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: Some(SecretBackend::Gpg),
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("EXPLICIT_ID".to_string()),
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     assert_eq!(config.gpg_key_id, Some("EXPLICIT_ID".to_string()));
+    assert_eq!(config.backend, SecretBackend::Gpg);
   }
 
   #[test]
   fn test_secret_config_gpg_key_id_from_vault_metadata() {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path().to_str().unwrap();
-    write_vault_meta(dir.path(), "META_ID").unwrap();
+    write_vault_meta(
+      dir.path(),
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("META_ID".to_string()),
+      },
+    )
+    .unwrap();
 
     let base = Path::new(".");
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, None, None);
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     assert_eq!(config.gpg_key_id, Some("META_ID".to_string()));
+    assert_eq!(config.backend, SecretBackend::Gpg);
+    assert_eq!(config.gpg_key_id_source, Some(SecretValueSource::VaultMeta));
+  }
+
+  #[test]
+  fn test_secret_config_root_settings_allow_vault_metadata_backend() {
+    let dir = TempDir::new().unwrap();
+    let vault_dir = dir.path().to_str().unwrap();
+    write_vault_meta(
+      dir.path(),
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("META_ID".to_string()),
+      },
+    )
+    .unwrap();
+
+    let config = resolve_secret_config(
+      Path::new("."),
+      None,
+      None,
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+    );
+
+    assert_eq!(config.backend, SecretBackend::Gpg);
+    assert_eq!(config.backend_source, SecretValueSource::VaultMeta);
+    assert_eq!(config.gpg_key_id.as_deref(), Some("META_ID"));
   }
 
   #[test]
   fn test_secret_config_explicit_gpg_key_id_overrides_metadata() {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path().to_str().unwrap();
-    write_vault_meta(dir.path(), "META_ID").unwrap();
+    write_vault_meta(
+      dir.path(),
+      &VaultMeta {
+        backend: Some(SecretBackend::Gpg),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("META_ID".to_string()),
+      },
+    )
+    .unwrap();
 
     let base = Path::new(".");
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, None, Some("EXPLICIT_ID"));
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: Some(SecretBackend::Gpg),
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("EXPLICIT_ID".to_string()),
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     // Explicit arg wins over metadata
     assert_eq!(config.gpg_key_id, Some("EXPLICIT_ID".to_string()));
+    assert_eq!(config.gpg_key_id_source, Some(SecretValueSource::Cli));
   }
 
   #[test]
@@ -483,8 +867,21 @@ mod tests {
     let vault_dir = dir.path().to_str().unwrap();
     let base = Path::new(".");
     // Empty vault dir — no .vault-meta.toml written
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, None, None);
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     assert_eq!(config.gpg_key_id, None);
+    assert_eq!(config.backend, SecretBackend::BuiltInPgp);
   }
 
   #[test]
@@ -492,7 +889,19 @@ mod tests {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path().to_str().unwrap();
     let base = Path::new(".");
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, None, None);
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     assert_eq!(config.key_name, "default");
   }
 
@@ -501,8 +910,46 @@ mod tests {
     let dir = TempDir::new().unwrap();
     let vault_dir = dir.path().to_str().unwrap();
     let base = Path::new(".");
-    let config = SecretConfig::resolve(base, Some(vault_dir), None, Some("mykey"), None);
+    let config = resolve_secret_config(
+      base,
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: Some("mykey".to_string()),
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
     assert_eq!(config.key_name, "mykey");
+  }
+
+  #[test]
+  fn test_secret_settings_merge_prefers_overlay() {
+    let base = SecretSettings {
+      backend: Some(SecretBackend::BuiltInPgp),
+      vault_location: Some("root-vault".to_string()),
+      keys_location: Some("root-keys".to_string()),
+      key_name: Some("root".to_string()),
+      gpg_key_id: None,
+      secrets_path: Some(vec!["root/path".to_string()]),
+    };
+    let overlay = SecretSettings {
+      backend: Some(SecretBackend::Gpg),
+      vault_location: None,
+      keys_location: None,
+      key_name: None,
+      gpg_key_id: Some("KEYID".to_string()),
+      secrets_path: Some(vec!["task/path".to_string()]),
+    };
+
+    let merged = base.merge(&overlay);
+    assert_eq!(merged.backend, Some(SecretBackend::Gpg));
+    assert_eq!(merged.vault_location.as_deref(), Some("root-vault"));
+    assert_eq!(merged.gpg_key_id.as_deref(), Some("KEYID"));
+    assert_eq!(merged.secrets_path, Some(vec!["task/path".to_string()]));
   }
 
   // ── VaultMeta serialization ───────────────────────────────────────────────
@@ -510,7 +957,12 @@ mod tests {
   #[test]
   fn test_vault_meta_toml_no_gpg_key_id() {
     // When gpg_key_id is None, the field is skipped in the TOML output
-    let meta = VaultMeta { gpg_key_id: None };
+    let meta = VaultMeta {
+      backend: None,
+      keys_location: None,
+      key_name: None,
+      gpg_key_id: None,
+    };
     let s = toml::to_string_pretty(&meta).unwrap();
     assert!(!s.contains("gpg_key_id"), "unexpected field in: {s}");
   }
@@ -518,9 +970,15 @@ mod tests {
   #[test]
   fn test_vault_meta_toml_with_gpg_key_id() {
     let meta = VaultMeta {
+      backend: Some(SecretBackend::Gpg),
+      keys_location: Some("./keys".to_string()),
+      key_name: Some("vault".to_string()),
       gpg_key_id: Some("FINGERPRINT".to_string()),
     };
     let s = toml::to_string_pretty(&meta).unwrap();
+    assert!(s.contains("backend"), "field missing from: {s}");
+    assert!(s.contains("keys_location"), "field missing from: {s}");
+    assert!(s.contains("key_name"), "field missing from: {s}");
     assert!(s.contains("gpg_key_id"), "field missing from: {s}");
     assert!(s.contains("FINGERPRINT"));
   }

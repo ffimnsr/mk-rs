@@ -1,13 +1,15 @@
-use std::path::Path;
-
 use clap::Args;
 use console::style;
-use mk_lib::secrets::load_secret_value;
+use mk_lib::secrets::{
+  load_secret_value,
+  verify_vault,
+};
 use prettytable::format::consts;
 use prettytable::{
   row,
   Table,
 };
+use std::io::Write as _;
 
 use crate::secrets::context::Context;
 
@@ -22,46 +24,50 @@ pub struct ShowSecret {
   #[arg(long, help = "The keys location")]
   keys_location: Option<String>,
 
-  #[arg(short, long, help = "The key name")]
+  #[arg(short, long, help = "The key name", conflicts_with = "gpg_key_id")]
   key_name: Option<String>,
 
   #[arg(
     long,
+    conflicts_with = "key_name",
     help = "GPG key ID or fingerprint for hardware/passphrase-protected keys. Cannot be combined with --key-name."
   )]
   gpg_key_id: Option<String>,
+
+  #[arg(short, long, help = "Print raw secret value without table formatting")]
+  plain: bool,
 }
 
 impl ShowSecret {
   pub fn execute(&self, context: &Context) -> anyhow::Result<()> {
     let path: &str = &self.path.clone();
-    let vault_location: &str = &self
-      .vault_location
-      .clone()
-      .unwrap_or_else(|| context.vault_location());
-    let keys_location: &str = &self
-      .keys_location
-      .clone()
-      .unwrap_or_else(|| context.keys_location());
-    if self.key_name.is_some() && self.gpg_key_id.is_some() {
-      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
+    let mut cli_overrides = context.settings().clone();
+    if let Some(vault_location) = &self.vault_location {
+      cli_overrides.vault_location = Some(vault_location.clone());
     }
-    let key_name: &str = &self.key_name.clone().unwrap_or_else(|| context.key_name());
-    let gpg_key_id = self.gpg_key_id.clone().or_else(|| context.gpg_key_id());
+    if let Some(keys_location) = &self.keys_location {
+      cli_overrides.keys_location = Some(keys_location.clone());
+    }
+    if let Some(key_name) = &self.key_name {
+      cli_overrides.key_name = Some(key_name.clone());
+    }
+    if let Some(gpg_key_id) = &self.gpg_key_id {
+      cli_overrides.gpg_key_id = Some(gpg_key_id.clone());
+    }
+    let secret_config = context.resolve_with_settings(&cli_overrides);
 
     assert!(!path.is_empty(), "Path or prefix must be provided");
-    assert!(!vault_location.is_empty(), "Vault location must be provided");
-    assert!(!keys_location.is_empty(), "Keys location must be provided");
-    assert!(!key_name.is_empty(), "Key name must be provided");
 
-    let value = load_secret_value(
-      path,
-      Path::new("."),
-      Some(vault_location),
-      Some(keys_location),
-      Some(key_name),
-      gpg_key_id.as_deref(),
-    )?;
+    verify_vault(&secret_config.vault_location)?;
+
+    let value = load_secret_value(path, &secret_config)?;
+
+    if self.plain {
+      let mut stdout = std::io::stdout().lock();
+      write!(stdout, "{}", value)?;
+      stdout.flush()?;
+      return Ok(());
+    }
 
     let mut table = Table::new();
     table.set_format(*consts::FORMAT_CLEAN);

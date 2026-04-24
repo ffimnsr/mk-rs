@@ -7,6 +7,7 @@ use assert_fs::TempDir;
 
 // Helper function to create a hello.yaml file
 // Temp directory is referenced as when it goes out of scope, it will be deleted
+#[allow(dead_code)]
 pub fn setup_hello_yaml(temp_dir: &TempDir) -> anyhow::Result<String> {
   setup_yaml(
     temp_dir,
@@ -39,6 +40,16 @@ pub fn setup_yaml(temp_dir: &TempDir, file_name: &str, contents: &str) -> anyhow
 /// POSIX shells (bash/sh from MSYS2/Git Bash), which corrupts the path. Using
 /// forward slashes avoids this — both Windows filesystem APIs and MSYS2 shells
 /// accept them.
+#[allow(dead_code)]
 pub fn sh_path(path: &Path) -> String {
   path.to_string_lossy().replace('\\', "/")
+}
+
+#[allow(dead_code)]
+pub fn normalize_snapshot_text(text: &str, replacements: &[(&str, &str)]) -> String {
+  let mut out = text.replace("\r\n", "\n");
+  for (from, to) in replacements {
+    out = out.replace(from, to);
+  }
+  out
 }

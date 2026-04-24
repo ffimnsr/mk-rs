@@ -1,3 +1,17 @@
+use clap::Args;
+use mk_lib::file::DisplayPath as _;
+use mk_lib::secrets::{
+  encrypt_with_gpg,
+  verify_vault,
+  SecretBackend,
+};
+use pgp::composed::{
+  ArmorOptions,
+  Deserializable,
+  SignedSecretKey,
+};
+use pgp::crypto::sym::SymmetricKeyAlgorithm;
+use rand::thread_rng;
 use std::fs::{
   self,
   File,
@@ -10,25 +24,8 @@ use std::io::{
 };
 use std::path::Path;
 
-use clap::Args;
-use mk_lib::file::ToUtf8 as _;
-use mk_lib::secrets::{
-  encrypt_with_gpg,
-  read_vault_gpg_key_id,
-};
-use pgp::composed::{
-  ArmorOptions,
-  Deserializable,
-  SignedSecretKey,
-};
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use rand::thread_rng;
-
 use crate::secrets::context::Context;
-use crate::secrets::vault::{
-  verify_key,
-  verify_vault,
-};
+use crate::secrets::vault::verify_key;
 
 #[derive(Debug, Args)]
 pub struct StoreSecret {
@@ -44,11 +41,12 @@ pub struct StoreSecret {
   #[arg(long, help = "The key location")]
   keys_location: Option<String>,
 
-  #[arg(short, long, help = "The key name")]
+  #[arg(short, long, help = "The key name", conflicts_with = "gpg_key_id")]
   key_name: Option<String>,
 
   #[arg(
     long,
+    conflicts_with = "key_name",
     help = "GPG key ID or fingerprint for hardware/passphrase-protected keys. Cannot be combined with --key-name."
   )]
   gpg_key_id: Option<String>,
@@ -85,34 +83,24 @@ impl StoreSecret {
       },
     };
 
-    let context_vault_location;
-    let vault_location = match self.vault_location.as_deref() {
-      Some(vault_location) => vault_location,
-      None => {
-        context_vault_location = context.vault_location();
-        context_vault_location.as_str()
-      },
-    };
-    let context_keys_location;
-    let keys_location = match self.keys_location.as_deref() {
-      Some(keys_location) => keys_location,
-      None => {
-        context_keys_location = context.keys_location();
-        context_keys_location.as_str()
-      },
-    };
-    if self.key_name.is_some() && self.gpg_key_id.is_some() {
-      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
+    let mut cli_overrides = context.settings().clone();
+    if let Some(vault_location) = &self.vault_location {
+      cli_overrides.vault_location = Some(vault_location.clone());
     }
-    let context_key_name;
-    let key_name = match self.key_name.as_deref() {
-      Some(key_name) => key_name,
-      None => {
-        context_key_name = context.key_name();
-        context_key_name.as_str()
-      },
-    };
-    let gpg_key_id = self.gpg_key_id.clone().or_else(|| context.gpg_key_id());
+    if let Some(keys_location) = &self.keys_location {
+      cli_overrides.keys_location = Some(keys_location.clone());
+    }
+    if let Some(key_name) = &self.key_name {
+      cli_overrides.key_name = Some(key_name.clone());
+    }
+    if let Some(gpg_key_id) = &self.gpg_key_id {
+      cli_overrides.gpg_key_id = Some(gpg_key_id.clone());
+    }
+    let secret_config = context.resolve_with_settings(&cli_overrides);
+    let vault_location = secret_config.vault_location.to_string_lossy().to_string();
+    let keys_location = secret_config.keys_location.to_string_lossy().to_string();
+    let key_name = secret_config.key_name.clone();
+    let gpg_key_id = secret_config.gpg_key_id.clone();
 
     assert!(!path.is_empty(), "Path must be provided");
     assert!(!value.is_empty(), "Value must be provided");
@@ -120,14 +108,13 @@ impl StoreSecret {
     assert!(!keys_location.is_empty(), "Keys location must be provided");
     assert!(!key_name.is_empty(), "Key name must be provided");
 
-    verify_vault(vault_location)?;
-    // Auto-resolve gpg_key_id from vault metadata when not set by flag or context
-    let gpg_key_id = gpg_key_id.or_else(|| read_vault_gpg_key_id(Path::new(vault_location)));
-    if gpg_key_id.is_none() {
-      verify_key(keys_location, key_name)?;
+    verify_vault(Path::new(&vault_location))?;
+    let backend = secret_config.backend.clone();
+    if matches!(backend, SecretBackend::BuiltInPgp) {
+      verify_key(&keys_location, &key_name)?;
     }
 
-    let secret_path = Path::new(vault_location).join(path);
+    let secret_path = Path::new(&vault_location).join(path);
     let data_path = secret_path.join("data.asc");
     if secret_path.exists()
       && secret_path.is_dir()
@@ -137,12 +124,15 @@ impl StoreSecret {
     {
       println!(
         "Secret already exists at path {path} in {}",
-        secret_path.to_utf8()?
+        secret_path.display_lossy()
       );
     } else {
       fs::create_dir_all(&secret_path)?;
 
-      if let Some(gpg_id) = &gpg_key_id {
+      if matches!(backend, SecretBackend::Gpg) {
+        let gpg_id = gpg_key_id
+          .as_deref()
+          .ok_or_else(|| anyhow::anyhow!("GPG backend selected but no gpg_key_id is configured"))?;
         // GPG path: encrypt via system gpg binary (supports YubiKey and passphrase-protected keys)
         let encrypted = encrypt_with_gpg(gpg_id, value.as_bytes())?;
         let mut writer = File::create(data_path)?;
@@ -151,7 +141,7 @@ impl StoreSecret {
       } else {
         // Built-in pgp path: key file must exist in keys_location
         let key_name = format!("{}.key", key_name);
-        let key_path = Path::new(keys_location).join(key_name);
+        let key_path = Path::new(&keys_location).join(key_name);
         let mut secret_key_string = File::open(key_path)?;
         let (signed_secret_key, _) = SignedSecretKey::from_armor_single(&mut secret_key_string)?;
         signed_secret_key.verify_bindings()?;
@@ -174,7 +164,7 @@ impl StoreSecret {
         writer.flush()?;
       }
 
-      println!("Secret stored at {}", secret_path.to_utf8()?);
+      println!("Secret stored at {}", secret_path.display_lossy());
     }
     Ok(())
   }

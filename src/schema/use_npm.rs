@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::defaults::default_node_package_manager;
-use crate::file::ToUtf8 as _;
+use crate::file::DisplayPath as _;
 use crate::utils::resolve_path;
 
 use super::{
@@ -95,7 +95,7 @@ impl UseNpmArgs {
       return Ok(HashMap::new());
     }
 
-    let file = File::open(&path).context(format!("Failed to open file - {}", path.to_utf8()?))?;
+    let file = File::open(&path).context(format!("Failed to open file - {}", path.display_lossy()))?;
     let reader = BufReader::new(file);
 
     let package: NpmPackage = serde_json::from_reader(reader)?;

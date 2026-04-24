@@ -4,8 +4,10 @@ use clap::{
 };
 use context::Context;
 use key::KEY_LOCATION_HELP;
+use mk_lib::schema::TaskRoot;
 
 mod context;
+mod doctor;
 mod key;
 mod utils;
 mod vault;
@@ -22,11 +24,12 @@ pub struct Secrets {
   #[arg(long, help = KEY_LOCATION_HELP)]
   keys_location: Option<String>,
 
-  #[arg(long, help = "The key name")]
+  #[arg(long, help = "The key name", conflicts_with = "gpg_key_id")]
   key_name: Option<String>,
 
   #[arg(
     long,
+    conflicts_with = "key_name",
     help = "GPG key ID or fingerprint for hardware/passphrase-protected keys (delegates crypto to the system gpg binary). Cannot be combined with --key-name."
   )]
   gpg_key_id: Option<String>,
@@ -51,24 +54,24 @@ enum SecretsCommand {
   #[command(visible_aliases = ["init"], about = "Initialize a new secret vault")]
   InitVault(vault::InitVault),
 
+  /// Print resolved secret configuration
+  #[command(about = "Inspect resolved secret configuration")]
+  Doctor(doctor::Doctor),
+
   /// Export a secret
   #[command(visible_aliases = ["export", "e"], about = "Export a secret to file")]
   ExportSecret(vault::ExportSecret),
 }
 
 impl Secrets {
-  pub fn execute(&self) -> anyhow::Result<()> {
-    let mut context = Context::new();
+  pub fn execute(&self, task_root: &TaskRoot) -> anyhow::Result<()> {
+    let mut context = Context::new(task_root);
     if let Some(keys_location) = &self.keys_location {
       context.set_keys_location(keys_location);
     }
 
     if let Some(vault_location) = &self.vault_location {
       context.set_vault_location(vault_location);
-    }
-
-    if self.key_name.is_some() && self.gpg_key_id.is_some() {
-      anyhow::bail!("--key-name and --gpg-key-id are mutually exclusive");
     }
 
     if let Some(key_name) = &self.key_name {
@@ -84,6 +87,7 @@ impl Secrets {
       Some(SecretsCommand::Vault(vault)) => vault.execute(&mut context),
       Some(SecretsCommand::ListKeys(list_keys)) => list_keys.execute(&context),
       Some(SecretsCommand::InitVault(init_store)) => init_store.execute(&context),
+      Some(SecretsCommand::Doctor(doctor)) => doctor.execute(&context),
       Some(SecretsCommand::ExportSecret(export_secret)) => export_secret.execute(&context),
       None => Err(anyhow::anyhow!(
         "No secrets subcommand given. Run 'mk secrets --help' to see available subcommands."

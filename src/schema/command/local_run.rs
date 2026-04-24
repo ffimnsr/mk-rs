@@ -80,6 +80,14 @@ pub struct LocalRun {
 
 impl LocalRun {
   pub fn execute(&self, context: &TaskContext) -> anyhow::Result<()> {
+    self.execute_internal(context, false)
+  }
+
+  pub fn execute_cancellable(&self, context: &TaskContext) -> anyhow::Result<()> {
+    self.execute_internal(context, true)
+  }
+
+  fn execute_internal(&self, context: &TaskContext, allow_cancellation: bool) -> anyhow::Result<()> {
     assert!(!self.command.is_empty());
 
     let command = interpolate_template_string(&self.command, context)?;
@@ -104,9 +112,12 @@ impl LocalRun {
       return self.execute_with_retrigger(context, &command, ignore_errors, capture_output, verbose);
     }
 
-    let (status, captured_stdout) = self
-      .spawn_command(context, &command, capture_output, verbose, interactive)?
-      .wait_for_completion()?;
+    let spawned = self.spawn_command(context, &command, capture_output, verbose, interactive)?;
+    let (status, captured_stdout) = if allow_cancellation {
+      spawned.wait_for_completion_or_cancellation(context, &command)?
+    } else {
+      spawned.wait_for_completion()?
+    };
     self.finish_execution(context, &command, status, captured_stdout, ignore_errors)
   }
 
@@ -154,7 +165,7 @@ impl LocalRun {
     }
 
     #[cfg(unix)]
-    if self.retrigger_enabled() && !interactive {
+    if !interactive {
       unsafe {
         cmd.pre_exec(|| {
           if libc::setpgid(0, 0) != 0 {
@@ -380,6 +391,28 @@ impl SpawnedLocalCommand {
     Ok((status, captured_stdout))
   }
 
+  fn wait_for_completion_or_cancellation(
+    mut self,
+    context: &TaskContext,
+    command: &str,
+  ) -> anyhow::Result<(ExitStatus, Option<String>)> {
+    loop {
+      if let Some(status) = self.child.try_wait()? {
+        let captured_stdout = self.join_stdout_handle()?;
+        return Ok((status, captured_stdout));
+      }
+
+      if context.cancellation_requested() {
+        self.kill_for_cancellation()?;
+        let _ = self.child.wait()?;
+        let _ = self.join_stdout_handle()?;
+        anyhow::bail!("Command cancelled - {}", command);
+      }
+
+      thread::sleep(std::time::Duration::from_millis(25));
+    }
+  }
+
   fn join_stdout_handle(&mut self) -> anyhow::Result<Option<String>> {
     self
       .stdout_handle
@@ -405,14 +438,14 @@ impl SpawnedLocalCommand {
 
       match read_control_byte(Duration::from_millis(100))? {
         Some(b'R' | b'r') => {
-          self.kill_for_restart()?;
+          self.kill_for_cancellation()?;
           let _ = self.child.wait()?;
           let _ = self.join_stdout_handle()?;
           drain_retrigger_input()?;
           return Ok(CommandOutcome::RestartRequested);
         },
         Some(3) => {
-          self.kill_for_restart()?;
+          self.kill_for_cancellation()?;
           let _ = self.child.wait()?;
           let _ = self.join_stdout_handle()?;
           drain_retrigger_input()?;
@@ -424,7 +457,7 @@ impl SpawnedLocalCommand {
   }
 
   #[cfg(unix)]
-  fn kill_for_restart(&mut self) -> anyhow::Result<()> {
+  fn kill_for_cancellation(&mut self) -> anyhow::Result<()> {
     let pid = self.child.id() as i32;
     let kill_result = unsafe { libc::killpg(pid, libc::SIGKILL) };
     if kill_result == 0 {
@@ -442,6 +475,15 @@ impl SpawnedLocalCommand {
     }
 
     Err(error.into())
+  }
+
+  #[cfg(not(unix))]
+  fn kill_for_cancellation(&mut self) -> anyhow::Result<()> {
+    match self.child.kill() {
+      Ok(()) => Ok(()),
+      Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => Ok(()),
+      Err(error) => Err(error.into()),
+    }
   }
 }
 

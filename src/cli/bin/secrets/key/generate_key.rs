@@ -6,7 +6,7 @@ use std::io::Write as _;
 use std::path::Path;
 
 use clap::Args;
-use mk_lib::file::ToUtf8;
+use mk_lib::file::DisplayPath as _;
 use pgp::composed::{
   ArmorOptions,
   EncryptionCaps,
@@ -57,7 +57,7 @@ impl GenerateKey {
       return Err(anyhow::anyhow!(
         "Key '{}' already exists at '{}'. Use --force to overwrite.",
         name,
-        file_path.to_utf8()?
+        file_path.display_lossy()
       ));
     }
 
@@ -76,7 +76,7 @@ impl GenerateKey {
     let mut file = File::create(file_path.clone())?;
     signed_private_key.to_armored_writer(&mut file, ArmorOptions::default())?;
     file.flush()?;
-    println!("Key saved to {}", file_path.to_utf8()?);
+    println!("Key saved to {}", file_path.display_lossy());
 
     Ok(())
   }
