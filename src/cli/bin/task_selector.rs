@@ -1,4 +1,7 @@
-use std::io::Write as _;
+use std::io::{
+  ErrorKind,
+  Write as _,
+};
 use std::process::{
   Command,
   Stdio,
@@ -50,8 +53,12 @@ impl FuzzyTaskSelector {
         .take()
         .with_context(|| format!("Failed to open stdin for fuzzy finder `{}`", backend.command()))?;
       for line in lines {
-        writeln!(stdin, "{line}")
-          .with_context(|| format!("Failed to write task list to `{}`", backend.command()))?;
+        if let Err(error) = writeln!(stdin, "{line}") {
+          if error.kind() == ErrorKind::BrokenPipe {
+            break;
+          }
+          return Err(error).with_context(|| format!("Failed to write task list to `{}`", backend.command()));
+        }
       }
     }
 
@@ -110,11 +117,15 @@ fn parse_selection(stdout: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::{
-    detect_backend,
     format_candidates,
     parse_selection,
-    Backend,
     TaskSelectorCandidate,
+  };
+
+  #[cfg(unix)]
+  use super::{
+    detect_backend,
+    Backend,
   };
 
   #[test]

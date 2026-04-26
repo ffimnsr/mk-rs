@@ -1,1 +1,0 @@
-Error: `mk init` only writes YAML sample configs. Use a .yaml/.yml path instead of .toml

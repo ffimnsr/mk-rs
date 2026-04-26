@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "greet": {
+      "commands": ["echo \"Hello, World!\""],
+      "description": "Sample greet command"
+    }
+  }
+}

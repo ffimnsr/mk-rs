@@ -52,6 +52,7 @@ use serde::{
 };
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
+static INIT_SCHEMA_URL: &str = "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json";
 
 /// The CLI arguments
 #[derive(Debug, Parser)]
@@ -90,7 +91,7 @@ struct Args {
 /// The available subcommands
 #[derive(Debug, Subcommand)]
 enum Command {
-  #[command(about = "Initialize a sample tasks.yaml file in the current directory")]
+  #[command(about = "Initialize a sample task config file in the current directory")]
   Init {
     #[arg(short, long, help = "Overwrite existing config file if present")]
     force: bool,
@@ -432,7 +433,7 @@ impl CliEntry {
         }
 
         Self::ensure_init_path_supported(config_path)?;
-        let contents = Self::build_init_contents();
+        let contents = Self::build_init_contents(config_path)?;
 
         std::fs::write(config_path, contents)?;
         println!("Config file created at {}", config_path.display_lossy());
@@ -642,46 +643,18 @@ impl CliEntry {
     run_task_by_name(&context, task_name)
   }
 
-  /// Build the contents of a new tasks.yaml, including a modeline and auto-detected integrations.
-  fn build_init_contents() -> String {
-    let mut out = String::new();
-
-    // yaml-language-server modeline for editor schema support
-    out.push_str("# yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json\n");
-    out.push('\n');
-
+  /// Build contents of new task config, including auto-detected integrations.
+  fn build_init_contents(config_path: &Path) -> anyhow::Result<String> {
+    let format = InitTemplateFormat::from_path(config_path)?;
     let cwd = std::env::current_dir().unwrap_or_default();
     let has_cargo = cwd.join("Cargo.toml").exists();
     let has_npm = cwd.join("package.json").exists();
-
-    if has_cargo {
-      out.push_str("use_cargo: true\n");
-      out.push('\n');
-    }
-
-    if has_npm {
-      out.push_str("use_npm: true\n");
-      out.push('\n');
-    }
-
-    out.push_str("tasks:\n");
-    out.push_str("  greet:\n");
-    out.push_str("    commands:\n");
-    out.push_str("      - echo \"Hello, World!\"\n");
-    out.push_str("    description: Sample greet command\n");
-
-    out
+    Ok(format.render(has_cargo, has_npm))
   }
 
-  // If TOML/JSON/Lua remain first-class entrypoints, add format-specific init templates.
   fn ensure_init_path_supported(config_path: &Path) -> anyhow::Result<()> {
-    match config_path.extension().and_then(|ext| ext.to_str()) {
-      Some("yaml") | Some("yml") | None => Ok(()),
-      Some(ext) => anyhow::bail!(
-        "`mk init` only writes YAML sample configs. Use a .yaml/.yml path instead of .{}",
-        ext
-      ),
-    }
+    let _ = InitTemplateFormat::from_path(config_path)?;
+    Ok(())
   }
 
   fn update_connect_timeout() -> Duration {
@@ -1310,6 +1283,119 @@ function _mk() {{
   }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InitTemplateFormat {
+  Yaml,
+  Toml,
+  Json,
+  Lua,
+}
+
+impl InitTemplateFormat {
+  fn from_path(config_path: &Path) -> anyhow::Result<Self> {
+    match config_path.extension().and_then(|ext| ext.to_str()) {
+      Some("yaml") | Some("yml") | None => Ok(Self::Yaml),
+      Some("toml") => Ok(Self::Toml),
+      Some("json") => Ok(Self::Json),
+      Some("lua") => Ok(Self::Lua),
+      Some(ext) => anyhow::bail!(
+        "Unsupported `mk init` output extension .{}. Supported formats: .yaml, .yml, .toml, .json, .lua",
+        ext
+      ),
+    }
+  }
+
+  fn render(self, has_cargo: bool, has_npm: bool) -> String {
+    match self {
+      Self::Yaml => self.render_yaml(has_cargo, has_npm),
+      Self::Toml => self.render_toml(has_cargo, has_npm),
+      Self::Json => self.render_json(has_cargo, has_npm),
+      Self::Lua => self.render_lua(has_cargo, has_npm),
+    }
+  }
+
+  fn render_yaml(self, has_cargo: bool, has_npm: bool) -> String {
+    let mut out = String::new();
+    out.push_str("# yaml-language-server: $schema=");
+    out.push_str(INIT_SCHEMA_URL);
+    out.push('\n');
+    out.push('\n');
+    self.push_shared_flags(&mut out, has_cargo, has_npm, "", ": true\n", '\n');
+    out.push_str("tasks:\n");
+    out.push_str("  greet:\n");
+    out.push_str("    commands:\n");
+    out.push_str("      - echo \"Hello, World!\"\n");
+    out.push_str("    description: Sample greet command\n");
+    out
+  }
+
+  fn render_toml(self, has_cargo: bool, has_npm: bool) -> String {
+    let mut out = String::new();
+    self.push_shared_flags(&mut out, has_cargo, has_npm, "", " = true\n", '\n');
+    out.push_str("[tasks.greet]\n");
+    out.push_str("commands = [\"echo \\\"Hello, World!\\\"\"]\n");
+    out.push_str("description = \"Sample greet command\"\n");
+    out
+  }
+
+  fn render_json(self, has_cargo: bool, has_npm: bool) -> String {
+    let mut lines = Vec::new();
+    lines.push("{".to_string());
+    if has_cargo {
+      lines.push("  \"use_cargo\": true,".to_string());
+    }
+    if has_npm {
+      lines.push("  \"use_npm\": true,".to_string());
+    }
+    lines.push("  \"tasks\": {".to_string());
+    lines.push("    \"greet\": {".to_string());
+    lines.push("      \"commands\": [\"echo \\\"Hello, World!\\\"\"],".to_string());
+    lines.push("      \"description\": \"Sample greet command\"".to_string());
+    lines.push("    }".to_string());
+    lines.push("  }".to_string());
+    lines.push("}".to_string());
+    lines.join("\n")
+  }
+
+  fn render_lua(self, has_cargo: bool, has_npm: bool) -> String {
+    let mut out = String::new();
+    out.push_str("return {\n");
+    self.push_shared_flags(&mut out, has_cargo, has_npm, "  ", " = true,\n", '\0');
+    out.push_str("  tasks = {\n");
+    out.push_str("    greet = {\n");
+    out.push_str("      commands = { \"echo \\\"Hello, World!\\\"\" },\n");
+    out.push_str("      description = \"Sample greet command\"\n");
+    out.push_str("    }\n");
+    out.push_str("  }\n");
+    out.push_str("}\n");
+    out
+  }
+
+  fn push_shared_flags(
+    self,
+    out: &mut String,
+    has_cargo: bool,
+    has_npm: bool,
+    prefix: &str,
+    suffix: &str,
+    separator: char,
+  ) {
+    if has_cargo {
+      out.push_str(prefix);
+      out.push_str("use_cargo");
+      out.push_str(suffix);
+    }
+    if has_npm {
+      out.push_str(prefix);
+      out.push_str("use_npm");
+      out.push_str(suffix);
+    }
+    if (has_cargo || has_npm) && separator != '\0' {
+      out.push(separator);
+    }
+  }
+}
+
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
   tag_name: String,
@@ -1341,15 +1427,20 @@ mod tests {
   use std::thread;
 
   #[test]
-  fn init_rejects_non_yaml_output_paths() {
-    let err = CliEntry::ensure_init_path_supported(std::path::Path::new("mk.toml")).unwrap_err();
-    assert!(err.to_string().contains("only writes YAML"));
+  fn init_rejects_unsupported_output_paths() {
+    let err = CliEntry::ensure_init_path_supported(std::path::Path::new("mk.txt")).unwrap_err();
+    assert!(err
+      .to_string()
+      .contains("Unsupported `mk init` output extension .txt"));
   }
 
   #[test]
-  fn init_accepts_yaml_output_paths() {
+  fn init_accepts_supported_output_paths() {
     assert!(CliEntry::ensure_init_path_supported(std::path::Path::new("tasks.yaml")).is_ok());
     assert!(CliEntry::ensure_init_path_supported(std::path::Path::new("tasks.yml")).is_ok());
+    assert!(CliEntry::ensure_init_path_supported(std::path::Path::new("mk.toml")).is_ok());
+    assert!(CliEntry::ensure_init_path_supported(std::path::Path::new("tasks.json")).is_ok());
+    assert!(CliEntry::ensure_init_path_supported(std::path::Path::new("tasks.lua")).is_ok());
   }
 
   #[test]

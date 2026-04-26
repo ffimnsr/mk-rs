@@ -3,7 +3,7 @@ mk is a powerful and flexible task runner designed to help you automate and mana
 Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
-  init         Initialize a sample tasks.yaml file in the current directory
+  init         Initialize a sample task config file in the current directory
   run          Run specific tasks [aliases: r]
   list         List all available tasks [aliases: ls]
   completion   Generate shell completions [aliases: comp, completions]

@@ -248,9 +248,84 @@ fn snapshot_init_yml() -> anyhow::Result<()> {
 }
 
 #[test]
-fn snapshot_init_toml_rejected() -> anyhow::Result<()> {
+fn snapshot_init_toml() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let output_path = temp_dir.path().join("mk.toml");
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("init")
+    .arg(output_path.to_utf8()?)
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = common::normalize_snapshot_text(
+    &String::from_utf8(output)?,
+    &[(output_path.to_utf8()?, "<OUTPUT_PATH>")],
+  );
+  assert_snapshot("init-toml.stdout.snap", &stdout)?;
+  let contents = fs::read_to_string(&output_path)?;
+  assert_snapshot(
+    "init-toml.contents.snap",
+    &common::normalize_snapshot_text(&contents, &[]),
+  )
+}
+
+#[test]
+fn snapshot_init_json() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_path = temp_dir.path().join("tasks.json");
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("init")
+    .arg(output_path.to_utf8()?)
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = common::normalize_snapshot_text(
+    &String::from_utf8(output)?,
+    &[(output_path.to_utf8()?, "<OUTPUT_PATH>")],
+  );
+  assert_snapshot("init-json.stdout.snap", &stdout)?;
+  let contents = fs::read_to_string(&output_path)?;
+  assert_snapshot(
+    "init-json.contents.snap",
+    &common::normalize_snapshot_text(&contents, &[]),
+  )
+}
+
+#[test]
+fn snapshot_init_lua() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_path = temp_dir.path().join("tasks.lua");
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("init")
+    .arg(output_path.to_utf8()?)
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = common::normalize_snapshot_text(
+    &String::from_utf8(output)?,
+    &[(output_path.to_utf8()?, "<OUTPUT_PATH>")],
+  );
+  assert_snapshot("init-lua.stdout.snap", &stdout)?;
+  let contents = fs::read_to_string(&output_path)?;
+  assert_snapshot(
+    "init-lua.contents.snap",
+    &common::normalize_snapshot_text(&contents, &[]),
+  )
+}
+
+#[test]
+fn snapshot_init_unsupported_extension() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_path = temp_dir.path().join("tasks.txt");
   let output = Command::new(cargo::cargo_bin!("mk"))
     .current_dir(temp_dir.path())
     .env_remove("RUST_BACKTRACE")
@@ -264,7 +339,7 @@ fn snapshot_init_toml_rejected() -> anyhow::Result<()> {
     .stderr
     .clone();
   assert_snapshot(
-    "init-toml.stderr.snap",
+    "init-unsupported.stderr.snap",
     &common::normalize_snapshot_text(&String::from_utf8(output)?, &[]),
   )
 }

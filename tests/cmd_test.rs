@@ -836,18 +836,18 @@ fn test_mk_18_dry_run_conflicts_with_json_events() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_mk_18_init_rejects_toml_output() -> anyhow::Result<()> {
+fn test_mk_18_init_rejects_unsupported_output() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
-  let output_path = temp_dir.path().join("mk.toml");
+  let output_path = temp_dir.path().join("mk.txt");
   let mut cmd = Command::new(cargo::cargo_bin!("mk"));
   let assert = cmd
     .current_dir(temp_dir.path())
     .arg("init")
     .arg(output_path.to_utf8()?)
     .assert();
-  assert
-    .failure()
-    .stderr(predicate::str::contains("only writes YAML sample configs"));
+  assert.failure().stderr(predicate::str::contains(
+    "Unsupported `mk init` output extension .txt",
+  ));
   assert!(!output_path.exists());
   Ok(())
 }
@@ -1406,6 +1406,201 @@ fn test_mk_28_env_file_content_invalidates_cache() -> anyhow::Result<()> {
   let marker = std::fs::read_to_string(&marker_file)?;
   assert_eq!(marker.lines().count(), 2);
   assert_eq!(std::fs::read_to_string(&output_file)?, "bar");
+  Ok(())
+}
+
+#[test]
+fn test_mk_28_cache_output_content_drift_invalidates_cache() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_file = temp_dir.path().join("output.txt");
+  let marker_file = temp_dir.path().join("marker.txt");
+  let shell = common::portable_test_shell();
+  let build_command = if cfg!(windows) {
+    "[System.IO.File]::WriteAllText('output.txt', 'fresh'); [System.IO.File]::AppendAllText('marker.txt', \"run`n\")"
+  } else {
+    "printf fresh > output.txt && echo run >> marker.txt"
+  };
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "output-drift-cache.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        outputs:
+          - output.txt
+        cache:
+          enabled: true
+        shell: {shell}
+        commands:
+          - command: {build_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::write(&output_file, "tampered")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert_eq!(marker.lines().count(), 2);
+  assert_eq!(std::fs::read_to_string(&output_file)?, "fresh");
+  Ok(())
+}
+
+#[test]
+fn test_mk_28_cache_missing_output_invalidates_cache() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_file = temp_dir.path().join("output.txt");
+  let marker_file = temp_dir.path().join("marker.txt");
+  let shell = common::portable_test_shell();
+  let build_command = if cfg!(windows) {
+    "[System.IO.File]::WriteAllText('output.txt', 'fresh'); [System.IO.File]::AppendAllText('marker.txt', \"run`n\")"
+  } else {
+    "printf fresh > output.txt && echo run >> marker.txt"
+  };
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "missing-output-cache.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        outputs:
+          - output.txt
+        cache:
+          enabled: true
+        shell: {shell}
+        commands:
+          - command: {build_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::remove_file(&output_file)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert_eq!(marker.lines().count(), 2);
+  assert!(output_file.exists());
+  Ok(())
+}
+
+#[test]
+fn test_mk_28_directory_input_changes_invalidate_cache() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let input_dir = temp_dir.path().join("input");
+  let nested_dir = input_dir.join("nested");
+  let marker_file = temp_dir.path().join("marker.txt");
+  std::fs::create_dir_all(&nested_dir)?;
+  std::fs::write(nested_dir.join("file.txt"), "one")?;
+
+  let shell = common::portable_test_shell();
+  let build_command = if cfg!(windows) {
+    "[System.IO.File]::WriteAllText('output.txt', 'fresh'); [System.IO.File]::AppendAllText('marker.txt', \"run`n\")"
+  } else {
+    "printf fresh > output.txt && echo run >> marker.txt"
+  };
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "directory-input-cache.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        inputs:
+          - input
+        outputs:
+          - output.txt
+        cache:
+          enabled: true
+        shell: {shell}
+        commands:
+          - command: {build_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::write(nested_dir.join("file.txt"), "two")?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::write(input_dir.join("added.txt"), "three")?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  std::fs::remove_file(input_dir.join("added.txt"))?;
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert_eq!(marker.lines().count(), 4);
   Ok(())
 }
 

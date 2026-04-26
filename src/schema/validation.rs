@@ -14,6 +14,7 @@ use super::{
   UseCargo,
   UseNpm,
 };
+use crate::schema::Precondition;
 use crate::secrets::{
   merge_optional_secret_settings,
   SecretBackend,
@@ -245,6 +246,17 @@ impl TaskRoot {
             Some(task_name),
             Some("inputs"),
             "Cached task depends_on other tasks but declares no inputs; dependency side effects may bypass cache invalidation",
+          );
+        }
+
+        if task.cache.as_ref().map(|cache| cache.enabled).unwrap_or(false)
+          && task.inputs.is_empty()
+          && task_uses_dynamic_runtime_inputs(task)
+        {
+          report.push_warning(
+            Some(task_name),
+            Some("inputs"),
+            "Cached task contains shell-derived or runtime-derived command inputs but declares no inputs; cache invalidation may miss external changes",
           );
         }
 
@@ -776,6 +788,87 @@ fn command_uses_task_outputs(command: &CommandRunner) -> bool {
   }
 }
 
+fn task_uses_dynamic_runtime_inputs(task: &super::TaskArgs) -> bool {
+  task.commands.iter().any(command_uses_dynamic_runtime_inputs)
+    || task
+      .preconditions
+      .iter()
+      .any(precondition_uses_dynamic_runtime_inputs)
+}
+
+fn command_uses_dynamic_runtime_inputs(command: &CommandRunner) -> bool {
+  match command {
+    CommandRunner::CommandRun(command) => contains_dynamic_runtime_fragment(command),
+    CommandRunner::LocalRun(local_run) => {
+      contains_dynamic_runtime_fragment(&local_run.command)
+        || local_run
+          .test
+          .as_ref()
+          .is_some_and(|test| contains_dynamic_runtime_fragment(test))
+    },
+    CommandRunner::ContainerRun(container_run) => {
+      contains_dynamic_runtime_fragment(&container_run.image)
+        || container_run
+          .container_command
+          .iter()
+          .any(|value| contains_dynamic_runtime_fragment(value))
+        || container_run
+          .mounted_paths
+          .iter()
+          .any(|value| contains_dynamic_runtime_fragment(value))
+    },
+    CommandRunner::ContainerBuild(container_build) => {
+      contains_dynamic_runtime_fragment(&container_build.container_build.image_name)
+        || contains_dynamic_runtime_fragment(&container_build.container_build.context)
+        || container_build
+          .container_build
+          .containerfile
+          .as_ref()
+          .is_some_and(|value| contains_dynamic_runtime_fragment(value))
+        || container_build
+          .container_build
+          .tags
+          .as_ref()
+          .is_some_and(|values| {
+            values
+              .iter()
+              .any(|value| contains_dynamic_runtime_fragment(value))
+          })
+        || container_build
+          .container_build
+          .build_args
+          .as_ref()
+          .is_some_and(|values| {
+            values
+              .iter()
+              .any(|value| contains_dynamic_runtime_fragment(value))
+          })
+        || container_build
+          .container_build
+          .labels
+          .as_ref()
+          .is_some_and(|values| {
+            values
+              .iter()
+              .any(|value| contains_dynamic_runtime_fragment(value))
+          })
+    },
+    CommandRunner::TaskRun(_) => false,
+  }
+}
+
+fn precondition_uses_dynamic_runtime_inputs(precondition: &Precondition) -> bool {
+  contains_dynamic_runtime_fragment(&precondition.command)
+}
+
+fn contains_dynamic_runtime_fragment(value: &str) -> bool {
+  value.contains("$(")
+    || value.contains('`')
+    || value.contains("MK_NOW")
+    || value.contains("MK_GIT_REVISION")
+    || value.contains("MK_GIT_REMOTE_ORIGIN")
+}
+
 fn has_default_containerfile(context_path: &Path) -> bool {
   context_path.join("Dockerfile").is_file() || context_path.join("Containerfile").is_file()
 }
@@ -1014,6 +1107,56 @@ mod tests {
       .issues
       .iter()
       .any(|issue| issue.field.as_deref() == Some("labels")));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_warns_for_cached_dynamic_command_without_inputs() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          outputs:
+            - output.txt
+          cache:
+            enabled: true
+          commands:
+            - command: echo $(git rev-parse HEAD) > output.txt
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_warning(
+      &report,
+      "inputs",
+      "Cached task contains shell-derived or runtime-derived command inputs but declares no inputs; cache invalidation may miss external changes"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_does_not_warn_for_cached_dynamic_command_with_inputs() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          inputs:
+            - .git/HEAD
+          outputs:
+            - output.txt
+          cache:
+            enabled: true
+          commands:
+            - command: echo $(git rev-parse HEAD) > output.txt
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!has_warning(
+      &report,
+      "inputs",
+      "Cached task contains shell-derived or runtime-derived command inputs but declares no inputs; cache invalidation may miss external changes"
+    ));
     Ok(())
   }
 }

@@ -11,6 +11,7 @@ use serde::{
   Serialize,
 };
 
+use std::fmt::Write as _;
 use std::io::BufRead as _;
 use std::sync::mpsc::{
   channel,
@@ -686,7 +687,7 @@ impl TaskArgs {
         .current_task_name
         .clone()
         .unwrap_or_else(|| "<task>".to_string()),
-      &stable_task_debug(self),
+      &stable_task_fingerprint(self),
       &env_vars,
       &inputs,
       &env_files,
@@ -721,7 +722,7 @@ impl TaskArgs {
         .current_task_name
         .clone()
         .unwrap_or_else(|| "<task>".to_string()),
-      &stable_task_debug(self),
+      &stable_task_fingerprint(self),
       &env_vars,
       &inputs,
       &env_files,
@@ -868,7 +869,7 @@ fn fingerprint_task_key(context: &TaskContext, task: &TaskArgs) -> String {
   })
 }
 
-fn stable_task_debug(task: &TaskArgs) -> String {
+fn stable_task_fingerprint(task: &TaskArgs) -> String {
   let mut labels: Vec<_> = task
     .labels
     .iter()
@@ -886,29 +887,217 @@ fn stable_task_debug(task: &TaskArgs) -> String {
   let mut secrets_path = task.secrets_path.clone();
   secrets_path.sort();
 
+  let mut out = String::new();
+  write_section(&mut out, "commands", stable_commands_fingerprint(&task.commands));
+  write_section(
+    &mut out,
+    "preconditions",
+    stable_preconditions_fingerprint(&task.preconditions),
+  );
+  write_section(
+    &mut out,
+    "depends_on",
+    stable_dependencies_fingerprint(&task.depends_on),
+  );
+  write_section(&mut out, "labels", stable_string_pairs_fingerprint(&labels));
+  write_section(&mut out, "description", json_value(&task.description));
+  write_section(
+    &mut out,
+    "environment",
+    stable_string_pairs_fingerprint(&environment),
+  );
+  write_section(&mut out, "env_file", stable_strings_fingerprint(&task.env_file));
+  write_section(
+    &mut out,
+    "secrets",
+    stable_secret_settings_fingerprint(task.normalized_secret_settings().as_ref()),
+  );
+  write_section(&mut out, "shell", stable_shell_fingerprint(task.shell.as_ref()));
+  write_section(
+    &mut out,
+    "execution_mode",
+    json_value(&execution_mode_name(&task.execution_mode())),
+  );
+  write_section(
+    &mut out,
+    "max_parallel",
+    json_option_usize(
+      task
+        .execution
+        .as_ref()
+        .and_then(|execution| execution.max_parallel),
+    ),
+  );
+  write_section(&mut out, "fail_fast", json_bool(task.fail_fast()));
+  write_section(&mut out, "cache_enabled", json_bool(task.cache_enabled()));
+  write_section(&mut out, "inputs", stable_strings_fingerprint(&task.inputs));
+  write_section(&mut out, "outputs", stable_strings_fingerprint(&task.outputs));
+  write_section(&mut out, "ignore_errors", json_option_bool(task.ignore_errors));
+  write_section(&mut out, "verbose", json_option_bool(task.verbose));
+  write_section(
+    &mut out,
+    "legacy_secrets_path",
+    stable_strings_fingerprint(&secrets_path),
+  );
+  out
+}
+
+fn write_section(out: &mut String, name: &str, value: String) {
+  let _ = write!(out, "{name}={value};");
+}
+
+fn stable_commands_fingerprint(commands: &[CommandRunner]) -> String {
+  let values = commands
+    .iter()
+    .map(stable_command_fingerprint)
+    .collect::<Vec<_>>();
+  json_value(&values)
+}
+
+fn stable_command_fingerprint(command: &CommandRunner) -> String {
+  match command {
+    CommandRunner::CommandRun(value) => format!("command_run:{}", json_value(value)),
+    CommandRunner::LocalRun(local_run) => format!(
+      "local_run:command={};shell={};test={};work_dir={};interactive={};retrigger={};ignore_errors={};save_output_as={};verbose={}",
+      json_value(&local_run.command),
+      stable_shell_fingerprint(local_run.shell.as_ref()),
+      json_option_string(local_run.test.as_ref()),
+      json_option_string(local_run.work_dir.as_ref()),
+      json_option_bool(local_run.interactive),
+      json_option_bool(local_run.retrigger),
+      json_option_bool(local_run.ignore_errors),
+      json_option_string(local_run.save_output_as.as_ref()),
+      json_option_bool(local_run.verbose),
+    ),
+    CommandRunner::ContainerRun(container_run) => format!(
+      "container_run:image={};container_command={};mounted_paths={};runtime={};ignore_errors={};verbose={}",
+      json_value(&container_run.image),
+      stable_strings_fingerprint(&container_run.container_command),
+      stable_strings_fingerprint(&container_run.mounted_paths),
+      json_option_string(container_run.runtime.as_ref().map(|runtime| runtime.name())),
+      json_option_bool(container_run.ignore_errors),
+      json_option_bool(container_run.verbose),
+    ),
+    CommandRunner::ContainerBuild(container_build) => format!(
+      "container_build:image_name={};context={};containerfile={};tags={};build_args={};labels={};sbom={};no_cache={};force_rm={};runtime={};verbose={}",
+      json_value(&container_build.container_build.image_name),
+      json_value(&container_build.container_build.context),
+      json_option_string(container_build.container_build.containerfile.as_ref()),
+      json_option_vec_strings(container_build.container_build.tags.as_ref()),
+      json_option_vec_strings(container_build.container_build.build_args.as_ref()),
+      json_option_vec_strings(container_build.container_build.labels.as_ref()),
+      json_bool(container_build.container_build.sbom),
+      json_bool(container_build.container_build.no_cache),
+      json_bool(container_build.container_build.force_rm),
+      json_option_string(container_build.container_build.runtime.as_ref().map(|runtime| runtime.name())),
+      json_option_bool(container_build.verbose),
+    ),
+    CommandRunner::TaskRun(task_run) => format!(
+      "task_run:task={};ignore_errors={};verbose={}",
+      json_value(&task_run.task),
+      json_option_bool(task_run.ignore_errors),
+      json_option_bool(task_run.verbose),
+    ),
+  }
+}
+
+fn stable_preconditions_fingerprint(preconditions: &[Precondition]) -> String {
+  let values = preconditions
+    .iter()
+    .map(|precondition| {
+      format!(
+        "command={};message={};shell={};work_dir={};verbose={}",
+        json_value(&precondition.command),
+        json_option_string(precondition.message.as_ref()),
+        stable_shell_fingerprint(precondition.shell.as_ref()),
+        json_option_string(precondition.work_dir.as_ref()),
+        json_option_bool(precondition.verbose),
+      )
+    })
+    .collect::<Vec<_>>();
+  json_value(&values)
+}
+
+fn stable_dependencies_fingerprint(dependencies: &[TaskDependency]) -> String {
+  let values = dependencies
+    .iter()
+    .map(|dependency| dependency.resolve_name().to_string())
+    .collect::<Vec<_>>();
+  json_value(&values)
+}
+
+fn stable_string_pairs_fingerprint(values: &[(String, String)]) -> String {
+  let values = values
+    .iter()
+    .map(|(key, value)| format!("{}={}", json_value(key), json_value(value)))
+    .collect::<Vec<_>>();
+  json_value(&values)
+}
+
+fn stable_strings_fingerprint(values: &[String]) -> String {
+  json_value(values)
+}
+
+fn stable_secret_settings_fingerprint(settings: Option<&SecretSettings>) -> String {
+  let Some(settings) = settings else {
+    return "null".to_string();
+  };
+
   format!(
-    "commands={:?};preconditions={:?};depends_on={:?};labels={:?};description={:?};environment={:?};env_file={:?};secrets_path={:?};vault_location={:?};keys_location={:?};key_name={:?};shell={:?};execution_mode={:?};max_parallel={:?};fail_fast={};cache_enabled={};inputs={:?};outputs={:?};ignore_errors={:?};verbose={:?}",
-    task.commands,
-    task.preconditions,
-    task.depends_on,
-    labels,
-    task.description,
-    environment,
-    task.env_file,
-    secrets_path,
-    task.vault_location,
-    task.keys_location,
-    task.key_name,
-    task.shell,
-    task.execution_mode(),
-    task.execution.as_ref().and_then(|execution| execution.max_parallel),
-    task.fail_fast(),
-    task.cache_enabled(),
-    task.inputs,
-    task.outputs,
-    task.ignore_errors,
-    task.verbose
+    "backend={};vault_location={};keys_location={};key_name={};gpg_key_id={};secrets_path={}",
+    json_option_string(settings.backend.as_ref().map(|backend| match backend {
+      crate::secrets::SecretBackend::BuiltInPgp => "built_in_pgp",
+      crate::secrets::SecretBackend::Gpg => "gpg",
+    })),
+    json_option_string(settings.vault_location.as_ref()),
+    json_option_string(settings.keys_location.as_ref()),
+    json_option_string(settings.key_name.as_ref()),
+    json_option_string(settings.gpg_key_id.as_ref()),
+    json_option_vec_strings(settings.secrets_path.as_ref()),
   )
+}
+
+fn stable_shell_fingerprint(shell: Option<&Shell>) -> String {
+  match shell {
+    None => "null".to_string(),
+    Some(Shell::String(command)) => format!("string:{}", json_value(command)),
+    Some(Shell::Shell(args)) => format!(
+      "shell:command={};args={}",
+      json_value(&args.command),
+      json_option_vec_strings(args.args.as_ref()),
+    ),
+  }
+}
+
+fn execution_mode_name(mode: &ExecutionMode) -> &'static str {
+  match mode {
+    ExecutionMode::Sequential => "sequential",
+    ExecutionMode::Parallel => "parallel",
+  }
+}
+
+fn json_value<T: Serialize + ?Sized>(value: &T) -> String {
+  serde_json::to_string(value).expect("task fingerprint serialization should succeed")
+}
+
+fn json_bool(value: bool) -> String {
+  json_value(&value)
+}
+
+fn json_option_bool(value: Option<bool>) -> String {
+  json_value(&value)
+}
+
+fn json_option_usize(value: Option<usize>) -> String {
+  json_value(&value)
+}
+
+fn json_option_string(value: Option<impl AsRef<str>>) -> String {
+  json_value(&value.as_ref().map(|value| value.as_ref().to_string()))
+}
+
+fn json_option_vec_strings(value: Option<&Vec<String>>) -> String {
+  json_value(&value.cloned())
 }
 
 #[cfg(test)]
@@ -1438,6 +1627,208 @@ mod test {
         .contains("Local commands with `retrigger: true` cannot be run in parallel"));
     }
 
+    Ok(())
+  }
+
+  fn parse_task_args(yaml: &str) -> anyhow::Result<Box<TaskArgs>> {
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+    match task {
+      Task::Task(task) => Ok(task),
+      Task::String(_) => anyhow::bail!("expected full task"),
+    }
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_ignores_map_insertion_order() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      labels:
+        b: two
+        a: one
+      environment:
+        BAR: two
+        FOO: one
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      labels:
+        a: one
+        b: two
+      environment:
+        FOO: one
+        BAR: two
+      "#,
+    )?;
+
+    assert_eq!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_treats_dependency_forms_equally() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      depends_on:
+        - build
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      depends_on:
+        - name: build
+      "#,
+    )?;
+
+    assert_eq!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_command_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo one
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo two
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_outputs_change() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      outputs:
+        - one.txt
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      outputs:
+        - two.txt
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_env_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      environment:
+        FOO: one
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      environment:
+        FOO: two
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_shell_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      shell: sh
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      shell: bash
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_execution_mode_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      execution:
+        mode: sequential
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      execution:
+        mode: parallel
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_secret_path_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      secrets:
+        backend: built_in_pgp
+        keys_location: ./.mk/keys
+        key_name: team
+        secrets_path:
+          - app/one
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      secrets:
+        backend: built_in_pgp
+        keys_location: ./.mk/keys
+        key_name: team
+        secrets_path:
+          - app/two
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
     Ok(())
   }
 }

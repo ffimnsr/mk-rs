@@ -88,7 +88,7 @@ Yet another simple task runner 🦀
 Usage: mk [OPTIONS] [TASK_NAME] [COMMAND]
 
 Commands:
-  init        Initialize a sample tasks.yaml file in the current directory
+  init        Initialize a sample task config file in the current directory
   run         Run specific tasks [aliases: r]
   list        List all available tasks [aliases: ls]
   completion  Generate shell completions [aliases: comp, completions]
@@ -121,7 +121,7 @@ mk run <task_name>
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
 When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, `mk.toml`, `tasks.toml`, `tasks.json`, `tasks.lua`, `.mk/tasks.toml`, `.mk/tasks.json`, and `.mk/tasks.lua`.
-`mk init` writes YAML sample configs only. Use `.yaml` or `.yml` output paths.
+`mk init` writes sample configs for `.yaml`, `.yml`, `.toml`, `.json`, and `.lua` output paths.
 
 Recent workflow features:
 
@@ -139,11 +139,13 @@ Cache hit only skips task command execution.
 
 - Dependencies still run before cache evaluation.
 - Preconditions still run before cache evaluation.
-- Cache validity only sees declared task state: task definition, environment, env files, secrets paths, declared `inputs`, and declared `outputs`.
+- Cache validity sees declared task state only: task definition, environment, env files, secrets paths, declared `inputs`, and current declared `outputs`.
+- Declared output content drift invalidates cache. External edits or deletions force task rerun even when inputs stay same.
+- Directory `inputs` recurse into child paths with deterministic traversal. Nested file edits, additions, and removals invalidate cache.
 - Cache validity does not infer hidden side effects from `depends_on`. If dependency output matters, declare that file in `inputs`.
+- Cache validity does not infer undeclared runtime reads such as `$(git rev-parse HEAD)`, backticks, git-derived container labels, or other shell-computed fragments. Declare those dependencies in `inputs` or `env_file`.
 - If `cache.enabled` is set with `depends_on` but no `inputs`, `mk validate` warns because stale cache hits are easy to create.
-
-Current limitation: `mk init` writes YAML templates only. If TOML/JSON/Lua remain first-class config entrypoints, format-specific `mk init` templates should be added later instead of relying on manual conversion.
+- If `cache.enabled` is set with dynamic shell-derived command inputs but no `inputs`, `mk validate` warns because cache invalidation may miss external changes.
 
 ### Task labels
 

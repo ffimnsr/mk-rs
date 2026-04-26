@@ -71,7 +71,6 @@ jobs:
           - stable-s390x
           - macos
           - win-msvc
-          - win-gnu
           - win32-msvc
         include:
           - build: stable-musl
@@ -120,10 +119,6 @@ jobs:
             os: windows-latest
             rust: nightly
             target: x86_64-pc-windows-msvc
-          - build: win-gnu
-            os: windows-latest
-            rust: nightly-x86_64-gnu
-            target: x86_64-pc-windows-gnu
           - build: win32-msvc
             os: windows-latest
             rust: nightly
@@ -134,14 +129,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           ci/ubuntu-install-packages
-      - name: Install packages (Windows GNU)
-        uses: msys2/setup-msys2@v2.31.0
-        if: matrix.os == 'windows-latest' && matrix.target == 'x86_64-pc-windows-gnu'
-        with:
-          msystem: UCRT64
-          update: true
-          install: git perl pkg-config mingw-w64-x86_64-toolchain mingw-w64-ucrt-x86_64-gcc openssl
-          path-type: inherit
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -170,11 +157,6 @@ jobs:
         if: matrix.target == ''
         run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
       - name: Build release binary and dependency crates (cross)
-        if: matrix.target != 'x86_64-pc-windows-gnu'
-        run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
-      - name: Build release binary and dependency crates (win-gnu)
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        shell: msys2 {0}
         run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
       - name: Strip release binary (macos)
         if: matrix.os == 'macos-latest'

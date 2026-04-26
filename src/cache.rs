@@ -126,7 +126,7 @@ pub fn expand_patterns_in_dir(base_dir: &Path, patterns: &[String]) -> anyhow::R
 
 pub fn compute_fingerprint(
   task_name: &str,
-  task_debug: &str,
+  task_fingerprint: &str,
   env_vars: &[(String, String)],
   inputs: &[PathBuf],
   env_files: &[PathBuf],
@@ -135,8 +135,7 @@ pub fn compute_fingerprint(
   let mut hasher = DefaultHasher::new();
 
   task_name.hash(&mut hasher);
-  task_debug.hash(&mut hasher);
-  outputs.hash(&mut hasher);
+  task_fingerprint.hash(&mut hasher);
 
   for (key, value) in env_vars {
     key.hash(&mut hasher);
@@ -153,6 +152,11 @@ pub fn compute_fingerprint(
     hash_path(path, &mut hasher)?;
   }
 
+  for path in outputs {
+    path.to_string_lossy().hash(&mut hasher);
+    hash_path(path, &mut hasher)?;
+  }
+
   Ok(format!("{:016x}", hasher.finish()))
 }
 
@@ -162,16 +166,85 @@ fn hash_path(path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
     return Ok(());
   }
 
-  let metadata = fs::metadata(path)?;
-  metadata.len().hash(hasher);
-
-  if metadata.is_file() {
-    let bytes = fs::read(path)?;
-    bytes.hash(hasher);
-  } else {
-    let modified = metadata.modified().ok();
-    format!("{modified:?}").hash(hasher);
-  }
+  hash_path_contents(path, path, hasher)?;
 
   Ok(())
+}
+
+fn hash_path_contents(root: &Path, path: &Path, hasher: &mut DefaultHasher) -> anyhow::Result<()> {
+  let metadata = fs::symlink_metadata(path)?;
+
+  if metadata.file_type().is_symlink() {
+    "symlink".hash(hasher);
+    fs::read_link(path)?.to_string_lossy().hash(hasher);
+    return Ok(());
+  }
+
+  if metadata.is_file() {
+    "file".hash(hasher);
+    metadata.len().hash(hasher);
+    let bytes = fs::read(path)?;
+    bytes.hash(hasher);
+    return Ok(());
+  }
+
+  if metadata.is_dir() {
+    "dir".hash(hasher);
+
+    let mut entries = fs::read_dir(path)?
+      .collect::<Result<Vec<_>, _>>()?
+      .into_iter()
+      .map(|entry| entry.path())
+      .collect::<Vec<_>>();
+    entries.sort();
+
+    for entry in entries {
+      let relative = entry.strip_prefix(root).unwrap_or(&entry);
+      relative.to_string_lossy().hash(hasher);
+      hash_path_contents(root, &entry, hasher)?;
+    }
+
+    return Ok(());
+  }
+
+  "other".hash(hasher);
+  metadata.len().hash(hasher);
+  Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use assert_fs::TempDir;
+
+  #[test]
+  fn test_compute_fingerprint_changes_when_output_content_changes() -> anyhow::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let output = temp_dir.path().join("output.txt");
+    fs::write(&output, "one")?;
+
+    let first = compute_fingerprint("build", "task", &[], &[], &[], std::slice::from_ref(&output))?;
+
+    fs::write(&output, "two")?;
+
+    let second = compute_fingerprint("build", "task", &[], &[], &[], &[output])?;
+    assert_ne!(first, second);
+    Ok(())
+  }
+
+  #[test]
+  fn test_compute_fingerprint_changes_when_directory_child_changes() -> anyhow::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let input_dir = temp_dir.path().join("input");
+    fs::create_dir_all(input_dir.join("nested"))?;
+    fs::write(input_dir.join("nested/file.txt"), "one")?;
+
+    let first = compute_fingerprint("build", "task", &[], std::slice::from_ref(&input_dir), &[], &[])?;
+
+    fs::write(input_dir.join("nested/file.txt"), "two")?;
+
+    let second = compute_fingerprint("build", "task", &[], &[input_dir], &[], &[])?;
+    assert_ne!(first, second);
+    Ok(())
+  }
 }
