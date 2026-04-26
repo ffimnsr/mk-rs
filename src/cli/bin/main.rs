@@ -10,6 +10,9 @@ mod cli_entry;
 /// The struct that represents the stored secrets
 mod secrets;
 
+/// Fuzzy task selector helpers
+mod task_selector;
+
 /// The main function
 fn main() -> anyhow::Result<()> {
   match run() {

@@ -1,0 +1,15 @@
+Run specific tasks
+
+Usage: mk run [OPTIONS] [TASK_NAME]
+
+Arguments:
+  [TASK_NAME]  The task name to run
+
+Options:
+      --dry-run         Print the resolved task plan without executing commands
+      --force           Bypass task cache and force execution
+      --json-events     Emit newline-delimited JSON execution events
+  -F, --fzf             Choose task with fuzzy finder before execution
+      --label <FILTER>  Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
+  -h, --help            Print help
+  -V, --version         Print version

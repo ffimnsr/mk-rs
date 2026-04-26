@@ -497,6 +497,8 @@ scripts/fuzz.sh fuzz_label_filter
 FUZZ_TIME=300 scripts/fuzz.sh all
 ```
 
+`mk run --fzf` opens a fuzzy task selector before execution. This is separate from command `interactive: true`, which controls stdin for command steps.
+
 ## What's on the roadmap?
 
 - [ ] Add lua script as config file
@@ -504,7 +506,7 @@ FUZZ_TIME=300 scripts/fuzz.sh all
 - [ ] Add proper documentation
 - [ ] Add support for cargo env
 - [x] Add support for trigger reload when on cargo run
-- [ ] Add fuzzy finder for tasks
+- [x] Add fuzzy finder for tasks
 - [ ] Add unit tests and benchmarks
 - [ ] Add support for npm scripts
 - [x] Add fuzzer scripts for code fuzzing

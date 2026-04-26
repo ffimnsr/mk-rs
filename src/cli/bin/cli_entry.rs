@@ -6,6 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::secrets::Secrets;
+use crate::task_selector::{
+  FuzzyTaskSelector,
+  TaskSelectorCandidate,
+};
 use anyhow::Context as _;
 use clap::{
   crate_authors,
@@ -110,6 +114,14 @@ enum Command {
 
     #[arg(long, help = "Emit newline-delimited JSON execution events")]
     json_events: bool,
+
+    #[arg(
+      short = 'F',
+      long = "fzf",
+      help = "Choose task with fuzzy finder before execution",
+      conflicts_with_all = ["task_name", "dry_run", "json_events"]
+    )]
+    fuzzy: bool,
 
     #[arg(
       long = "label",
@@ -430,10 +442,15 @@ impl CliEntry {
         dry_run,
         force,
         json_events,
+        fuzzy,
         labels,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
-        let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
+        let names = if *fuzzy {
+          vec![self.select_run_task(&filters)?]
+        } else {
+          self.resolve_run_tasks(task_name.as_deref(), &filters)?
+        };
         if *dry_run {
           for name in &names {
             self.print_plan(name, false)?;
@@ -601,6 +618,23 @@ impl CliEntry {
     Ok(matched)
   }
 
+  fn select_run_task(&self, filters: &[LabelFilter]) -> anyhow::Result<String> {
+    let candidates = self.task_selector_candidates(filters);
+
+    if candidates.is_empty() {
+      if filters.is_empty() {
+        anyhow::bail!("No tasks available to select");
+      }
+      anyhow::bail!("No tasks matched the given label filters");
+    }
+
+    if candidates.len() == 1 {
+      return Ok(candidates[0].name.clone());
+    }
+
+    FuzzyTaskSelector::select(&candidates)
+  }
+
   /// Run the specified tasks
   fn run_task(&self, task_name: &str, force: bool, json_events: bool) -> anyhow::Result<()> {
     assert!(!task_name.is_empty());
@@ -764,6 +798,20 @@ impl CliEntry {
         Task::Task(t) => matches_all(filters, &t.labels),
         // string shorthand tasks have no labels — never match a label filter
         Task::String(_) => false,
+      })
+      .collect()
+  }
+
+  fn task_selector_candidates(&self, filters: &[LabelFilter]) -> Vec<TaskSelectorCandidate> {
+    self
+      .filtered_tasks(filters)
+      .into_iter()
+      .map(|(name, task)| TaskSelectorCandidate {
+        name: name.to_owned(),
+        description: match task {
+          Task::Task(task) if !task.description.is_empty() => task.description.clone(),
+          _ => String::from("No description provided"),
+        },
       })
       .collect()
   }
@@ -1280,9 +1328,16 @@ mod tests {
     CliEntry,
     Command,
   };
+  use mk_lib::schema::{
+    Task,
+    TaskRoot,
+  };
   use std::io::Read as _;
   use std::net::TcpListener;
-  use std::sync::mpsc;
+  use std::sync::{
+    mpsc,
+    Arc,
+  };
   use std::thread;
 
   #[test]
@@ -1543,5 +1598,26 @@ mod tests {
   #[test]
   fn hydra_unknown_token_passes_through_unchanged() {
     assert_eq!(expand(&["mk", "run", "my-task"]), ["mk", "run", "my-task"]);
+  }
+
+  #[test]
+  fn task_selector_candidates_use_description_fallback() {
+    let mut task_root = TaskRoot::default();
+    task_root
+      .tasks
+      .insert(String::from("plain"), Task::String(String::from("echo plain")));
+    let cli = CliEntry {
+      args: Args {
+        config: String::from("tasks.yaml"),
+        task_name: None,
+        command: None,
+      },
+      task_root: Arc::new(task_root),
+    };
+
+    let candidates = cli.task_selector_candidates(&[]);
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].name, "plain");
+    assert_eq!(candidates[0].description, "No description provided");
   }
 }

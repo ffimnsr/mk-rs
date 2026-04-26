@@ -71,3 +71,12 @@ Instruction for items in this section:
   - Add README examples for `mk run --label kind=test`.
   - Document multiple label filters as AND.
   - Clarify task labels are separate from `container_build.labels`.
+
+## Task Selector
+
+- [x] Add fuzzy task selector to `mk run`
+  - Add `mk run --fzf` and `mk run -F`.
+  - Select one task with `fzf` first, then `sk`.
+  - Keep command `interactive: true` behavior unchanged.
+  - Allow `--label` filters to narrow selector candidates.
+  - Add integration tests for selection, fallback, missing backend, and cancel flow.

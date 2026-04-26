@@ -46,6 +46,15 @@ pub fn sh_path(path: &Path) -> String {
 }
 
 #[allow(dead_code)]
+pub fn portable_test_shell() -> &'static str {
+  if cfg!(windows) {
+    "powershell"
+  } else {
+    "bash"
+  }
+}
+
+#[allow(dead_code)]
 pub fn normalize_snapshot_text(text: &str, replacements: &[(&str, &str)]) -> String {
   let mut out = text.replace("\r\n", "\n");
   for (from, to) in replacements {

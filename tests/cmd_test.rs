@@ -80,6 +80,29 @@ fn setup_secrets_fixture(
   Ok((temp_dir, config_file_path, vault_dir, keys_dir))
 }
 
+#[cfg(unix)]
+fn write_fake_selector(
+  temp_dir: &TempDir,
+  program_name: &str,
+  script: &str,
+) -> anyhow::Result<std::path::PathBuf> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let path = temp_dir.path().join(program_name);
+  std::fs::write(&path, script)?;
+  std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+  Ok(path)
+}
+
+#[cfg(unix)]
+fn write_fake_sh(temp_dir: &TempDir) -> anyhow::Result<std::path::PathBuf> {
+  use std::os::unix::fs::symlink;
+
+  let path = temp_dir.path().join("sh");
+  symlink("/bin/sh", &path)?;
+  Ok(path)
+}
+
 #[test]
 fn test_mk_1() -> anyhow::Result<()> {
   let mut cmd = Command::new(cargo::cargo_bin!("mk"));
@@ -188,6 +211,356 @@ fn test_completion_task_candidates_respect_prefix_and_config() -> anyhow::Result
     .stdout(predicates::str::contains("build"))
     .stdout(predicates::str::contains("bundle"))
     .stdout(predicates::str::contains("lint").not());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_fzf_selects_task_from_fzf() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("selected.txt");
+  let capture_file = temp_dir.path().join("fzf-input.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    &format!(
+      "
+    tasks:
+      zebra:
+        description: Zebra task
+        commands:
+          - command: printf zebra > {}
+            verbose: false
+      alpha:
+        description: Alpha task
+        commands:
+          - command: printf alpha > {}
+            verbose: false
+    ",
+      common::sh_path(&marker_file),
+      common::sh_path(&marker_file)
+    ),
+  )?;
+  write_fake_selector(
+    &temp_dir,
+    "fzf",
+    &format!(
+      "#!/bin/sh\nwhile IFS= read -r line; do printf '%s\\n' \"$line\"; done > \"{}\"\nprintf 'zebra\\tZebra task\\n'\n",
+      common::sh_path(&capture_file)
+    ),
+  )?;
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&marker_file)?, "zebra");
+  assert_eq!(
+    std::fs::read_to_string(&capture_file)?,
+    "alpha\tAlpha task\nzebra\tZebra task\n"
+  );
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_fzf_filters_candidates_before_selection() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("selected.txt");
+  let capture_file = temp_dir.path().join("fzf-input.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        description: Build
+        labels:
+          area: ci
+        commands:
+          - command: printf build > {}
+            verbose: false
+      deploy:
+        description: Deploy
+        labels:
+          area: ci
+        commands:
+          - command: printf deploy > {}
+            verbose: false
+      lint:
+        description: Lint
+        commands:
+          - command: printf lint > {}
+            verbose: false
+    ",
+      common::sh_path(&marker_file),
+      common::sh_path(&marker_file),
+      common::sh_path(&marker_file)
+    ),
+  )?;
+  write_fake_selector(
+    &temp_dir,
+    "fzf",
+    &format!(
+      "#!/bin/sh\nwhile IFS= read -r line; do printf '%s\\n' \"$line\"; done > \"{}\"\nprintf 'build\\tBuild\\n'\n",
+      common::sh_path(&capture_file)
+    ),
+  )?;
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .arg("--label")
+    .arg("area=ci")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&marker_file)?, "build");
+  assert_eq!(
+    std::fs::read_to_string(&capture_file)?,
+    "build\tBuild\ndeploy\tDeploy\n"
+  );
+  Ok(())
+}
+
+#[test]
+fn test_run_fzf_single_candidate_does_not_require_backend() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("selected.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        description: Build
+        labels:
+          area: ci
+        commands:
+          - command: printf build > {}
+            verbose: false
+    ",
+      common::sh_path(&marker_file)
+    ),
+  )?;
+  let path = std::env::var("PATH").unwrap_or_default();
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .arg("--label")
+    .arg("area=ci")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&marker_file)?, "build");
+  Ok(())
+}
+
+#[test]
+fn test_run_fzf_reports_missing_label_match() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        labels:
+          area: ci
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .arg("--label")
+    .arg("area=dev")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "No tasks matched the given label filters",
+    ));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_fzf_falls_back_to_sk() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("selected.txt");
+  let capture_file = temp_dir.path().join("sk-input.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        description: Build
+        commands:
+          - command: printf build > {}
+            verbose: false
+      lint:
+        description: Lint
+        commands:
+          - command: printf lint > {}
+            verbose: false
+    ",
+      common::sh_path(&marker_file),
+      common::sh_path(&marker_file)
+    ),
+  )?;
+  write_fake_selector(
+    &temp_dir,
+    "sk",
+    &format!(
+      "#!/bin/sh\nwhile IFS= read -r line; do printf '%s\\n' \"$line\"; done > \"{}\"\nprintf 'lint\\tLint\\n'\n",
+      common::sh_path(&capture_file)
+    ),
+  )?;
+  write_fake_sh(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&marker_file)?, "lint");
+  assert_eq!(
+    std::fs::read_to_string(&capture_file)?,
+    "build\tBuild\nlint\tLint\n"
+  );
+  Ok(())
+}
+
+#[test]
+fn test_run_fzf_reports_missing_backend() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+      lint:
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+  write_fake_sh(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "No fuzzy finder found. Install fzf or skim (sk).",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_run_fzf_conflicts_with_task_name() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_hello_yaml(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("hello")
+    .arg("--fzf")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "the argument '[TASK_NAME]' cannot be used with '--fzf'",
+    ));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_fzf_cancel_returns_no_task_selected() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+      lint:
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+  write_fake_selector(&temp_dir, "fzf", "#!/bin/sh\nexit 130\n")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("--fzf")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("No task selected"));
 
   Ok(())
 }
@@ -980,11 +1353,18 @@ fn test_mk_28_env_file_content_invalidates_cache() -> anyhow::Result<()> {
   let output_file = temp_dir.path().join("output.txt");
   let marker_file = temp_dir.path().join("marker.txt");
   std::fs::write(&env_file, "# one\nFOO=bar\n")?;
+  let shell = common::portable_test_shell();
+  let build_command = if cfg!(windows) {
+    "[System.IO.File]::WriteAllText('output.txt', $env:FOO); [System.IO.File]::AppendAllText('marker.txt', \"run`n\")"
+  } else {
+    "printf '%s' \"$FOO\" > output.txt && echo run >> marker.txt"
+  };
 
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "env-cache.yaml",
-    "
+    &format!(
+      "
     tasks:
       build:
         env_file:
@@ -993,11 +1373,12 @@ fn test_mk_28_env_file_content_invalidates_cache() -> anyhow::Result<()> {
           - output.txt
         cache:
           enabled: true
-        shell: bash
+        shell: {shell}
         commands:
-          - command: printf '%s' \"$FOO\" > output.txt && echo run >> marker.txt
+          - command: {build_command}
             verbose: false
-    ",
+    "
+    ),
   )?;
 
   let mut first = Command::new(cargo::cargo_bin!("mk"));
@@ -1954,6 +2335,23 @@ fn test_mk_39_container_run_preserves_named_volumes() -> anyhow::Result<()> {
 fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let result_file = temp_dir.path().join("result.txt");
+  let shell = common::portable_test_shell();
+  let version_command = if cfg!(windows) {
+    "Write-Output '1.2.3'"
+  } else {
+    "printf '1.2.3\\n'"
+  };
+  let result_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.version }}}}|' + $env:IMAGE_TAG)",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s|%s' \"${{{{ outputs.version }}}}\" \"$IMAGE_TAG\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "outputs.yaml",
@@ -1961,17 +2359,16 @@ fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
       "
     tasks:
       build:
-        shell: bash
+        shell: {shell}
         environment:
           IMAGE_TAG: tag-${{{{ outputs.version }}}}
         commands:
-          - command: printf '1.2.3\\n'
+          - command: {version_command}
             save_output_as: version
             verbose: false
-          - command: printf '%s|%s' \"${{{{ outputs.version }}}}\" \"$IMAGE_TAG\" > {}
+          - command: {result_command}
             verbose: false
-    ",
-      common::sh_path(&result_file)
+    "
     ),
   )?;
 
@@ -1993,6 +2390,23 @@ fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
 fn test_mk_38_capture_multiline_output_trims_trailing_newlines() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let result_file = temp_dir.path().join("multiline.txt");
+  let shell = common::portable_test_shell();
+  let capture_command = if cfg!(windows) {
+    "[Console]::Write(\"line1`nline2`n`n\")"
+  } else {
+    "printf 'line1\\nline2\\n\\n'"
+  };
+  let result_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.block }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.block }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "multiline-output.yaml",
@@ -2000,16 +2414,15 @@ fn test_mk_38_capture_multiline_output_trims_trailing_newlines() -> anyhow::Resu
       "
     tasks:
       build:
-        shell: bash
+        shell: {shell}
         commands:
           - command: |
-              printf 'line1\\nline2\\n\\n'
+              {capture_command}
             save_output_as: block
             verbose: false
-          - command: printf '%s' \"${{{{ outputs.block }}}}\" > {}
+          - command: {result_command}
             verbose: false
-    ",
-      common::sh_path(&result_file)
+    "
     ),
   )?;
 
@@ -2067,6 +2480,39 @@ fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let parent_file = temp_dir.path().join("parent.txt");
   let child_file = temp_dir.path().join("child.txt");
+  let shell = common::portable_test_shell();
+  let parent_capture_command = if cfg!(windows) {
+    "Write-Output 'parent'"
+  } else {
+    "printf 'parent\\n'"
+  };
+  let child_capture_command = if cfg!(windows) {
+    "Write-Output 'child'"
+  } else {
+    "printf 'child\\n'"
+  };
+  let parent_write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.shared }}}}')",
+      common::sh_path(&parent_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.shared }}}}\" > {}",
+      common::sh_path(&parent_file)
+    )
+  };
+  let child_write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.shared }}}}')",
+      common::sh_path(&child_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.shared }}}}\" > {}",
+      common::sh_path(&child_file)
+    )
+  };
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "nested-output.yaml",
@@ -2074,25 +2520,23 @@ fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
       "
     tasks:
       root:
-        shell: bash
+        shell: {shell}
         commands:
-          - command: printf 'parent\\n'
+          - command: {parent_capture_command}
             save_output_as: shared
             verbose: false
           - task: child
-          - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
+          - command: {parent_write_command}
             verbose: false
       child:
-        shell: bash
+        shell: {shell}
         commands:
-          - command: printf 'child\\n'
+          - command: {child_capture_command}
             save_output_as: shared
             verbose: false
-          - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
+          - command: {child_write_command}
             verbose: false
-    ",
-      common::sh_path(&parent_file),
-      common::sh_path(&child_file)
+    "
     ),
   )?;
 
@@ -2661,7 +3105,7 @@ fn test_mk_55_secrets_commands_use_config_defaults() -> anyhow::Result<()> {
 #[test]
 fn test_mk_56_secrets_doctor_reports_config_and_sources() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
-  let config_file_path = common::setup_yaml(
+  common::setup_yaml(
     &temp_dir,
     "tasks.yaml",
     "
@@ -2691,10 +3135,8 @@ fn test_mk_56_secrets_doctor_reports_config_and_sources() -> anyhow::Result<()> 
     .arg("doctor")
     .assert()
     .success()
-    .stdout(predicates::str::contains(format!(
-      "Active config file: {}",
-      std::fs::canonicalize(&config_file_path)?.to_string_lossy()
-    )))
+    .stdout(predicates::str::contains("Active config file: "))
+    .stdout(predicates::str::is_match(r"Active config file: .*tasks\.yaml")?)
     .stdout(predicates::str::contains("Resolved backend: gpg"))
     .stdout(predicates::str::contains("Resolved backend source: vault-meta"))
     .stdout(predicates::str::contains("Resolved vault path source: root"))

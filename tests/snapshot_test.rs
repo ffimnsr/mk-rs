@@ -53,6 +53,19 @@ fn snapshot_list_help() -> anyhow::Result<()> {
 }
 
 #[test]
+fn snapshot_run_help() -> anyhow::Result<()> {
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("run")
+    .arg("--help")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  assert_snapshot("run-help.snap", &String::from_utf8(output)?)
+}
+
+#[test]
 fn snapshot_completion_help() -> anyhow::Result<()> {
   let output = Command::new(cargo::cargo_bin!("mk"))
     .arg("completion")

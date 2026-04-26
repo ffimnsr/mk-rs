@@ -207,6 +207,7 @@ Notes:
 
 - Multiple `--label` flags are combined as AND; all filters must match for a task to be selected.
 - `mk run --label` runs all matching tasks in deterministic sorted order.
+- `mk run --fzf` opens a fuzzy task selector before execution. This is task selection only; it is separate from command `interactive: true`, which controls stdin for command steps.
 - Task `labels` are distinct from `container_build.labels`, which are OCI image labels applied during a container build.
 - Label keys starting with `mk.` are reserved; `mk validate` warns if they are used.
 - `mk validate` also warns on empty label keys or empty label values.
@@ -776,7 +777,7 @@ FUZZ_TIME=300 scripts/fuzz.sh all
 - [ ] Add proper documentation
 - [ ] Add support for cargo env on mk-rs when running task on cargo project
 - [x] Add support for trigger reload when on cargo run
-- [ ] Add fuzzy finder for tasks
+- [x] Add fuzzy finder for tasks
 - [ ] Add more unit tests and benchmarks
 - [x] Add support for npm commands
 - [x] Add fuzzer scripts for code fuzzing
