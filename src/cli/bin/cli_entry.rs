@@ -179,6 +179,35 @@ pub(super) struct CliEntry {
 }
 
 impl CliEntry {
+  pub fn maybe_print_task_completion_from_env() -> anyhow::Result<bool> {
+    if env::var_os("MK_COMPLETE_TASKS").is_none() {
+      return Ok(false);
+    }
+
+    let prefix = env::var("MK_COMPLETE_PREFIX").ok();
+    let config = Self::completion_config_path()?;
+    let task_root = if config.exists() {
+      TaskRoot::from_file(&config)?
+    } else {
+      TaskRoot::default()
+    };
+
+    let mut names = task_root.tasks.keys().map(String::as_str).collect::<Vec<_>>();
+    names.sort_unstable();
+
+    for name in names {
+      if prefix
+        .as_deref()
+        .map(|prefix| name.starts_with(prefix))
+        .unwrap_or(true)
+      {
+        println!("{name}");
+      }
+    }
+
+    Ok(true)
+  }
+
   /// Create a new CLI entry
   pub fn new() -> anyhow::Result<Self> {
     let args = Self::parse_args();
@@ -334,6 +363,46 @@ impl CliEntry {
     } else {
       Ok(env::current_dir()?.join(config))
     }
+  }
+
+  fn completion_config_path() -> anyhow::Result<std::path::PathBuf> {
+    let mut config = env::var_os("MK_CONFIG")
+      .map(std::path::PathBuf::from)
+      .unwrap_or_else(|| std::path::PathBuf::from("tasks.yaml"));
+
+    let mut args = env::args_os();
+    let _program = args.next();
+    let mut expect_config_value = false;
+
+    for arg in args {
+      if expect_config_value {
+        config = std::path::PathBuf::from(arg);
+        expect_config_value = false;
+        continue;
+      }
+
+      if arg == "-c" || arg == "--config" {
+        expect_config_value = true;
+        continue;
+      }
+
+      let arg = arg.to_string_lossy();
+      if let Some(value) = arg.strip_prefix("--config=") {
+        config = std::path::PathBuf::from(value);
+      }
+    }
+
+    if !config.exists() && config == Path::new("tasks.yaml") {
+      for candidate in Self::default_config_candidates() {
+        let candidate = std::path::PathBuf::from(candidate);
+        if candidate.exists() {
+          config = candidate;
+          break;
+        }
+      }
+    }
+
+    Self::absolute_config_path(&config)
   }
 
   /// Run the CLI entry
@@ -766,9 +835,323 @@ impl CliEntry {
 
   fn write_completions(&self, shell: Shell) -> anyhow::Result<()> {
     let mut app = Args::command();
-    clap_complete::generate(shell, &mut app, "mk", &mut std::io::stdout().lock());
+    let mut output = Vec::new();
+    clap_complete::generate(shell, &mut app, "mk", &mut output);
+    let script = String::from_utf8(output).context("Generated completion script was not valid UTF-8")?;
+    print!("{}", Self::augment_completion_script(shell, &script));
 
     Ok(())
+  }
+
+  fn augment_completion_script(shell: Shell, script: &str) -> String {
+    match shell {
+      Shell::Bash => Self::augment_bash_completion(script),
+      Shell::Fish => Self::augment_fish_completion(script),
+      Shell::Zsh => Self::augment_zsh_completion(script),
+      _ => script.to_owned(),
+    }
+  }
+
+  fn augment_bash_completion(script: &str) -> String {
+    let static_script = script.replacen("_mk() {", "_mk_clap_static() {", 1);
+    format!(
+      r#"{static_script}
+
+__mk_complete_tasks() {{
+    local cur="$1"
+    local cmd="$2"
+    local -a config_args=()
+    local i=1
+
+    while (( i < COMP_CWORD )); do
+        local word="${{COMP_WORDS[i]}}"
+        case "$word" in
+            -c|--config)
+                if (( i + 1 < ${{#COMP_WORDS[@]}} )); then
+                    config_args+=("$word" "${{COMP_WORDS[i + 1]}}")
+                    ((i+=2))
+                    continue
+                fi
+                ;;
+            --config=*)
+                config_args+=("$word")
+                ;;
+        esac
+        ((i+=1))
+    done
+
+    MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$cur" "$cmd" "${{config_args[@]}}" 2>/dev/null
+}}
+
+__mk_should_complete_task() {{
+    local mode="top"
+    local expect_value=0
+    local i=1
+
+    while (( i < COMP_CWORD )); do
+        local word="${{COMP_WORDS[i]}}"
+
+        if (( expect_value )); then
+            expect_value=0
+            ((i+=1))
+            continue
+        fi
+
+        case "$mode" in
+            top)
+                case "$word" in
+                    -c|--config)
+                        expect_value=1
+                        ;;
+                    --config=*)
+                        ;;
+                    -h|--help|-V|--version)
+                        ;;
+                    run|r|plan)
+                        mode="$word"
+                        ;;
+                    init|list|ls|completion|comp|completions|validate|secrets|s|update|clean-cache|schema|help)
+                        return 1
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+            run|r)
+                case "$word" in
+                    --label)
+                        expect_value=1
+                        ;;
+                    --label=*|--dry-run|--force|--json-events|-h|--help|-V|--version)
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+            plan)
+                case "$word" in
+                    --label)
+                        expect_value=1
+                        ;;
+                    --label=*|--json|-h|--help|-V|--version)
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+        esac
+
+        ((i+=1))
+    done
+
+    return 0
+}}
+
+_mk() {{
+    _mk_clap_static "$@"
+
+    if __mk_should_complete_task; then
+        local cur="$2"
+        local cmd="${{COMP_WORDS[0]}}"
+        local candidate
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+        done < <(__mk_complete_tasks "$cur" "$cmd")
+    fi
+}}
+"#
+    )
+  }
+
+  fn augment_fish_completion(script: &str) -> String {
+    format!(
+      r#"{script}
+
+function __fish_mk_complete_tasks
+    set -l cmd (commandline -opc)
+    set -e cmd[1]
+
+    set -l current (commandline -ct)
+    set -l mode top
+    set -l expect_value 0
+    set -l config_args
+
+    for word in $cmd
+        if test $expect_value -eq 1
+            set config_args $config_args $word
+            set expect_value 0
+            continue
+        end
+
+        switch $mode
+            case top
+                switch $word
+                    case -c --config
+                        set config_args $config_args $word
+                        set expect_value 1
+                    case '--config=*'
+                        set config_args $config_args $word
+                    case -h --help -V --version
+                    case run r plan
+                        set mode $word
+                    case init list ls completion comp completions validate secrets s update clean-cache schema help
+                        return
+                    case '-*'
+                    case '*'
+                        return
+                end
+            case run r
+                switch $word
+                    case --label
+                        set expect_value 1
+                    case '--label=*' --dry-run --force --json-events -h --help -V --version
+                    case '-*'
+                    case '*'
+                        return
+                end
+            case plan
+                switch $word
+                    case --label
+                        set expect_value 1
+                    case '--label=*' --json -h --help -V --version
+                    case '-*'
+                    case '*'
+                        return
+                end
+        end
+    end
+
+    env MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$current" command mk $config_args 2>/dev/null
+end
+
+complete -c mk -f -a "(__fish_mk_complete_tasks)"
+"#
+    )
+  }
+
+  fn augment_zsh_completion(script: &str) -> String {
+    let static_script = script.replacen("_mk() {", "_mk_clap_static() {", 1);
+    format!(
+      r#"{static_script}
+
+function _mk_complete_tasks() {{
+    local cur="$1"
+    local -a config_args
+    local i=2
+
+    while (( i < CURRENT )); do
+        local word="${{words[i]}}"
+        case "$word" in
+            -c|--config)
+                if (( i + 1 <= $#words )); then
+                    config_args+=("$word" "${{words[i + 1]}}")
+                    ((i+=2))
+                    continue
+                fi
+                ;;
+            --config=*)
+                config_args+=("$word")
+                ;;
+        esac
+        ((i+=1))
+    done
+
+    MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$cur" "${{words[1]}}" "${{config_args[@]}}" 2>/dev/null
+}}
+
+function _mk_should_complete_task() {{
+    local mode="top"
+    local expect_value=0
+    local i=2
+
+    while (( i < CURRENT )); do
+        local word="${{words[i]}}"
+
+        if (( expect_value )); then
+            expect_value=0
+            ((i+=1))
+            continue
+        fi
+
+        case "$mode" in
+            top)
+                case "$word" in
+                    -c|--config)
+                        expect_value=1
+                        ;;
+                    --config=*)
+                        ;;
+                    -h|--help|-V|--version)
+                        ;;
+                    run|r|plan)
+                        mode="$word"
+                        ;;
+                    init|list|ls|completion|comp|completions|validate|secrets|s|update|clean-cache|schema|help)
+                        return 1
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+            run|r)
+                case "$word" in
+                    --label)
+                        expect_value=1
+                        ;;
+                    --label=*|--dry-run|--force|--json-events|-h|--help|-V|--version)
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+            plan)
+                case "$word" in
+                    --label)
+                        expect_value=1
+                        ;;
+                    --label=*|--json|-h|--help|-V|--version)
+                        ;;
+                    -*)
+                        ;;
+                    *)
+                        return 1
+                        ;;
+                esac
+                ;;
+        esac
+
+        ((i+=1))
+    done
+
+    return 0
+}}
+
+function _mk() {{
+    _mk_clap_static "$@"
+
+    if _mk_should_complete_task; then
+        local -a task_candidates
+        task_candidates=(${{(@f)$(_mk_complete_tasks "$PREFIX")}})
+        (( $#task_candidates )) && compadd -a task_candidates
+    fi
+}}
+"#
+    )
   }
 
   fn validate_config(&self, json: bool) -> anyhow::Result<()> {

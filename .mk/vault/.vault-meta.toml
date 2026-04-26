@@ -1,1 +1,2 @@
+backend = "gpg"
 gpg_key_id = "105AF578CF730F08"

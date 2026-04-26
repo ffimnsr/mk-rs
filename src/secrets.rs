@@ -197,7 +197,10 @@ pub fn read_vault_gpg_key_id(vault_location: &Path) -> Option<String> {
 }
 
 pub fn read_vault_backend(vault_location: &Path) -> Option<SecretBackend> {
-  read_vault_meta(vault_location)?.backend
+  let meta = read_vault_meta(vault_location)?;
+  meta
+    .backend
+    .or_else(|| meta.gpg_key_id.as_ref().map(|_| SecretBackend::Gpg))
 }
 
 /// Write (or overwrite) the vault's metadata file with the supplied settings.
@@ -285,15 +288,6 @@ pub fn resolve_secret_config(
 
   let vault_meta = read_vault_meta(&vault_location);
 
-  let default_backend = SecretBackend::BuiltInPgp;
-  let (backend_value, backend_source) = pick_setting(
-    cli_overrides.and_then(|settings| settings.backend.as_ref()),
-    task_settings.and_then(|settings| settings.backend.as_ref()),
-    root_settings.and_then(|settings| settings.backend.as_ref()),
-    vault_meta.as_ref().and_then(|meta| meta.backend.as_ref()),
-    &default_backend,
-  );
-
   let default_keys_location = default_keys_location();
   let default_keys_location_str = default_keys_location.to_string_lossy().to_string();
   let (keys_location, keys_location_source) = pick_setting(
@@ -349,10 +343,44 @@ pub fn resolve_secret_config(
       })
     });
 
+  let explicit_backend = cli_overrides
+    .and_then(|settings| settings.backend.clone())
+    .or_else(|| task_settings.and_then(|settings| settings.backend.clone()))
+    .or_else(|| root_settings.and_then(|settings| settings.backend.clone()))
+    .or_else(|| vault_meta.as_ref().and_then(|meta| meta.backend.clone()));
   let backend = infer_secret_backend(
-    Some(backend_value.clone()),
+    explicit_backend,
     gpg_key_id.as_ref().map(|(value, _)| value.as_str()),
   );
+  let backend_source = if cli_overrides
+    .and_then(|settings| settings.backend.as_ref())
+    .is_some()
+  {
+    SecretValueSource::Cli
+  } else if task_settings
+    .and_then(|settings| settings.backend.as_ref())
+    .is_some()
+  {
+    SecretValueSource::Task
+  } else if root_settings
+    .and_then(|settings| settings.backend.as_ref())
+    .is_some()
+  {
+    SecretValueSource::Root
+  } else if vault_meta
+    .as_ref()
+    .and_then(|meta| meta.backend.as_ref())
+    .is_some()
+  {
+    SecretValueSource::VaultMeta
+  } else if gpg_key_id.is_some() {
+    gpg_key_id
+      .as_ref()
+      .map(|(_, source)| *source)
+      .unwrap_or(SecretValueSource::Default)
+  } else {
+    SecretValueSource::Default
+  };
 
   SecretConfig {
     backend,
@@ -710,6 +738,23 @@ mod tests {
   }
 
   #[test]
+  fn test_read_vault_backend_infers_gpg_from_gpg_key_id() {
+    let dir = TempDir::new().unwrap();
+    write_vault_meta(
+      dir.path(),
+      &VaultMeta {
+        backend: None,
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("LEGACY_META_ID".to_string()),
+      },
+    )
+    .unwrap();
+
+    assert_eq!(read_vault_backend(dir.path()), Some(SecretBackend::Gpg));
+  }
+
+  #[test]
   fn test_verify_vault_accepts_existing_directory() {
     let dir = TempDir::new().unwrap();
 
@@ -825,6 +870,41 @@ mod tests {
     assert_eq!(config.backend, SecretBackend::Gpg);
     assert_eq!(config.backend_source, SecretValueSource::VaultMeta);
     assert_eq!(config.gpg_key_id.as_deref(), Some("META_ID"));
+  }
+
+  #[test]
+  fn test_secret_config_legacy_vault_metadata_gpg_key_id_implies_gpg_backend() {
+    let dir = TempDir::new().unwrap();
+    let vault_dir = dir.path().to_str().unwrap();
+    write_vault_meta(
+      dir.path(),
+      &VaultMeta {
+        backend: None,
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: Some("LEGACY_META_ID".to_string()),
+      },
+    )
+    .unwrap();
+
+    let config = resolve_secret_config(
+      Path::new("."),
+      Some(&SecretSettings {
+        backend: None,
+        vault_location: Some(vault_dir.to_string()),
+        keys_location: None,
+        key_name: None,
+        gpg_key_id: None,
+        secrets_path: None,
+      }),
+      None,
+      None,
+    );
+
+    assert_eq!(config.backend, SecretBackend::Gpg);
+    assert_eq!(config.backend_source, SecretValueSource::VaultMeta);
+    assert_eq!(config.gpg_key_id.as_deref(), Some("LEGACY_META_ID"));
+    assert_eq!(config.gpg_key_id_source, Some(SecretValueSource::VaultMeta));
   }
 
   #[test]

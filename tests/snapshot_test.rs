@@ -240,6 +240,8 @@ fn snapshot_init_toml_rejected() -> anyhow::Result<()> {
   let output_path = temp_dir.path().join("mk.toml");
   let output = Command::new(cargo::cargo_bin!("mk"))
     .current_dir(temp_dir.path())
+    .env_remove("RUST_BACKTRACE")
+    .env_remove("RUST_LIB_BACKTRACE")
     .arg("init")
     .arg(output_path.to_utf8()?)
     .assert()

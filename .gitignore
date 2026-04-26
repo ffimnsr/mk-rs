@@ -10,9 +10,9 @@
 /node_modules
 /hello.txt
 /test.env
-/.mk
 /.cargo
 /package.json
 /package-lock.json
 /node_modules
 /tmp
+/.codex

@@ -4,6 +4,7 @@ set -euo pipefail
 
 readonly PACKAGE_NAME="mk"
 readonly REMOTE_NAME="origin"
+readonly CHANGELOG_FILE="CHANGELOG.md"
 
 usage() {
   cat <<'EOF'
@@ -35,6 +36,12 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+append_section_entry() {
+  local section_name="$1"
+  local entry="$2"
+  printf -v "$section_name" '%s- %s\n' "${!section_name}" "$entry"
 }
 
 ensure_clean_worktree() {
@@ -146,11 +153,155 @@ update_lockfile_version() {
   mv "$tmp" Cargo.lock
 }
 
+previous_release_tag() {
+  git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true
+}
+
+render_changelog_group() {
+  local title="$1"
+  local content="$2"
+
+  [[ -n "$content" ]] || return 0
+
+  printf '### %s\n\n' "$title"
+  printf '%s\n' "$content"
+}
+
+update_changelog() {
+  local version="$1"
+  local release_date="$2"
+  local previous_tag="$3"
+  local log_range
+  local features=""
+  local fixes=""
+  local docs=""
+  local tests=""
+  local ci=""
+  local maintenance=""
+  local other=""
+  local entry_count=0
+  local conventional_commit_regex='^([[:alnum:]_-]+)(\([^)]+\))?(!)?:[[:space:]]*(.+)$'
+
+  if [[ -n "$previous_tag" ]]; then
+    log_range="${previous_tag}..HEAD"
+  else
+    log_range="HEAD"
+  fi
+
+  while IFS=$'\t' read -r commit_sha subject; do
+    local short_sha category message
+    [[ -n "$commit_sha" ]] || continue
+
+    short_sha="$(git rev-parse --short "$commit_sha")"
+    category="other"
+    message="$subject"
+
+    if [[ "$subject" =~ $conventional_commit_regex ]]; then
+      local commit_type
+      commit_type="${BASH_REMATCH[1]}"
+      message="${BASH_REMATCH[4]}"
+
+      case "$commit_type" in
+        feat)
+          category="features"
+          ;;
+        fix)
+          category="fixes"
+          ;;
+        docs)
+          category="docs"
+          ;;
+        test)
+          category="tests"
+          ;;
+        ci)
+          category="ci"
+          ;;
+        build|style|refactor|perf|chore)
+          category="maintenance"
+          ;;
+      esac
+    fi
+
+    case "$category" in
+      features)
+        append_section_entry features "${message} (\`${short_sha}\`)"
+        ;;
+      fixes)
+        append_section_entry fixes "${message} (\`${short_sha}\`)"
+        ;;
+      docs)
+        append_section_entry docs "${message} (\`${short_sha}\`)"
+        ;;
+      tests)
+        append_section_entry tests "${message} (\`${short_sha}\`)"
+        ;;
+      ci)
+        append_section_entry ci "${message} (\`${short_sha}\`)"
+        ;;
+      maintenance)
+        append_section_entry maintenance "${message} (\`${short_sha}\`)"
+        ;;
+      *)
+        append_section_entry other "${message} (\`${short_sha}\`)"
+        ;;
+    esac
+
+    ((entry_count += 1))
+  done < <(git log --reverse --format='%H%x09%s' "$log_range")
+
+  ((entry_count > 0)) || die "no commits found for changelog range: ${log_range}"
+
+  if [[ -f "$CHANGELOG_FILE" ]] && grep -Eq "^## ${version//./\\.}([[:space:]]|$)" "$CHANGELOG_FILE"; then
+    die "$CHANGELOG_FILE already contains an entry for version $version"
+  fi
+
+  local tmp existing_content
+  tmp="$(mktemp)"
+  existing_content=""
+
+  if [[ -f "$CHANGELOG_FILE" ]]; then
+    existing_content="$(
+      awk '
+        NR == 1 && $0 == "# Changelog" {
+          header = 1
+          next
+        }
+        header && !body_started && $0 == "" { next }
+        {
+          body_started = 1
+          print
+        }
+      ' "$CHANGELOG_FILE"
+    )"
+  fi
+
+  {
+    printf '# Changelog\n\n'
+    printf '## %s - %s\n\n' "$version" "$release_date"
+    render_changelog_group "Features" "$features"
+    render_changelog_group "Fixes" "$fixes"
+    render_changelog_group "Documentation" "$docs"
+    render_changelog_group "Tests" "$tests"
+    render_changelog_group "CI" "$ci"
+    render_changelog_group "Maintenance" "$maintenance"
+    render_changelog_group "Other Changes" "$other"
+
+    if [[ -n "$existing_content" ]]; then
+      printf '%s\n' "$existing_content"
+    fi
+  } >"$tmp"
+
+  mv "$tmp" "$CHANGELOG_FILE"
+}
+
 main() {
   local run_publish=1
   local run_push=1
   local version=""
   local bump_kind=""
+  local previous_tag=""
+  local release_date=""
 
   while (($# > 0)); do
     case "$1" in
@@ -193,6 +344,7 @@ main() {
 
   need_cmd awk
   need_cmd cargo
+  need_cmd date
   need_cmd git
   need_cmd mktemp
 
@@ -219,14 +371,18 @@ main() {
   git rev-parse --verify "refs/tags/$version" >/dev/null 2>&1 && die "tag '$version' already exists locally"
   git ls-remote --exit-code --tags "$REMOTE_NAME" "refs/tags/$version" >/dev/null 2>&1 && die "tag '$version' already exists on '$REMOTE_NAME'"
 
+  previous_tag="$(previous_release_tag)"
+  release_date="$(date +%Y-%m-%d)"
+
   update_manifest_version "$version"
   update_lockfile_version "$version"
+  update_changelog "$version" "$release_date" "$previous_tag"
 
   cargo fmt
   cargo test
   cargo clippy --all-targets --all-features -- -D warnings
 
-  git add Cargo.toml Cargo.lock
+  git add Cargo.toml Cargo.lock "$CHANGELOG_FILE"
   git commit -m "release: $version"
 
   cargo publish --dry-run

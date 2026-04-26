@@ -1,10 +1,18 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json
 
 tasks:
-  install-hooks:
+  install:
+    commands:
+      - command: cargo install --locked mk
+    description: Install mk
+  install-githooks:
     commands:
       - command: git config --local core.hooksPath .githooks
     description: Install git hooks
+  uninstall-githooks:
+    commands:
+      - command: git config --local --unset core.hooksPath
+    description: Uninstall git hooks
   run:
     commands:
       - command: cargo r
@@ -14,7 +22,7 @@ tasks:
       - command: cargo r
         retrigger: true
     description: Run the project and press R to manually restart it
-  fmt:
+  format:
     commands:
       - command: cargo fmt --all
     description: Format the project

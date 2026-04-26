@@ -213,7 +213,7 @@ Notes:
 
 ### Shell completion install examples
 
-Dynamic task-name completion is not implemented yet. Static shell completion for subcommands and flags is available now.
+Task-name completion is dynamic for Bash, Zsh, and Fish: generated completion scripts call back into `mk` and read task names from the active config file. PowerShell and Elvish currently keep the static Clap-generated behavior.
 
 ```bash
 # Bash: generate completion and load it from ~/.bashrc

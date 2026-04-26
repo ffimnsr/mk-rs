@@ -142,6 +142,57 @@ fn test_mk_4() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_completion_bash_includes_dynamic_task_hook() -> anyhow::Result<()> {
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("completion")
+    .arg("bash")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("MK_COMPLETE_TASKS=1"))
+    .stdout(predicates::str::contains("__mk_should_complete_task"));
+  Ok(())
+}
+
+#[test]
+fn test_completion_task_candidates_respect_prefix_and_config() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+      bundle:
+        commands:
+          - command: echo bundle
+            verbose: false
+      lint:
+        commands:
+          - command: echo lint
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("MK_COMPLETE_TASKS", "1")
+    .env("MK_COMPLETE_PREFIX", "bu")
+    .arg("-c")
+    .arg(&config_file_path)
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("build"))
+    .stdout(predicates::str::contains("bundle"))
+    .stdout(predicates::str::contains("lint").not());
+
+  Ok(())
+}
+
+#[test]
 fn test_mk_5() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_hello_yaml(&temp_dir)?;

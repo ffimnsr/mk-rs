@@ -111,7 +111,9 @@ pub(crate) fn expand_home_path(value: &str) -> Option<PathBuf> {
 fn home_dir() -> Option<PathBuf> {
   #[cfg(windows)]
   {
-    std::env::var_os("USERPROFILE").map(PathBuf::from)
+    std::env::var_os("HOME")
+      .or_else(|| std::env::var_os("USERPROFILE"))
+      .map(PathBuf::from)
   }
 
   #[cfg(not(windows))]

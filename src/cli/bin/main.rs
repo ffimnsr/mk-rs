@@ -22,6 +22,10 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn run() -> anyhow::Result<()> {
+  if CliEntry::maybe_print_task_completion_from_env()? {
+    return Ok(());
+  }
+
   let cli = CliEntry::new()?;
   cli.run()
 }
