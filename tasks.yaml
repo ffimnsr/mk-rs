@@ -135,6 +135,19 @@ tasks:
           --keep-only 'src/*' \
           -o coverage/tests.lcov
     description: Generate lcov coverage report
+  cov_to_json:
+    commands:
+      - rm -rf target/coverage/tests.json
+      - |
+        grcov ./target/debug/coverage/ \
+          --binary-path ./target/debug/ \
+          -s . \
+          -t covdir \
+          --branch \
+          --ignore-not-existing \
+          --keep-only 'src/*' \
+          -o coverage/tests.json
+    description: Generate recursive JSON coverage report
   python:
     commands:
       - command: ls -lah
