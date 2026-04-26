@@ -340,7 +340,7 @@ fn test_run_fzf_filters_candidates_before_selection() -> anyhow::Result<()> {
   assert_eq!(std::fs::read_to_string(&marker_file)?, "build");
   assert_eq!(
     std::fs::read_to_string(&capture_file)?,
-    "build\tBuild\ndeploy\tDeploy\n"
+    "build \tBuild\ndeploy\tDeploy\n"
   );
   Ok(())
 }
@@ -468,7 +468,7 @@ fn test_run_fzf_falls_back_to_sk() -> anyhow::Result<()> {
   assert_eq!(std::fs::read_to_string(&marker_file)?, "lint");
   assert_eq!(
     std::fs::read_to_string(&capture_file)?,
-    "build\tBuild\nlint\tLint\n"
+    "build\tBuild\nlint \tLint\n"
   );
   Ok(())
 }

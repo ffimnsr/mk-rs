@@ -36,6 +36,7 @@ pub(crate) struct FuzzyTaskSelector;
 impl FuzzyTaskSelector {
   pub(crate) fn select(candidates: &[TaskSelectorCandidate]) -> anyhow::Result<String> {
     let backend = detect_backend()?;
+    let lines = format_candidates(candidates);
     let mut child = Command::new(backend.command())
       .args(backend.args())
       .stdin(Stdio::piped())
@@ -48,8 +49,8 @@ impl FuzzyTaskSelector {
         .stdin
         .take()
         .with_context(|| format!("Failed to open stdin for fuzzy finder `{}`", backend.command()))?;
-      for candidate in candidates {
-        writeln!(stdin, "{}\t{}", candidate.name, candidate.description)
+      for line in lines {
+        writeln!(stdin, "{line}")
           .with_context(|| format!("Failed to write task list to `{}`", backend.command()))?;
       }
     }
@@ -78,6 +79,25 @@ fn detect_backend() -> anyhow::Result<Backend> {
   anyhow::bail!("No fuzzy finder found. Install fzf or skim (sk).");
 }
 
+fn format_candidates(candidates: &[TaskSelectorCandidate]) -> Vec<String> {
+  let width = candidates
+    .iter()
+    .map(|candidate| candidate.name.chars().count())
+    .max()
+    .unwrap_or(0);
+
+  candidates
+    .iter()
+    .map(|candidate| {
+      format!(
+        "{name:<width$}\t{description}",
+        name = candidate.name,
+        description = candidate.description,
+      )
+    })
+    .collect()
+}
+
 fn parse_selection(stdout: &str) -> Option<String> {
   let line = stdout.lines().find(|line| !line.trim().is_empty())?;
   let name = line.split_once('\t').map(|(name, _)| name).unwrap_or(line).trim();
@@ -91,14 +111,16 @@ fn parse_selection(stdout: &str) -> Option<String> {
 mod tests {
   use super::{
     detect_backend,
+    format_candidates,
     parse_selection,
     Backend,
+    TaskSelectorCandidate,
   };
 
   #[test]
   fn parse_selection_reads_first_tsv_column() {
     assert_eq!(
-      parse_selection("build\tBuild project\n"),
+      parse_selection("build    \tBuild project\n"),
       Some(String::from("build"))
     );
   }
@@ -106,6 +128,28 @@ mod tests {
   #[test]
   fn parse_selection_rejects_empty_output() {
     assert_eq!(parse_selection("\n"), None);
+  }
+
+  #[test]
+  fn format_candidates_aligns_description_column() {
+    let candidates = vec![
+      TaskSelectorCandidate {
+        name: String::from("lint"),
+        description: String::from("Lint project"),
+      },
+      TaskSelectorCandidate {
+        name: String::from("uninstall-githooks"),
+        description: String::from("Uninstall git hooks"),
+      },
+    ];
+
+    assert_eq!(
+      format_candidates(&candidates),
+      vec![
+        String::from("lint              \tLint project"),
+        String::from("uninstall-githooks\tUninstall git hooks"),
+      ]
+    );
   }
 
   #[cfg(unix)]
