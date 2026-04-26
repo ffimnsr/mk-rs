@@ -13,19 +13,25 @@ use which::which;
 pub enum ContainerRuntime {
   Auto,
   Docker,
+  Nerdctl,
   Podman,
 }
 
 impl ContainerRuntime {
   pub fn resolve(runtime: Option<&ContainerRuntime>) -> anyhow::Result<PathBuf> {
     match runtime.unwrap_or(&ContainerRuntime::Auto) {
-      ContainerRuntime::Auto => which("docker").or_else(|_| which("podman")).map_err(|_| {
-        anyhow::anyhow!(
-          "No container runtime found. Install Docker or Podman and ensure it is available in PATH."
-        )
-      }),
+      ContainerRuntime::Auto => which("docker")
+        .or_else(|_| which("nerdctl"))
+        .or_else(|_| which("podman"))
+        .map_err(|_| {
+          anyhow::anyhow!(
+            "No container runtime found. Install Docker, nerdctl, or Podman and ensure one is available in PATH."
+          )
+        }),
       ContainerRuntime::Docker => which("docker")
         .map_err(|_| anyhow::anyhow!("Docker not found. Install Docker and ensure it is available in PATH.")),
+      ContainerRuntime::Nerdctl => which("nerdctl")
+        .map_err(|_| anyhow::anyhow!("nerdctl not found. Install nerdctl and ensure it is available in PATH.")),
       ContainerRuntime::Podman => which("podman")
         .map_err(|_| anyhow::anyhow!("Podman not found. Install Podman and ensure it is available in PATH.")),
     }
@@ -35,6 +41,7 @@ impl ContainerRuntime {
     match self {
       ContainerRuntime::Auto => "auto",
       ContainerRuntime::Docker => "docker",
+      ContainerRuntime::Nerdctl => "nerdctl",
       ContainerRuntime::Podman => "podman",
     }
   }

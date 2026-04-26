@@ -410,43 +410,27 @@ tasks:
       - command: git diff-index --quiet --exit-code HEAD --
       - command: cargo c
     commands:
-      - command: |
-          latest_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
-          podman build \
-            --sbom=true \
-            --label org.opencontainers.image.created=$(date +%Y-%m-%dT%H:%M:%S%z) \
-            --label org.opencontainers.image.authors=gh:@ffimnsr \
-            --label org.opencontainers.image.description="$name $latest_version" \
-            --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
-            --label org.opencontainers.image.source=$(git remote get-url origin) \
-            --label org.opencontainers.image.title=$name \
-            --label org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs \
-            --label org.opencontainers.image.version=$latest_version \
-            -f Containerfile \
-            -t ghcr.io/ffimnsr/$name-rs:$latest_version \
-            -t ghcr.io/ffimnsr/$name-rs:latest .
-    description: Build the container image
-  pack_2:
-    preconditions:
-      - command: cargo c
-    commands:
       - container_build:
           image_name: ghcr.io/ffimnsr/mk-rs
           context: .
+          runtime: auto
           tags:
             - latest
+            - ${{ env.VERSION }}
           sbom: true
           labels:
             - org.opencontainers.image.created=MK_NOW
             - org.opencontainers.image.authors=gh:@ffimnsr
-            - org.opencontainers.image.description=mk-rs
+            - org.opencontainers.image.description=${{ env.DESCRIPTION }}
             - org.opencontainers.image.revision=MK_GIT_REVISION
             - org.opencontainers.image.source=MK_GIT_REMOTE_ORIGIN
             - org.opencontainers.image.title=mk-rs
             - org.opencontainers.image.url=https://github.com/ffimnsr/mk-rs
-            - org.opencontainers.image.version=latest
+            - org.opencontainers.image.version=${{ env.VERSION }}
     description: Build the container image
+    environment:
+      VERSION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+      DESCRIPTION: $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].description')
   docs:
     commands:
       - command: docsify serve docs

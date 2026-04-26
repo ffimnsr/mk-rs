@@ -175,7 +175,23 @@ fn path_for_config(base_dir: &Path, path: &Path) -> String {
     }
   }
 
+  if let Some(relative) = canonical_relative_path(base_dir, path) {
+    let rendered = relative.to_string_lossy().replace('\\', "/");
+    if !rendered.is_empty() {
+      return rendered;
+    }
+  }
+
   path.to_string_lossy().replace('\\', "/")
+}
+
+fn canonical_relative_path(base_dir: &Path, path: &Path) -> Option<std::path::PathBuf> {
+  let canonical_base = fs::canonicalize(base_dir).ok()?;
+  let canonical_path = fs::canonicalize(path).ok()?;
+  canonical_path
+    .strip_prefix(canonical_base)
+    .ok()
+    .map(std::path::Path::to_path_buf)
 }
 
 fn update_yaml_config(config_path: &Path, secrets: &SecretSettings) -> anyhow::Result<()> {

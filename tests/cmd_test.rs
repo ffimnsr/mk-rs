@@ -993,6 +993,7 @@ fn test_mk_28_env_file_content_invalidates_cache() -> anyhow::Result<()> {
           - output.txt
         cache:
           enabled: true
+        shell: bash
         commands:
           - command: printf '%s' \"$FOO\" > output.txt && echo run >> marker.txt
             verbose: false
@@ -1725,7 +1726,147 @@ fn test_mk_35_container_run_resolves_relative_mount_host_paths_from_config_dir()
 
 #[cfg(unix)]
 #[test]
-fn test_mk_36_container_run_preserves_named_volumes() -> anyhow::Result<()> {
+fn test_mk_36_container_build_supports_explicit_nerdctl_runtime() -> anyhow::Result<()> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let temp_dir = TempDir::new()?;
+  let nerdctl_path = temp_dir.path().join("nerdctl");
+  let marker_file = temp_dir.path().join("nerdctl-build-args.txt");
+  std::fs::write(temp_dir.path().join("Containerfile"), "FROM scratch\n")?;
+
+  std::fs::write(
+    &nerdctl_path,
+    format!(
+      "#!/bin/sh\nprintf '%s\\n' \"$0 $*\" > {}\n",
+      marker_file.to_string_lossy()
+    ),
+  )?;
+  std::fs::set_permissions(&nerdctl_path, std::fs::Permissions::from_mode(0o755))?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      image:
+        commands:
+          - container_build:
+              image_name: example/test
+              context: .
+              runtime: nerdctl
+    ",
+  )?;
+
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("image")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert!(
+    marker.contains("nerdctl build"),
+    "expected nerdctl runtime, got: {}",
+    marker
+  );
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_37_container_build_auto_falls_back_to_nerdctl() -> anyhow::Result<()> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let temp_dir = TempDir::new()?;
+  let nerdctl_path = temp_dir.path().join("nerdctl");
+  let marker_file = temp_dir.path().join("nerdctl-auto-build-args.txt");
+  std::fs::write(temp_dir.path().join("Containerfile"), "FROM scratch\n")?;
+
+  std::fs::write(
+    &nerdctl_path,
+    format!(
+      "#!/bin/sh\nprintf '%s\\n' \"$0 $*\" > {}\n",
+      marker_file.to_string_lossy()
+    ),
+  )?;
+  std::fs::set_permissions(&nerdctl_path, std::fs::Permissions::from_mode(0o755))?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      image:
+        commands:
+          - container_build:
+              image_name: example/test
+              context: .
+    ",
+  )?;
+
+  let path = format!("{}", temp_dir.path().to_string_lossy(),);
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("image")
+    .assert()
+    .success();
+
+  let marker = std::fs::read_to_string(&marker_file)?;
+  assert!(
+    marker.contains("nerdctl build"),
+    "expected auto runtime to use nerdctl, got: {}",
+    marker
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_38_repo_pack_task_uses_native_container_build() -> anyhow::Result<()> {
+  let repo_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(repo_dir)
+    .arg("-c")
+    .arg(repo_dir.join("tasks.yaml"))
+    .arg("plan")
+    .arg("pack")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("\"type\": \"container_build\""))
+    .stdout(predicates::str::contains("\"runtime\": \"auto\""))
+    .stdout(predicates::str::contains(
+      "\"image_name\": \"ghcr.io/ffimnsr/mk-rs\"",
+    ))
+    .stdout(predicates::str::contains("\"tags\": ["))
+    .stdout(predicates::str::contains("\"${{ env.VERSION }}\""));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_39_container_run_preserves_named_volumes() -> anyhow::Result<()> {
   use std::os::unix::fs::PermissionsExt as _;
 
   let temp_dir = TempDir::new()?;
@@ -1820,6 +1961,7 @@ fn test_mk_37_save_and_reuse_command_output() -> anyhow::Result<()> {
       "
     tasks:
       build:
+        shell: bash
         environment:
           IMAGE_TAG: tag-${{{{ outputs.version }}}}
         commands:
@@ -1858,6 +2000,7 @@ fn test_mk_38_capture_multiline_output_trims_trailing_newlines() -> anyhow::Resu
       "
     tasks:
       build:
+        shell: bash
         commands:
           - command: |
               printf 'line1\\nline2\\n\\n'
@@ -1931,6 +2074,7 @@ fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
       "
     tasks:
       root:
+        shell: bash
         commands:
           - command: printf 'parent\\n'
             save_output_as: shared
@@ -1939,6 +2083,7 @@ fn test_mk_40_nested_tasks_have_isolated_outputs() -> anyhow::Result<()> {
           - command: printf '%s' \"${{{{ outputs.shared }}}}\" > {}
             verbose: false
       child:
+        shell: bash
         commands:
           - command: printf 'child\\n'
             save_output_as: shared
@@ -2547,7 +2692,8 @@ fn test_mk_56_secrets_doctor_reports_config_and_sources() -> anyhow::Result<()> 
     .assert()
     .success()
     .stdout(predicates::str::contains(format!(
-      "Active config file: {config_file_path}"
+      "Active config file: {}",
+      std::fs::canonicalize(&config_file_path)?.to_string_lossy()
     )))
     .stdout(predicates::str::contains("Resolved backend: gpg"))
     .stdout(predicates::str::contains("Resolved backend source: vault-meta"))

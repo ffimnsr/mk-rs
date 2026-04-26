@@ -186,6 +186,7 @@
       "enum": [
         "auto",
         "docker",
+        "nerdctl",
         "podman"
       ],
       "type": "string"

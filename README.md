@@ -130,7 +130,7 @@ Recent workflow features:
 - `mk run <task> --json-events` emits newline-delimited JSON task and command events.
 - Tasks can opt into incremental caching with `inputs`, `outputs`, and `cache.enabled`.
 - Cached tasks that depend on other tasks should declare dependency-produced files in `inputs` so cache invalidation sees dependency side effects.
-- Container commands can select `runtime: docker|podman|auto`.
+- Container commands can select `runtime: docker|nerdctl|podman|auto`.
 - Local `command:` steps can save stdout with `save_output_as` and reuse it later via `${{ outputs.NAME }}`.
 
 ### Cache semantics
@@ -785,7 +785,6 @@ FUZZ_TIME=300 scripts/fuzz.sh all
 - [ ] Expand Windows and macOS test coverage and polish platform-specific behavior
 - [x] Make use of labels
 - [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
-- [ ] Support for lima and nerdctrl
 - [ ] There's still a lot of unknown, if you found a bug please report.
 
 ## License

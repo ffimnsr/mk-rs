@@ -646,7 +646,7 @@ fn collect_secret_paths(vault_root: &Path, dir: &Path, secret_paths: &mut Vec<St
         vault_root
       )
     })?;
-    secret_paths.push(relative.to_utf8().unwrap_or("<non-utf8-path>").to_string());
+    secret_paths.push(render_secret_path(relative));
   }
 
   for entry in fs::read_dir(dir)?.filter_map(Result::ok) {
@@ -657,6 +657,14 @@ fn collect_secret_paths(vault_root: &Path, dir: &Path, secret_paths: &mut Vec<St
   }
 
   Ok(())
+}
+
+fn render_secret_path(path: &Path) -> String {
+  path
+    .components()
+    .map(|component| component.as_os_str().to_string_lossy().into_owned())
+    .collect::<Vec<_>>()
+    .join("/")
 }
 
 #[cfg(test)]
@@ -721,6 +729,12 @@ mod tests {
     .unwrap();
 
     assert_eq!(read_vault_gpg_key_id(vault_dir), Some("SECOND_KEY".to_string()));
+  }
+
+  #[test]
+  fn test_render_secret_path_uses_forward_slashes() {
+    let path = Path::new("app").join("token");
+    assert_eq!(render_secret_path(&path), "app/token");
   }
 
   #[test]
