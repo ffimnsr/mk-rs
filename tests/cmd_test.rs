@@ -103,6 +103,55 @@ fn write_fake_sh(temp_dir: &TempDir) -> anyhow::Result<std::path::PathBuf> {
   Ok(path)
 }
 
+#[cfg(unix)]
+fn write_fake_ssh(temp_dir: &TempDir) -> anyhow::Result<std::path::PathBuf> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let path = temp_dir.path().join("ssh");
+  std::fs::write(
+    &path,
+    r#"#!/bin/sh
+if [ -n "$MK_TEST_SSH_ARGS_FILE" ]; then
+  printf '%s\n' "$@" > "$MK_TEST_SSH_ARGS_FILE"
+fi
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -T|-tt)
+      shift
+      ;;
+    -p|-i|-o)
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+target="$1"
+shift
+remote_command="$1"
+
+if [ -z "$target" ] || [ -z "$remote_command" ]; then
+  echo "fake ssh missing target or command" >&2
+  exit 99
+fi
+
+exec /bin/sh -c "$remote_command"
+"#,
+  )?;
+  std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+  Ok(path)
+}
+
 #[test]
 fn test_mk_1() -> anyhow::Result<()> {
   let mut cmd = Command::new(cargo::cargo_bin!("mk"));
@@ -473,6 +522,7 @@ fn test_run_fzf_falls_back_to_sk() -> anyhow::Result<()> {
   Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn test_run_fzf_reports_missing_backend() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
@@ -2876,8 +2926,104 @@ fn test_mk_44_validate_rejects_parallel_saved_outputs() -> anyhow::Result<()> {
   Ok(())
 }
 
+#[cfg(unix)]
 #[test]
-fn test_mk_45_secrets_rejects_conflicting_key_name_and_gpg_key_id() -> anyhow::Result<()> {
+fn test_mk_45_ssh_run_captures_output_and_exit_code() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  write_fake_ssh(&temp_dir)?;
+  let args_file = temp_dir.path().join("ssh-args.txt");
+  let remote_dir = temp_dir.path().join("remote-work");
+  std::fs::create_dir_all(&remote_dir)?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "ssh-run.yaml",
+    &format!(
+      "
+    tasks:
+      remote:
+        commands:
+          - ssh_run:
+              host: buildbox
+              user: deploy
+              port: 2222
+              options:
+                - BatchMode=yes
+              work_dir: {}
+              command: pwd
+              save_output_as: remote_pwd
+              save_exit_code_as: remote_code
+            verbose: false
+          - command: printf '%s|%s' \"${{{{ outputs.remote_pwd }}}}\" \"${{{{ outputs.remote_code }}}}\"
+            verbose: false
+    ",
+      remote_dir.to_string_lossy()
+    ),
+  )?;
+
+  let path = format!("{}:{}", temp_dir.path().to_utf8()?, std::env::var("PATH")?);
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .env("MK_TEST_SSH_ARGS_FILE", &args_file)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("remote")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains(format!(
+      "{}|0",
+      remote_dir.to_string_lossy()
+    )));
+
+  let args = std::fs::read_to_string(&args_file)?;
+  assert!(args.contains("-T"));
+  assert!(args.contains("-p"));
+  assert!(args.contains("2222"));
+  assert!(args.contains("-o"));
+  assert!(args.contains("BatchMode=yes"));
+  assert!(args.contains("deploy@buildbox"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mk_46_validate_rejects_duplicate_saved_outputs_from_ssh_run() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "ssh-duplicate-output.yaml",
+    "
+    tasks:
+      remote:
+        commands:
+          - ssh_run:
+              host: buildbox
+              command: printf 'one'
+              save_output_as: shared
+            verbose: false
+          - command: printf 'two'
+            save_output_as: shared
+            verbose: false
+    ",
+  )?;
+
+  let mut cmd = Command::new(cargo::cargo_bin!("mk"));
+  cmd
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("Duplicate saved output name: shared"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_47_secrets_rejects_conflicting_key_name_and_gpg_key_id() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_yaml(
     &temp_dir,
@@ -4512,5 +4658,1001 @@ fn test_mk_72_plan_no_name_no_label_errors() -> anyhow::Result<()> {
     .stderr(predicates::str::contains(
       "Provide a task name or at least one --label filter",
     ));
+  Ok(())
+}
+
+#[test]
+fn test_mk_73_vault_store_secret_requires_path() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  let vault_dir = temp_dir.path().join("vault");
+  let keys_dir = temp_dir.path().join("keys");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "store-secret"])
+    .arg("--vault-location")
+    .arg(&vault_dir)
+    .arg("--keys-location")
+    .arg(&keys_dir)
+    .assert()
+    .failure()
+    .code(2);
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_78_vault_init_with_gpg_key() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let vault_dir = temp_dir.path().join("vault");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .args(["secrets", "vault", "init-vault", "--vault-location"])
+    .arg(&vault_dir)
+    .args(["--gpg-key-id", "ABC123DEF456"])
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Vault created"))
+    .stdout(predicates::str::contains("GPG key: ABC123DEF456"));
+
+  // Verify metadata was written
+  assert!(vault_dir.exists());
+  assert!(vault_dir.join(".vault-meta.toml").exists());
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_78_vault_init_already_exists() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let vault_dir = temp_dir.path().join("vault");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .args(["secrets", "vault", "init-vault", "--vault-location"])
+    .arg(&vault_dir)
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Vault created"));
+
+  // Try initializing again
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .args(["secrets", "vault", "init-vault", "--vault-location"])
+    .arg(&vault_dir)
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Vault already exists"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_79_vault_purge_secret_not_found() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  let vault_dir = temp_dir.path().join("vault");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "init-vault", "--vault-location"])
+    .arg(&vault_dir)
+    .assert()
+    .success();
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "purge-secret", "nonexistent"])
+    .arg("--vault-location")
+    .arg(&vault_dir)
+    .arg("--yes")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("not found in vault"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_79_vault_export_missing_vault() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  let vault_dir = temp_dir.path().join("missing-vault");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "export-secret", "some/secret"])
+    .arg("--vault-location")
+    .arg(&vault_dir)
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Vault not found"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_vault_store_secret_missing_vault() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  let vault_dir = temp_dir.path().join("missing-vault");
+  let keys_dir = temp_dir.path().join("keys");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "store-secret", "test/key", "test-value"])
+    .arg("--vault-location")
+    .arg(&vault_dir)
+    .arg("--keys-location")
+    .arg(&keys_dir)
+    .arg("--key-name")
+    .arg("default")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Vault not found"));
+
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_vault_show_secret_missing_vault() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  let vault_dir = temp_dir.path().join("missing-vault");
+  let keys_dir = temp_dir.path().join("keys");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .args(["secrets", "vault", "show-secret", "test/key"])
+    .arg("--vault-location")
+    .arg(&vault_dir)
+    .arg("--keys-location")
+    .arg(&keys_dir)
+    .arg("--key-name")
+    .arg("default")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Vault not found"));
+
+  Ok(())
+}
+
+// ---- doctor diagnostics ----
+
+#[test]
+fn test_doctor_config_found() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("[ok]"))
+    .stdout(predicates::str::contains("tasks.yaml"))
+    .stdout(predicates::str::contains("format: yaml"))
+    .stdout(predicates::str::contains("All checks passed."));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_config_missing() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("doctor")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("[fail]"))
+    .stdout(predicates::str::contains("config not found"))
+    .stderr(predicates::str::contains("One or more checks failed."));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_doctor_with_fake_docker_runtime() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  write_fake_sh(&temp_dir)?;
+  write_fake_selector(&temp_dir, "docker", "#!/bin/sh\nexit 0\n")?;
+  let path = format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", path)
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("[ok]   docker:"))
+    .stdout(predicates::str::contains("[ok]   auto:"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_doctor_no_container_runtime() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  // Use an empty temp dir as PATH so no container runtimes are found.
+  let empty_path_dir = TempDir::new()?;
+  write_fake_sh(&empty_path_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", empty_path_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains(
+      "[warn] auto: no container runtime found",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_cache_not_yet_created() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("cache.json (not yet created)"));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_cache_exists() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+  // Run a task first to create cache.
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("noop")
+    .assert()
+    .success();
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("[ok]   cache:"));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_secrets_not_configured() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("secrets: not configured"));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_secrets_configured_vault_missing() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let vault_dir = temp_dir.path().join("vault");
+  let keys_dir = temp_dir.path().join("keys");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    &format!(
+      "
+      secrets:
+        vault_location: {}
+        keys_location: {}
+      tasks:
+        noop:
+          commands:
+            - command: echo noop
+              verbose: false
+      ",
+      vault_dir.to_string_lossy(),
+      keys_dir.to_string_lossy(),
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("doctor")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("[fail] vault not found:"))
+    .stderr(predicates::str::contains("One or more checks failed."));
+
+  Ok(())
+}
+
+#[test]
+fn test_doctor_secrets_configured_healthy() -> anyhow::Result<()> {
+  let (temp_dir, config_file_path, vault_dir, keys_dir) =
+    setup_secrets_fixture("myapp/db-password", "supersecret")?;
+
+  let config_file_path_with_secrets = common::setup_yaml(
+    &temp_dir,
+    "tasks-with-secrets.yaml",
+    &format!(
+      "
+      secrets:
+        vault_location: {}
+        keys_location: {}
+      tasks:
+        noop:
+          commands:
+            - command: echo noop
+              verbose: false
+      ",
+      vault_dir.to_string_lossy(),
+      keys_dir.to_string_lossy(),
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path_with_secrets)
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("[ok]   vault:"))
+    .stdout(predicates::str::contains("[ok]   keys:"))
+    .stdout(predicates::str::contains("All checks passed."));
+
+  // Suppress unused warning for config_file_path kept alive as fixture owner.
+  let _ = config_file_path;
+
+  Ok(())
+}
+
+// ── Output Plumbing – Phase 1: Capture Expansion ─────────────────────────────
+
+#[test]
+fn test_output_plumbing_p1_stderr_capture_only() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("stderr.txt");
+  let shell = common::portable_test_shell();
+  let stderr_command = if cfg!(windows) {
+    "[Console]::Error.Write('stderr-value')".to_string()
+  } else {
+    "printf 'stderr-value' >&2".to_string()
+  };
+  let write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.err }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.err }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "stderr-capture.yaml",
+    &format!(
+      "
+    tasks:
+      capture:
+        shell: {shell}
+        commands:
+          - command: {stderr_command}
+            save_stderr_as: err
+            verbose: false
+          - command: {write_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("capture")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "stderr-value");
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p1_stdout_and_stderr_capture_combined() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("combined.txt");
+  let shell = common::portable_test_shell();
+  let (stdout_command, stderr_command) = if cfg!(windows) {
+    (
+      "Write-Output 'out-value'".to_string(),
+      "[Console]::Error.Write('err-value')".to_string(),
+    )
+  } else {
+    (
+      "printf 'out-value\\n'".to_string(),
+      "printf 'err-value' >&2".to_string(),
+    )
+  };
+  let write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.out }}}}|${{{{ outputs.err }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s|%s' \"${{{{ outputs.out }}}}\" \"${{{{ outputs.err }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "combined-capture.yaml",
+    &format!(
+      "
+    tasks:
+      capture:
+        shell: {shell}
+        commands:
+          - command: {stdout_command}
+            save_output_as: out
+            verbose: false
+          - command: {stderr_command}
+            save_stderr_as: err
+            verbose: false
+          - command: {write_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("capture")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "out-value|err-value");
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p1_exit_code_capture_success() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("exit_code.txt");
+  let shell = common::portable_test_shell();
+  let true_command = if cfg!(windows) {
+    "exit 0".to_string()
+  } else {
+    "true".to_string()
+  };
+  let write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.code }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.code }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "exit-code-capture.yaml",
+    &format!(
+      "
+    tasks:
+      capture:
+        shell: {shell}
+        commands:
+          - command: \"{true_command}\"
+            save_exit_code_as: code
+            verbose: false
+          - command: {write_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("capture")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "0");
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p1_exit_code_capture_failing_command_with_ignore_errors() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("exit_code.txt");
+  let shell = common::portable_test_shell();
+  let fail_command = if cfg!(windows) {
+    "exit 1".to_string()
+  } else {
+    "false".to_string()
+  };
+  let write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.code }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.code }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "exit-code-fail.yaml",
+    &format!(
+      "
+    tasks:
+      capture:
+        shell: {shell}
+        commands:
+          - command: \"{fail_command}\"
+            save_exit_code_as: code
+            ignore_errors: true
+            verbose: false
+          - command: {write_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("capture")
+    .assert()
+    .success();
+
+  let code = std::fs::read_to_string(&result_file)?;
+  assert_ne!(code, "0", "exit code should be non-zero for failing command");
+  Ok(())
+}
+
+// ── Output Plumbing – Phase 2: Structured Extraction ─────────────────────────
+
+#[test]
+fn test_output_plumbing_p2_json_extract_valid() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let result_file = temp_dir.path().join("json_out.txt");
+  let shell = common::portable_test_shell();
+  let json_command = if cfg!(windows) {
+    "Write-Output '{\"version\":\"2.0.0\"}'".to_string()
+  } else {
+    r#"printf '{"version":"2.0.0"}\n'"#.to_string()
+  };
+  let write_command = if cfg!(windows) {
+    format!(
+      "[System.IO.File]::WriteAllText('{}', '${{{{ outputs.ver }}}}')",
+      common::sh_path(&result_file)
+    )
+  } else {
+    format!(
+      "printf '%s' \"${{{{ outputs.ver }}}}\" > {}",
+      common::sh_path(&result_file)
+    )
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "json-extract.yaml",
+    &format!(
+      "
+    tasks:
+      extract:
+        shell: {shell}
+        commands:
+          - command: {json_command}
+            save_output_as: raw
+            verbose: false
+          - extract_json_from: raw
+            json_path: version
+            save_as: ver
+          - command: {write_command}
+            verbose: false
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("extract")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&result_file)?, "2.0.0");
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p2_json_extract_invalid_json_fails() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let shell = common::portable_test_shell();
+  let bad_json_command = if cfg!(windows) {
+    "Write-Output 'not json'".to_string()
+  } else {
+    "printf 'not json'".to_string()
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "bad-json.yaml",
+    &format!(
+      "
+    tasks:
+      extract:
+        shell: {shell}
+        commands:
+          - command: {bad_json_command}
+            save_output_as: raw
+            verbose: false
+          - extract_json_from: raw
+            json_path: key
+            save_as: result
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("extract")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Failed to parse"));
+
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p2_json_extract_missing_path_fails() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let shell = common::portable_test_shell();
+  let json_command = if cfg!(windows) {
+    "Write-Output '{\"key\":\"val\"}'".to_string()
+  } else {
+    r#"printf '{"key":"val"}\n'"#.to_string()
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "missing-path.yaml",
+    &format!(
+      "
+    tasks:
+      extract:
+        shell: {shell}
+        commands:
+          - command: {json_command}
+            save_output_as: raw
+            verbose: false
+          - extract_json_from: raw
+            json_path: nonexistent
+            save_as: result
+    "
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("extract")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("JSON path"));
+
+  Ok(())
+}
+
+// ── Output Plumbing – Phase 3: Artifact Writes ───────────────────────────────
+
+#[test]
+fn test_output_plumbing_p3_write_output_to_file() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let dest_file = temp_dir.path().join("artifact.txt");
+  let shell = common::portable_test_shell();
+  let capture_command = if cfg!(windows) {
+    "Write-Output 'artifact-content'".to_string()
+  } else {
+    "printf 'artifact-content\\n'".to_string()
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "write-output.yaml",
+    &format!(
+      "
+    tasks:
+      write:
+        shell: {shell}
+        commands:
+          - command: {capture_command}
+            save_output_as: content
+            verbose: false
+          - write_output: content
+            to_file: {}
+    ",
+      common::sh_path(&dest_file)
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("write")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&dest_file)?, "artifact-content");
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p3_write_output_fails_on_existing_file() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let dest_file = temp_dir.path().join("existing.txt");
+  std::fs::write(&dest_file, "existing")?;
+  let shell = common::portable_test_shell();
+  let capture_command = if cfg!(windows) {
+    "Write-Output 'new-content'".to_string()
+  } else {
+    "printf 'new-content\\n'".to_string()
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "write-existing.yaml",
+    &format!(
+      "
+    tasks:
+      write:
+        shell: {shell}
+        commands:
+          - command: {capture_command}
+            save_output_as: content
+            verbose: false
+          - write_output: content
+            to_file: {}
+    ",
+      common::sh_path(&dest_file)
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("write")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("already exists"));
+
+  Ok(())
+}
+
+#[test]
+fn test_output_plumbing_p3_write_output_with_create_parents() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let dest_file = temp_dir.path().join("nested").join("dir").join("out.txt");
+  let shell = common::portable_test_shell();
+  let capture_command = if cfg!(windows) {
+    "Write-Output 'nested-content'".to_string()
+  } else {
+    "printf 'nested-content\\n'".to_string()
+  };
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "write-parents.yaml",
+    &format!(
+      "
+    tasks:
+      write:
+        shell: {shell}
+        commands:
+          - command: {capture_command}
+            save_output_as: content
+            verbose: false
+          - write_output: content
+            to_file: {}
+            create_parents: true
+    ",
+      common::sh_path(&dest_file)
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("write")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&dest_file)?, "nested-content");
   Ok(())
 }
