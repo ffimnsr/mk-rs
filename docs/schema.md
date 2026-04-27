@@ -186,7 +186,7 @@ Any tier may be absent; the resolver falls through to the next. A value at a hig
 
 #### CommandRunner
 
-The command runner can either be a `CommandRun`, `LocalRun`, `ContainerRun`, `ContainerBuild`, and `TaskRun`.
+The command runner can either be a `CommandRun`, `LocalRun`, `SshRun`, `ContainerRun`, `ContainerBuild`, and `TaskRun`.
 
 ##### CommandRun
 
@@ -237,6 +237,53 @@ tasks:
         save_output_as: version
       - command: echo "$IMAGE_TAG"
       - command: printf '%s\n' "${{ outputs.version }}"
+```
+
+##### SshRun
+
+Run command on remote host through system `ssh`.
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| ssh_run | SshRunArgs | - | true | SSH execution arguments. |
+| verbose | bool | true | false | Show verbose output. |
+
+###### SshRunArgs
+
+| Name | Type | Default Value | Required | Description |
+| --- | --- | --- | --- | --- |
+| host | String | - | true | SSH host, alias, or target. |
+| command | String | - | true | Remote command to execute. |
+| user | String | - | false | SSH user name. |
+| port | u16 | - | false | SSH TCP port. |
+| identity_file | String | - | false | Identity file passed to `ssh -i`. |
+| options | String[] | [] | false | Extra SSH options passed as repeated `ssh -o` flags. |
+| shell | String | sh | false | Remote shell used to evaluate wrapped command. |
+| test | String | - | false | Remote test command to run before main command. If it fails, main command is skipped. |
+| work_dir | String | - | false | Remote working directory prefixed as `cd <dir> && ...`. |
+| interactive | bool | false | false | Request TTY with `ssh -tt` and attach stdin/stdout. |
+| save_output_as | String | - | false | Save remote stdout as a task-scoped output for later commands in same task. |
+| save_stderr_as | String | - | false | Save remote stderr as a task-scoped output for later commands in same task. |
+| save_exit_code_as | String | - | false | Save remote exit code as a task-scoped output for later commands in same task. |
+| ignore_errors | bool | false | false | Ignore errors if remote command fails? |
+
+**Example**
+
+```yaml
+tasks:
+  commands:
+    - ssh_run:
+        host: buildbox
+        user: deploy
+        port: 22
+        options:
+          - BatchMode=yes
+        work_dir: /srv/app
+        command: ./deploy.sh
+        save_output_as: deploy_result
+      verbose: false
+    - command: printf '%s\n' "${{ outputs.deploy_result }}"
+      verbose: false
 ```
 
 ##### ContainerRun

@@ -1,0 +1,7 @@
+Diagnose mk setup and configuration
+
+Usage: mk doctor
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

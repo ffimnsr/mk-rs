@@ -9,7 +9,16 @@
           "$ref": "#/$defs/ContainerRun"
         },
         {
+          "$ref": "#/$defs/JsonExtract"
+        },
+        {
+          "$ref": "#/$defs/WriteOutput"
+        },
+        {
           "$ref": "#/$defs/LocalRun"
+        },
+        {
+          "$ref": "#/$defs/SshRun"
         },
         {
           "$ref": "#/$defs/TaskRun"
@@ -223,6 +232,28 @@
       ],
       "type": "object"
     },
+    "JsonExtract": {
+      "properties": {
+        "extract_json_from": {
+          "description": "The name of a previously saved output to parse as JSON",
+          "type": "string"
+        },
+        "json_path": {
+          "description": "Dot-separated path into the JSON value (e.g. \"items.0.name\")",
+          "type": "string"
+        },
+        "save_as": {
+          "description": "The output name under which the extracted value is saved",
+          "type": "string"
+        }
+      },
+      "required": [
+        "extract_json_from",
+        "json_path",
+        "save_as"
+      ],
+      "type": "object"
+    },
     "LocalRun": {
       "properties": {
         "command": {
@@ -253,9 +284,25 @@
             "null"
           ]
         },
+        "save_exit_code_as": {
+          "default": null,
+          "description": "Save the command exit code to a task-scoped output name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "save_output_as": {
           "default": null,
           "description": "Save the command stdout to a task-scoped output name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "save_stderr_as": {
+          "default": null,
+          "description": "Save the command stderr to a task-scoped output name",
           "type": [
             "string",
             "null"
@@ -441,6 +488,145 @@
         }
       },
       "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "SshRun": {
+      "properties": {
+        "ssh_run": {
+          "$ref": "#/$defs/SshRunArgs",
+          "description": "SSH-backed remote command execution"
+        },
+        "verbose": {
+          "default": null,
+          "description": "Show verbose output",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ssh_run"
+      ],
+      "type": "object"
+    },
+    "SshRunArgs": {
+      "properties": {
+        "command": {
+          "description": "The command to run on the remote host",
+          "type": "string"
+        },
+        "host": {
+          "description": "SSH target host name or alias",
+          "type": "string"
+        },
+        "identity_file": {
+          "default": null,
+          "description": "Identity file to pass to ssh",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ignore_errors": {
+          "default": null,
+          "description": "Ignore errors if the command fails",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interactive": {
+          "default": null,
+          "description": "Interactive mode",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "options": {
+          "default": [],
+          "description": "Extra `ssh -o` options",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "port": {
+          "default": null,
+          "description": "The TCP port to connect to",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "save_exit_code_as": {
+          "default": null,
+          "description": "Save the command exit code to a task-scoped output name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "save_output_as": {
+          "default": null,
+          "description": "Save the command stdout to a task-scoped output name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "save_stderr_as": {
+          "default": null,
+          "description": "Save the command stderr to a task-scoped output name",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Shell"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Remote shell used to evaluate the command"
+        },
+        "test": {
+          "default": null,
+          "description": "The test to run before running command\nIf the test fails, the command will not run",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user": {
+          "default": null,
+          "description": "The user to connect as",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "work_dir": {
+          "default": null,
+          "description": "Remote working directory to switch to before command execution",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "host",
         "command"
       ],
       "type": "object"
@@ -786,6 +972,31 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "WriteOutput": {
+      "properties": {
+        "create_parents": {
+          "default": null,
+          "description": "Create parent directories when they do not exist",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "to_file": {
+          "description": "The file path to write the output to",
+          "type": "string"
+        },
+        "write_output": {
+          "description": "The name of a previously saved output to write to disk",
+          "type": "string"
+        }
+      },
+      "required": [
+        "write_output",
+        "to_file"
+      ],
       "type": "object"
     }
   },

@@ -13,6 +13,10 @@ tasks:
     commands:
       - command: git config --local --unset core.hooksPath
     description: Uninstall git hooks
+  test-run:
+    commands:
+      - command: cargo t
+    description: Run tests
   run:
     commands:
       - command: cargo r
@@ -100,6 +104,11 @@ tasks:
       - cargo install --locked grcov
       - rustup component add llvm-tools-preview
     description: Install code coverage tools
+  cover:
+    commands:
+      - task: gen_test_cov
+      - task: cov_to_html
+    description: Run tests with coverage and generate reports
   gen_test_cov:
     commands:
       - cargo t
@@ -182,6 +191,7 @@ tasks:
     commands:
       - |
         git ls-files -z --cached --others --exclude-standard \
+        | grep -zv '^coverage/' \
         | xargs -0 -I{} sh -c '[ -f "{}" ] && wc -l "{}"' \
         | awk '$1 > 1000' \
         | sort -nr

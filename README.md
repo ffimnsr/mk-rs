@@ -682,6 +682,28 @@ tasks:
 
 Set `retrigger: true` on a non-interactive local command to allow pressing `R` while it is running to stop and start it again manually. This is intended for long-running processes such as `go run .` without enabling file watching.
 
+Use `ssh_run` for first-class remote execution while still reusing task outputs and templates locally:
+
+```yaml
+tasks:
+  deploy:
+    commands:
+      - ssh_run:
+          host: app-01
+          user: deploy
+          port: 22
+          options:
+            - BatchMode=yes
+          work_dir: /srv/app
+          command: ./deploy.sh
+          save_output_as: deploy_result
+        verbose: false
+      - command: printf 'remote said: %s\n' "${{ outputs.deploy_result }}"
+        verbose: false
+```
+
+`ssh_run` shells out to system `ssh`, so it respects existing `~/.ssh/config`, agent forwarding, known-host checks, and bastion/proxy settings already configured on machine.
+
 ### Using a YubiKey or hardware-backed GPG key
 
 mk supports vault encryption and decryption via the system `gpg` binary, which allows you to use any hardware security key supported by GnuPG — including YubiKey with OpenPGP applet, Nitrokey, and similar devices. Passphrase-protected software GPG keys are also supported this way.
@@ -755,6 +777,84 @@ mk secrets vault init --write-config --gpg-key-id YOUR_KEY_ID --vault-location .
 
 This creates the vault, writes `.vault-meta.toml`, and adds or updates the `secrets:` block in `tasks.yaml`. Unrelated config content is preserved. Only YAML config files are supported for mutation.
 
+## Troubleshooting
+
+Run `mk doctor` to diagnose your setup. It checks config discovery, container runtimes, cache state, and secrets configuration in one pass.
+
+```bash
+mk doctor
+```
+
+Sample output when everything is healthy:
+
+```text
+Config:
+  [ok]   config: /path/to/tasks.yaml
+  [ok]   format: yaml
+Container runtime:
+  [ok]   docker: /usr/bin/docker
+  [warn] nerdctl: not found
+  [warn] podman: not found
+  [ok]   auto: /usr/bin/docker
+Cache:
+  [ok]   cache: /path/to/.mk/cache.json (not yet created)
+Secrets:
+  [ok]   secrets: not configured
+All checks passed.
+```
+
+Exit code is zero when all checks pass and non-zero when any required check fails.
+
+### Missing config
+
+If `mk` cannot find your config file, `doctor` prints the path it expected and exits non-zero:
+
+```text
+Config:
+  [fail] config not found: /path/to/tasks.yaml
+```
+
+Fix: run `mk init` to generate a starter config, or pass an explicit path:
+
+```bash
+mk init
+# or
+mk -c path/to/my-tasks.yaml doctor
+```
+
+### Missing container runtime
+
+`[warn]` lines for `docker`, `nerdctl`, and `podman` indicate the binary was not found on `PATH`. These are warnings, not failures, when container features are unused:
+
+```text
+Container runtime:
+  [warn] docker: not found
+  [warn] nerdctl: not found
+  [warn] podman: not found
+  [warn] auto: no container runtime found (docker, nerdctl, podman)
+```
+
+If your tasks use `container_run` or `container_build` commands, install one of the supported runtimes. Container tasks specify `runtime: docker|nerdctl|podman|auto`.
+
+### Secrets configuration
+
+When a `secrets:` block is present, `doctor` checks that the vault and keys directories exist:
+
+```text
+Secrets:
+  [fail] vault not found: /path/to/.mk/vault
+  [fail] keys not found: /home/user/.config/mk/priv
+```
+
+Initialize a vault and generate a key before running tasks that use secrets:
+
+```bash
+mk secrets key generate-key
+mk secrets vault init
+```
+
+For detailed secrets setup, see the [Secret Vault](#secret-vault) section above. For hardware key (YubiKey) setup, see [Using a YubiKey or hardware-backed GPG key](#using-a-yubikey-or-hardware-backed-gpg-key).
+
 ## Config Schema
 
 The docs can be found [here](https://me.vastorigins.com/mk-rs/#/schema).
@@ -769,26 +869,6 @@ scripts/fuzz.sh fuzz_config_parse
 scripts/fuzz.sh fuzz_label_filter
 FUZZ_TIME=300 scripts/fuzz.sh all
 ```
-
-## What's on the roadmap?
-
-- [x] Add global context for environment and output
-- [ ] Add support for makefile, markdown and org-mode as task config format
-- [x] Add `interactive` field for commands that can accept stdin (i.e. python, psql)
-- [x] Add support for saving and reusing command output (output can be reused on other command inside a task)
-- [ ] Add proper documentation
-- [ ] Add support for cargo env on mk-rs when running task on cargo project
-- [x] Add support for trigger reload when on cargo run
-- [x] Add fuzzy finder for tasks
-- [ ] Add more unit tests and benchmarks
-- [x] Add support for npm commands
-- [x] Add fuzzer scripts for code fuzzing
-- [ ] Complete the code coverage
-- [ ] Expand `extends`-based composition beyond local single-parent files
-- [ ] Expand Windows and macOS test coverage and polish platform-specific behavior
-- [x] Make use of labels
-- [x] Proper prop argument drilling so ignore_errors on defined on task would go down properly on child commands
-- [ ] There's still a lot of unknown, if you found a bug please report.
 
 ## License
 

@@ -79,6 +79,19 @@ fn snapshot_completion_help() -> anyhow::Result<()> {
 }
 
 #[test]
+fn snapshot_doctor_help() -> anyhow::Result<()> {
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("doctor")
+    .arg("--help")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  assert_snapshot("doctor-help.snap", &String::from_utf8(output)?)
+}
+
+#[test]
 fn snapshot_list_json() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_yaml(

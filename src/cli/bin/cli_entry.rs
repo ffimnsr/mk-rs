@@ -26,6 +26,7 @@ use mk_lib::label_filter::{
 };
 use mk_lib::schema::{
   run_task_by_name,
+  ContainerRuntime,
   Task,
   TaskContext,
   TaskPlan,
@@ -183,6 +184,8 @@ enum Command {
   CleanCache,
   #[command(about = "Print the JSON Schema for the task configuration file")]
   Schema,
+  #[command(about = "Diagnose mk setup and configuration")]
+  Doctor,
 }
 
 /// The CLI entry
@@ -340,6 +343,7 @@ impl CliEntry {
         | Some(Command::Update)
         | Some(Command::CleanCache)
         | Some(Command::Schema)
+        | Some(Command::Doctor)
     ) || (matches!(args.command, Some(Command::Secrets(_)))
       && !Self::config_requested_explicitly(args));
 
@@ -503,6 +507,9 @@ impl CliEntry {
         let schema: serde_json::Value = serde_json::from_str(&schema)?;
         Self::print_json_value(schema)?;
       },
+      Some(Command::Doctor) => {
+        self.run_doctor()?;
+      },
       None => {
         if let Some(task_name) = &self.args.task_name {
           self.run_task(task_name, false, false)?;
@@ -655,6 +662,116 @@ impl CliEntry {
   fn ensure_init_path_supported(config_path: &Path) -> anyhow::Result<()> {
     let _ = InitTemplateFormat::from_path(config_path)?;
     Ok(())
+  }
+
+  fn run_doctor(&self) -> anyhow::Result<()> {
+    let mut any_failure = false;
+
+    // --- Config discovery ---
+    println!("Config:");
+    let source_path = self.task_root.source_path.as_deref();
+    match source_path {
+      Some(path) if path.exists() => {
+        let format = Self::detect_config_format(path);
+        println!("  [ok]   config: {}", path.display_lossy());
+        println!("  [ok]   format: {format}");
+      },
+      Some(path) => {
+        println!("  [fail] config not found: {}", path.display_lossy());
+        any_failure = true;
+      },
+      None => {
+        println!("  [fail] config not found");
+        any_failure = true;
+      },
+    }
+
+    // --- Container runtime ---
+    println!("Container runtime:");
+    for name in &["docker", "nerdctl", "podman"] {
+      match which::which(name) {
+        Ok(path) => println!("  [ok]   {name}: {}", path.display_lossy()),
+        Err(_) => println!("  [warn] {name}: not found"),
+      }
+    }
+    match self.task_root.container_runtime.as_ref() {
+      Some(rt) => match ContainerRuntime::resolve(Some(rt)) {
+        Ok(path) => println!("  [ok]   configured ({}): {}", rt.name(), path.display_lossy()),
+        Err(e) => {
+          println!("  [fail] configured ({}): {e}", rt.name());
+          any_failure = true;
+        },
+      },
+      None => match which::which("docker")
+        .or_else(|_| which::which("nerdctl"))
+        .or_else(|_| which::which("podman"))
+      {
+        Ok(path) => println!("  [ok]   auto: {}", path.display_lossy()),
+        Err(_) => println!("  [warn] auto: no container runtime found (docker, nerdctl, podman)"),
+      },
+    }
+
+    // --- Cache ---
+    println!("Cache:");
+    let cache_path = mk_lib::cache::cache_path_in_dir(&self.task_root.cache_base_dir());
+    if cache_path.exists() {
+      println!("  [ok]   cache: {}", cache_path.display_lossy());
+    } else {
+      println!("  [ok]   cache: {} (not yet created)", cache_path.display_lossy());
+    }
+
+    // --- Secrets ---
+    println!("Secrets:");
+    match self.task_root.normalized_secret_settings() {
+      None => println!("  [ok]   secrets: not configured"),
+      Some(settings) => {
+        let vault_path = settings
+          .vault_location
+          .as_deref()
+          .map(|v| self.task_root.resolve_from_config(v))
+          .unwrap_or_else(|| self.task_root.config_base_dir().join(".mk").join("vault"));
+        if vault_path.exists() {
+          println!("  [ok]   vault: {}", vault_path.display_lossy());
+        } else {
+          println!("  [fail] vault not found: {}", vault_path.display_lossy());
+          any_failure = true;
+        }
+
+        let keys_path = settings
+          .keys_location
+          .as_deref()
+          .map(|k| self.task_root.resolve_from_config(k))
+          .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "./.mk/priv".to_string());
+            std::path::PathBuf::from(home)
+              .join(".config")
+              .join("mk")
+              .join("priv")
+          });
+        if keys_path.exists() {
+          println!("  [ok]   keys: {}", keys_path.display_lossy());
+        } else {
+          println!("  [fail] keys not found: {}", keys_path.display_lossy());
+          any_failure = true;
+        }
+      },
+    }
+
+    if any_failure {
+      anyhow::bail!("One or more checks failed.");
+    }
+    println!("All checks passed.");
+    Ok(())
+  }
+
+  fn detect_config_format(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+      Some("yaml") | Some("yml") => "yaml",
+      Some("toml") => "toml",
+      Some("json") => "json",
+      Some("lua") => "lua",
+      _ => "unknown",
+    }
   }
 
   fn update_connect_timeout() -> Duration {

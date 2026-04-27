@@ -465,6 +465,36 @@ impl TaskRoot {
           );
         }
       },
+      CommandRunner::SshRun(ssh_run) => {
+        if ssh_run.ssh_run.host.trim().is_empty() {
+          report.push_error(
+            Some(task_name),
+            Some("ssh_run.host"),
+            "SSH host must not be empty",
+          );
+        }
+        if ssh_run.ssh_run.command.trim().is_empty() {
+          report.push_error(
+            Some(task_name),
+            Some("ssh_run.command"),
+            "SSH command must not be empty",
+          );
+        }
+        for (field, name_opt) in [
+          ("ssh_run.save_output_as", ssh_run.ssh_run.save_output_as.as_ref()),
+          ("ssh_run.save_stderr_as", ssh_run.ssh_run.save_stderr_as.as_ref()),
+          (
+            "ssh_run.save_exit_code_as",
+            ssh_run.ssh_run.save_exit_code_as.as_ref(),
+          ),
+        ] {
+          if let Some(name) = name_opt {
+            if name.trim().is_empty() {
+              report.push_error(Some(task_name), Some(field), format!("{field} must not be empty"));
+            }
+          }
+        }
+      },
       CommandRunner::ContainerRun(container_run) => {
         if container_run.image.trim().is_empty() {
           report.push_error(
@@ -529,6 +559,33 @@ impl TaskRoot {
           );
         }
       },
+      CommandRunner::JsonExtract(json_extract) => {
+        if json_extract.extract_json_from.trim().is_empty() {
+          report.push_error(
+            Some(task_name),
+            Some("extract_json_from"),
+            "extract_json_from must not be empty",
+          );
+        }
+        if json_extract.json_path.trim().is_empty() {
+          report.push_error(Some(task_name), Some("json_path"), "json_path must not be empty");
+        }
+        if json_extract.save_as.trim().is_empty() {
+          report.push_error(Some(task_name), Some("save_as"), "save_as must not be empty");
+        }
+      },
+      CommandRunner::WriteOutput(write_output) => {
+        if write_output.write_output.trim().is_empty() {
+          report.push_error(
+            Some(task_name),
+            Some("write_output"),
+            "write_output must not be empty",
+          );
+        }
+        if write_output.to_file.trim().is_empty() {
+          report.push_error(Some(task_name), Some("to_file"), "to_file must not be empty");
+        }
+      },
     }
   }
 
@@ -536,11 +593,36 @@ impl TaskRoot {
     let declared_outputs = task
       .commands
       .iter()
-      .filter_map(|command| match command {
-        CommandRunner::LocalRun(local_run) => local_run.save_output_as.as_ref(),
-        _ => None,
+      .flat_map(|command| match command {
+        CommandRunner::LocalRun(local_run) => {
+          let mut names = vec![];
+          if let Some(n) = &local_run.save_output_as {
+            names.push(n.trim().to_string());
+          }
+          if let Some(n) = &local_run.save_stderr_as {
+            names.push(n.trim().to_string());
+          }
+          if let Some(n) = &local_run.save_exit_code_as {
+            names.push(n.trim().to_string());
+          }
+          names
+        },
+        CommandRunner::SshRun(ssh_run) => {
+          let mut names = vec![];
+          if let Some(n) = &ssh_run.ssh_run.save_output_as {
+            names.push(n.trim().to_string());
+          }
+          if let Some(n) = &ssh_run.ssh_run.save_stderr_as {
+            names.push(n.trim().to_string());
+          }
+          if let Some(n) = &ssh_run.ssh_run.save_exit_code_as {
+            names.push(n.trim().to_string());
+          }
+          names
+        },
+        CommandRunner::JsonExtract(je) => vec![je.save_as.trim().to_string()],
+        _ => vec![],
       })
-      .map(|name| name.trim().to_string())
       .filter(|name| !name.is_empty())
       .collect::<HashSet<_>>();
 
@@ -588,14 +670,107 @@ impl TaskRoot {
             }
           }
 
-          if let Some(save_output_as) = &local_run.save_output_as {
-            let save_output_as = save_output_as.trim().to_string();
-            if !save_output_as.is_empty() && !produced_outputs.insert(save_output_as.clone()) {
+          for (field, name_opt) in [
+            ("save_output_as", local_run.save_output_as.as_ref()),
+            ("save_stderr_as", local_run.save_stderr_as.as_ref()),
+            ("save_exit_code_as", local_run.save_exit_code_as.as_ref()),
+          ] {
+            if let Some(output_name) = name_opt {
+              let output_name = output_name.trim().to_string();
+              if !output_name.is_empty() && !produced_outputs.insert(output_name.clone()) {
+                report.push_error(
+                  Some(task_name),
+                  Some(field),
+                  format!("Duplicate saved output name: {}", output_name),
+                );
+              }
+            }
+          }
+        },
+        CommandRunner::JsonExtract(json_extract) => {
+          // The source output must have been produced by an earlier command
+          if !json_extract.extract_json_from.trim().is_empty()
+            && !produced_outputs.contains(json_extract.extract_json_from.trim())
+          {
+            report.push_error(
+              Some(task_name),
+              Some("extract_json_from"),
+              format!(
+                "Output reference must come from an earlier command: {}",
+                json_extract.extract_json_from.trim()
+              ),
+            );
+          }
+          let save_as = json_extract.save_as.trim().to_string();
+          if !save_as.is_empty() && !produced_outputs.insert(save_as.clone()) {
+            report.push_error(
+              Some(task_name),
+              Some("save_as"),
+              format!("Duplicate saved output name: {}", save_as),
+            );
+          }
+        },
+        CommandRunner::WriteOutput(write_output) => {
+          // The source output must have been produced by an earlier command
+          if !write_output.write_output.trim().is_empty()
+            && !produced_outputs.contains(write_output.write_output.trim())
+          {
+            report.push_error(
+              Some(task_name),
+              Some("write_output"),
+              format!(
+                "Output reference must come from an earlier command: {}",
+                write_output.write_output.trim()
+              ),
+            );
+          }
+        },
+        CommandRunner::SshRun(ssh_run) => {
+          for output_name in extract_output_references(&ssh_run.ssh_run.command) {
+            if !produced_outputs.contains(&output_name) {
               report.push_error(
                 Some(task_name),
-                Some("save_output_as"),
-                format!("Duplicate saved output name: {}", save_output_as),
+                Some("ssh_run.command"),
+                format!(
+                  "Output reference must come from an earlier command: {}",
+                  output_name
+                ),
               );
+            }
+          }
+
+          if let Some(test) = &ssh_run.ssh_run.test {
+            for output_name in extract_output_references(test) {
+              if !produced_outputs.contains(&output_name) {
+                report.push_error(
+                  Some(task_name),
+                  Some("ssh_run.test"),
+                  format!(
+                    "Output reference must come from an earlier command: {}",
+                    output_name
+                  ),
+                );
+              }
+            }
+          }
+
+          for (field, name_opt) in [
+            ("ssh_run.save_output_as", ssh_run.ssh_run.save_output_as.as_ref()),
+            ("ssh_run.save_stderr_as", ssh_run.ssh_run.save_stderr_as.as_ref()),
+            (
+              "ssh_run.save_exit_code_as",
+              ssh_run.ssh_run.save_exit_code_as.as_ref(),
+            ),
+          ] {
+            if let Some(output_name) = name_opt {
+              let output_name = output_name.trim().to_string();
+              if !output_name.is_empty() && !produced_outputs.insert(output_name.clone()) {
+                report.push_error(
+                  Some(task_name),
+                  Some(field),
+                  format!("Duplicate saved output name: {}", output_name),
+                );
+              }
             }
           }
         },
@@ -777,12 +952,26 @@ fn command_uses_task_outputs(command: &CommandRunner) -> bool {
   match command {
     CommandRunner::LocalRun(local_run) => {
       local_run.save_output_as.is_some()
+        || local_run.save_stderr_as.is_some()
+        || local_run.save_exit_code_as.is_some()
         || contains_output_reference(&local_run.command)
         || local_run
           .test
           .as_ref()
           .is_some_and(|test| contains_output_reference(test))
     },
+    CommandRunner::SshRun(ssh_run) => {
+      ssh_run.ssh_run.save_output_as.is_some()
+        || ssh_run.ssh_run.save_stderr_as.is_some()
+        || ssh_run.ssh_run.save_exit_code_as.is_some()
+        || contains_output_reference(&ssh_run.ssh_run.command)
+        || ssh_run
+          .ssh_run
+          .test
+          .as_ref()
+          .is_some_and(|test| contains_output_reference(test))
+    },
+    CommandRunner::JsonExtract(_) | CommandRunner::WriteOutput(_) => true,
     CommandRunner::CommandRun(command) => contains_output_reference(command),
     CommandRunner::ContainerRun(_) | CommandRunner::ContainerBuild(_) | CommandRunner::TaskRun(_) => false,
   }
@@ -798,6 +987,7 @@ fn task_uses_dynamic_runtime_inputs(task: &super::TaskArgs) -> bool {
 
 fn command_uses_dynamic_runtime_inputs(command: &CommandRunner) -> bool {
   match command {
+    CommandRunner::JsonExtract(_) | CommandRunner::WriteOutput(_) => false,
     CommandRunner::CommandRun(command) => contains_dynamic_runtime_fragment(command),
     CommandRunner::LocalRun(local_run) => {
       contains_dynamic_runtime_fragment(&local_run.command)
@@ -805,6 +995,30 @@ fn command_uses_dynamic_runtime_inputs(command: &CommandRunner) -> bool {
           .test
           .as_ref()
           .is_some_and(|test| contains_dynamic_runtime_fragment(test))
+    },
+    CommandRunner::SshRun(ssh_run) => {
+      contains_dynamic_runtime_fragment(&ssh_run.ssh_run.host)
+        || contains_dynamic_runtime_fragment(&ssh_run.ssh_run.command)
+        || ssh_run
+          .ssh_run
+          .test
+          .as_ref()
+          .is_some_and(|test| contains_dynamic_runtime_fragment(test))
+        || ssh_run
+          .ssh_run
+          .work_dir
+          .as_ref()
+          .is_some_and(|work_dir| contains_dynamic_runtime_fragment(work_dir))
+        || ssh_run
+          .ssh_run
+          .identity_file
+          .as_ref()
+          .is_some_and(|identity_file| contains_dynamic_runtime_fragment(identity_file))
+        || ssh_run
+          .ssh_run
+          .options
+          .iter()
+          .any(|value| contains_dynamic_runtime_fragment(value))
     },
     CommandRunner::ContainerRun(container_run) => {
       contains_dynamic_runtime_fragment(&container_run.image)

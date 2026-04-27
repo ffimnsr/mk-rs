@@ -958,7 +958,7 @@ fn stable_command_fingerprint(command: &CommandRunner) -> String {
   match command {
     CommandRunner::CommandRun(value) => format!("command_run:{}", json_value(value)),
     CommandRunner::LocalRun(local_run) => format!(
-      "local_run:command={};shell={};test={};work_dir={};interactive={};retrigger={};ignore_errors={};save_output_as={};verbose={}",
+      "local_run:command={};shell={};test={};work_dir={};interactive={};retrigger={};ignore_errors={};save_output_as={};save_stderr_as={};save_exit_code_as={};verbose={}",
       json_value(&local_run.command),
       stable_shell_fingerprint(local_run.shell.as_ref()),
       json_option_string(local_run.test.as_ref()),
@@ -967,7 +967,26 @@ fn stable_command_fingerprint(command: &CommandRunner) -> String {
       json_option_bool(local_run.retrigger),
       json_option_bool(local_run.ignore_errors),
       json_option_string(local_run.save_output_as.as_ref()),
+      json_option_string(local_run.save_stderr_as.as_ref()),
+      json_option_string(local_run.save_exit_code_as.as_ref()),
       json_option_bool(local_run.verbose),
+    ),
+    CommandRunner::SshRun(ssh_run) => format!(
+      "ssh_run:host={};user={};port={};command={};shell={};test={};work_dir={};interactive={};ignore_errors={};save_output_as={};save_stderr_as={};save_exit_code_as={};options={};verbose={}",
+      json_value(&ssh_run.ssh_run.host),
+      json_option_string(ssh_run.ssh_run.user.as_ref()),
+      json_value(&ssh_run.ssh_run.port),
+      json_value(&ssh_run.ssh_run.command),
+      stable_shell_fingerprint(ssh_run.ssh_run.shell.as_ref()),
+      json_option_string(ssh_run.ssh_run.test.as_ref()),
+      json_option_string(ssh_run.ssh_run.work_dir.as_ref()),
+      json_option_bool(ssh_run.ssh_run.interactive),
+      json_option_bool(ssh_run.ssh_run.ignore_errors),
+      json_option_string(ssh_run.ssh_run.save_output_as.as_ref()),
+      json_option_string(ssh_run.ssh_run.save_stderr_as.as_ref()),
+      json_option_string(ssh_run.ssh_run.save_exit_code_as.as_ref()),
+      stable_strings_fingerprint(&ssh_run.ssh_run.options),
+      json_option_bool(ssh_run.verbose),
     ),
     CommandRunner::ContainerRun(container_run) => format!(
       "container_run:image={};container_command={};mounted_paths={};runtime={};ignore_errors={};verbose={}",
@@ -997,6 +1016,18 @@ fn stable_command_fingerprint(command: &CommandRunner) -> String {
       json_value(&task_run.task),
       json_option_bool(task_run.ignore_errors),
       json_option_bool(task_run.verbose),
+    ),
+    CommandRunner::JsonExtract(je) => format!(
+      "json_extract:from={};path={};save_as={}",
+      json_value(&je.extract_json_from),
+      json_value(&je.json_path),
+      json_value(&je.save_as),
+    ),
+    CommandRunner::WriteOutput(wo) => format!(
+      "write_output:from={};to_file={};create_parents={}",
+      json_value(&wo.write_output),
+      json_value(&wo.to_file),
+      json_bool(wo.create_parents.unwrap_or(false)),
     ),
   }
 }

@@ -73,6 +73,14 @@ pub struct LocalRun {
   #[serde(default)]
   pub save_output_as: Option<String>,
 
+  /// Save the command stderr to a task-scoped output name
+  #[serde(default)]
+  pub save_stderr_as: Option<String>,
+
+  /// Save the command exit code to a task-scoped output name
+  #[serde(default)]
+  pub save_exit_code_as: Option<String>,
+
   /// Show verbose output
   #[serde(default)]
   pub verbose: Option<bool>,
@@ -97,7 +105,9 @@ impl LocalRun {
       anyhow::bail!("retrigger is only supported for non-interactive local commands");
     }
     let ignore_errors = self.ignore_errors(context);
-    let capture_output = self.save_output_as.is_some();
+    let capture_stdout = self.save_output_as.is_some();
+    let capture_stderr = self.save_stderr_as.is_some();
+    let capture_exit_code = self.save_exit_code_as.is_some();
     // If interactive mode is enabled, we don't need to redirect the output
     // to the parent process. This is because the command will be run in the
     // foreground and the user will be able to see the output.
@@ -109,23 +119,46 @@ impl LocalRun {
     }
 
     if retrigger {
-      return self.execute_with_retrigger(context, &command, ignore_errors, capture_output, verbose);
+      return self.execute_with_retrigger(
+        context,
+        &command,
+        ignore_errors,
+        capture_stdout,
+        capture_stderr,
+        verbose,
+      );
     }
 
-    let spawned = self.spawn_command(context, &command, capture_output, verbose, interactive)?;
-    let (status, captured_stdout) = if allow_cancellation {
+    let spawned = self.spawn_command(
+      context,
+      &command,
+      capture_stdout,
+      capture_stderr,
+      verbose,
+      interactive,
+    )?;
+    let result = if allow_cancellation {
       spawned.wait_for_completion_or_cancellation(context, &command)?
     } else {
       spawned.wait_for_completion()?
     };
-    self.finish_execution(context, &command, status, captured_stdout, ignore_errors)
+    self.finish_execution(
+      context,
+      &command,
+      result,
+      ExecutionOptions {
+        capture_exit_code,
+        ignore_errors,
+      },
+    )
   }
 
   fn spawn_command(
     &self,
     context: &TaskContext,
     command: &str,
-    capture_output: bool,
+    capture_stdout: bool,
+    capture_stderr: bool,
     verbose: bool,
     interactive: bool,
   ) -> anyhow::Result<SpawnedLocalCommand> {
@@ -137,13 +170,28 @@ impl LocalRun {
 
     cmd.arg(command);
 
-    if capture_output {
+    if capture_stdout {
       cmd.stdout(Stdio::piped());
       if interactive {
         context.multi.set_draw_target(ProgressDrawTarget::hidden());
-        cmd.stdin(Stdio::inherit()).stderr(Stdio::inherit());
+        cmd.stdin(Stdio::inherit());
+        if capture_stderr {
+          cmd.stderr(Stdio::piped());
+        } else {
+          cmd.stderr(Stdio::inherit());
+        }
+      } else if capture_stderr {
+        cmd.stderr(Stdio::piped());
       } else {
         cmd.stderr(get_output_handler(verbose));
+      }
+    } else if capture_stderr {
+      cmd.stderr(Stdio::piped());
+      if interactive {
+        context.multi.set_draw_target(ProgressDrawTarget::hidden());
+        cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit());
+      } else {
+        cmd.stdout(get_output_handler(verbose));
       }
     } else if verbose {
       if interactive {
@@ -182,7 +230,7 @@ impl LocalRun {
     }
 
     let mut child = cmd.spawn()?;
-    let stdout_handle = if capture_output {
+    let stdout_handle = if capture_stdout {
       let stdout = child.stdout.take().context("Failed to open stdout")?;
       let multi = context.multi.clone();
       Some(thread::spawn(move || -> anyhow::Result<String> {
@@ -202,31 +250,69 @@ impl LocalRun {
       None
     };
 
-    if verbose && !interactive && !capture_output {
+    let stderr_handle = if capture_stderr {
+      let stderr = child.stderr.take().context("Failed to open stderr")?;
+      let multi = context.multi.clone();
+      Some(thread::spawn(move || -> anyhow::Result<String> {
+        let reader = BufReader::new(stderr);
+        let mut output = String::new();
+        for line in reader.lines() {
+          let line = line?;
+          if verbose {
+            let _ = multi.println(line.clone());
+          }
+          output.push_str(&line);
+          output.push('\n');
+        }
+        Ok(output.trim_end_matches(['\r', '\n']).to_string())
+      }))
+    } else {
+      None
+    };
+
+    if verbose && !interactive && !capture_stdout {
       handle_output!(child.stdout, context);
-      handle_output!(child.stderr, context);
-    } else if verbose && !interactive && capture_output {
+    }
+    if verbose && !interactive && !capture_stderr {
       handle_output!(child.stderr, context);
     }
 
-    Ok(SpawnedLocalCommand { child, stdout_handle })
+    Ok(SpawnedLocalCommand {
+      child,
+      stdout_handle,
+      stderr_handle,
+    })
   }
 
   fn finish_execution(
     &self,
     context: &TaskContext,
     command: &str,
-    status: ExitStatus,
-    captured_stdout: Option<String>,
-    ignore_errors: bool,
+    result: ExecutionResult,
+    options: ExecutionOptions,
   ) -> anyhow::Result<()> {
-    if !status.success() && !ignore_errors {
+    // Save exit code before checking failure, so it is available regardless
+    if options.capture_exit_code {
+      if let Some(exit_code_name) = &self.save_exit_code_as {
+        let code = result.status.code().unwrap_or(-1).to_string();
+        context.insert_task_output(exit_code_name.clone(), code)?;
+      }
+    }
+
+    if !result.status.success() && !options.ignore_errors {
       anyhow::bail!("Command failed - {}", command);
     }
 
-    if status.success() {
-      if let (Some(output_name), Some(output_value)) = (&self.save_output_as, captured_stdout) {
+    if result.status.success() {
+      if let (Some(output_name), Some(output_value)) = (&self.save_output_as, result.captured_stdout) {
         context.insert_task_output(output_name.clone(), output_value)?;
+      }
+    }
+
+    // stderr is saved on success or when ignore_errors is set (command ran to completion)
+    if result.status.success() || options.ignore_errors {
+      if let (Some(stderr_name), Some(stderr_value)) = (&self.save_stderr_as, result.captured_stderr) {
+        context.insert_task_output(stderr_name.clone(), stderr_value)?;
       }
     }
 
@@ -238,17 +324,24 @@ impl LocalRun {
     context: &TaskContext,
     command: &str,
     ignore_errors: bool,
-    capture_output: bool,
+    capture_stdout: bool,
+    capture_stderr: bool,
     verbose: bool,
   ) -> anyhow::Result<()> {
     if !std::io::stdin().is_terminal() || context.json_events {
       return self.execute_without_retrigger(
         context,
         command,
-        ignore_errors,
-        capture_output,
-        verbose,
-        "Manual retrigger requires an attached terminal and is disabled for `--json-events`.",
+        ExecutionRequest {
+          capture_stdout,
+          capture_stderr,
+          verbose,
+          options: ExecutionOptions {
+            capture_exit_code: self.save_exit_code_as.is_some(),
+            ignore_errors,
+          },
+          reason: "Manual retrigger requires an attached terminal and is disabled for `--json-events`.",
+        },
       );
     }
 
@@ -257,10 +350,16 @@ impl LocalRun {
       return self.execute_without_retrigger(
         context,
         command,
-        ignore_errors,
-        capture_output,
-        verbose,
-        "Manual retrigger is currently supported on Unix terminals only.",
+        ExecutionRequest {
+          capture_stdout,
+          capture_stderr,
+          verbose,
+          options: ExecutionOptions {
+            capture_exit_code: self.save_exit_code_as.is_some(),
+            ignore_errors,
+          },
+          reason: "Manual retrigger is currently supported on Unix terminals only.",
+        },
       );
     }
 
@@ -272,13 +371,27 @@ impl LocalRun {
       drain_retrigger_input()?;
 
       loop {
-        let spawned = self.spawn_command(context, command, capture_output, verbose, false)?;
+        let spawned = self.spawn_command(context, command, capture_stdout, capture_stderr, verbose, false)?;
         match spawned.wait_for_completion_or_retrigger() {
           Ok(CommandOutcome::Completed {
             status,
             captured_stdout,
+            captured_stderr,
           }) => {
-            return self.finish_execution(context, command, status, captured_stdout, ignore_errors);
+            let capture_exit_code = self.save_exit_code_as.is_some();
+            return self.finish_execution(
+              context,
+              command,
+              ExecutionResult {
+                status,
+                captured_stdout,
+                captured_stderr,
+              },
+              ExecutionOptions {
+                capture_exit_code,
+                ignore_errors,
+              },
+            );
           },
           Ok(CommandOutcome::RestartRequested) => {
             let _ = term.write_line("Restarting command...");
@@ -296,18 +409,22 @@ impl LocalRun {
     &self,
     context: &TaskContext,
     command: &str,
-    ignore_errors: bool,
-    capture_output: bool,
-    verbose: bool,
-    reason: &str,
+    request: ExecutionRequest<'_>,
   ) -> anyhow::Result<()> {
     if !context.json_events {
-      let _ = context.multi.println(reason);
+      let _ = context.multi.println(request.reason);
     }
-    let (status, captured_stdout) = self
-      .spawn_command(context, command, capture_output, verbose, false)?
+    let result = self
+      .spawn_command(
+        context,
+        command,
+        request.capture_stdout,
+        request.capture_stderr,
+        request.verbose,
+        false,
+      )?
       .wait_for_completion()?;
-    self.finish_execution(context, command, status, captured_stdout, ignore_errors)
+    self.finish_execution(context, command, result, request.options)
   }
 
   /// Check if the local run task is parallel safe
@@ -382,30 +499,37 @@ impl LocalRun {
 struct SpawnedLocalCommand {
   child: Child,
   stdout_handle: Option<thread::JoinHandle<anyhow::Result<String>>>,
+  stderr_handle: Option<thread::JoinHandle<anyhow::Result<String>>>,
 }
 
 impl SpawnedLocalCommand {
-  fn wait_for_completion(mut self) -> anyhow::Result<(ExitStatus, Option<String>)> {
-    let status = self.child.wait()?;
-    let captured_stdout = self.join_stdout_handle()?;
-    Ok((status, captured_stdout))
+  fn wait_for_completion(mut self) -> anyhow::Result<ExecutionResult> {
+    Ok(ExecutionResult {
+      status: self.child.wait()?,
+      captured_stdout: self.join_stdout_handle()?,
+      captured_stderr: self.join_stderr_handle()?,
+    })
   }
 
   fn wait_for_completion_or_cancellation(
     mut self,
     context: &TaskContext,
     command: &str,
-  ) -> anyhow::Result<(ExitStatus, Option<String>)> {
+  ) -> anyhow::Result<ExecutionResult> {
     loop {
       if let Some(status) = self.child.try_wait()? {
-        let captured_stdout = self.join_stdout_handle()?;
-        return Ok((status, captured_stdout));
+        return Ok(ExecutionResult {
+          status,
+          captured_stdout: self.join_stdout_handle()?,
+          captured_stderr: self.join_stderr_handle()?,
+        });
       }
 
       if context.cancellation_requested() {
         self.kill_for_cancellation()?;
         let _ = self.child.wait()?;
         let _ = self.join_stdout_handle()?;
+        let _ = self.join_stderr_handle()?;
         anyhow::bail!("Command cancelled - {}", command);
       }
 
@@ -425,14 +549,28 @@ impl SpawnedLocalCommand {
       .transpose()
   }
 
+  fn join_stderr_handle(&mut self) -> anyhow::Result<Option<String>> {
+    self
+      .stderr_handle
+      .take()
+      .map(|handle| {
+        handle
+          .join()
+          .map_err(|_| anyhow::anyhow!("Failed to join stderr capture thread"))?
+      })
+      .transpose()
+  }
+
   #[cfg(unix)]
   fn wait_for_completion_or_retrigger(mut self) -> anyhow::Result<CommandOutcome> {
     loop {
       if let Some(status) = self.child.try_wait()? {
         let captured_stdout = self.join_stdout_handle()?;
+        let captured_stderr = self.join_stderr_handle()?;
         return Ok(CommandOutcome::Completed {
           status,
           captured_stdout,
+          captured_stderr,
         });
       }
 
@@ -441,6 +579,7 @@ impl SpawnedLocalCommand {
           self.kill_for_cancellation()?;
           let _ = self.child.wait()?;
           let _ = self.join_stdout_handle()?;
+          let _ = self.join_stderr_handle()?;
           drain_retrigger_input()?;
           return Ok(CommandOutcome::RestartRequested);
         },
@@ -448,6 +587,7 @@ impl SpawnedLocalCommand {
           self.kill_for_cancellation()?;
           let _ = self.child.wait()?;
           let _ = self.join_stdout_handle()?;
+          let _ = self.join_stderr_handle()?;
           drain_retrigger_input()?;
           return Ok(CommandOutcome::Interrupted);
         },
@@ -492,9 +632,29 @@ enum CommandOutcome {
   Completed {
     status: ExitStatus,
     captured_stdout: Option<String>,
+    captured_stderr: Option<String>,
   },
   RestartRequested,
   Interrupted,
+}
+
+struct ExecutionOptions {
+  capture_exit_code: bool,
+  ignore_errors: bool,
+}
+
+struct ExecutionRequest<'a> {
+  capture_stdout: bool,
+  capture_stderr: bool,
+  verbose: bool,
+  options: ExecutionOptions,
+  reason: &'a str,
+}
+
+struct ExecutionResult {
+  status: ExitStatus,
+  captured_stdout: Option<String>,
+  captured_stderr: Option<String>,
 }
 
 #[cfg(unix)]

@@ -51,6 +51,15 @@ pub enum PlannedCommand {
     interactive: bool,
     retrigger: bool,
   },
+  SshRun {
+    host: String,
+    user: Option<String>,
+    port: Option<u16>,
+    command: String,
+    shell: Option<String>,
+    work_dir: Option<String>,
+    interactive: bool,
+  },
   ContainerRun {
     runtime: String,
     image: String,
@@ -69,6 +78,16 @@ pub enum PlannedCommand {
   TaskRun {
     task: String,
   },
+  JsonExtract {
+    extract_json_from: String,
+    json_path: String,
+    save_as: String,
+  },
+  WriteOutput {
+    write_output: String,
+    to_file: String,
+    create_parents: bool,
+  },
 }
 
 impl PlannedCommand {
@@ -76,6 +95,7 @@ impl PlannedCommand {
     match self {
       PlannedCommand::CommandRun { command, .. } => format!("command: {}", command),
       PlannedCommand::LocalRun { command, .. } => format!("local: {}", command),
+      PlannedCommand::SshRun { host, command, .. } => format!("ssh:{} -> {}", host, command),
       PlannedCommand::ContainerRun { image, command, .. } => {
         format!("container_run: {} -> {}", image, command.join(" "))
       },
@@ -83,6 +103,18 @@ impl PlannedCommand {
         image_name, context, ..
       } => format!("container_build: {} ({})", image_name, context),
       PlannedCommand::TaskRun { task } => format!("task: {}", task),
+      PlannedCommand::JsonExtract {
+        extract_json_from,
+        json_path,
+        save_as,
+      } => format!("json_extract: {}.{} -> {}", extract_json_from, json_path, save_as),
+      PlannedCommand::WriteOutput {
+        write_output,
+        to_file,
+        ..
+      } => {
+        format!("write_output: {} -> {}", write_output, to_file)
+      },
     }
   }
 }
@@ -204,6 +236,15 @@ impl PlannedCommand {
         interactive: local_run.interactive_enabled(),
         retrigger: local_run.retrigger_enabled(),
       },
+      CommandRunner::SshRun(ssh_run) => PlannedCommand::SshRun {
+        host: ssh_run.ssh_run.host.clone(),
+        user: ssh_run.ssh_run.user.clone(),
+        port: ssh_run.ssh_run.port,
+        command: ssh_run.ssh_run.command.clone(),
+        shell: ssh_run.ssh_run.shell.as_ref().map(|shell| shell.cmd()),
+        work_dir: ssh_run.ssh_run.work_dir.clone(),
+        interactive: ssh_run.interactive_enabled(),
+      },
       CommandRunner::ContainerRun(container_run) => PlannedCommand::ContainerRun {
         runtime: container_run
           .runtime
@@ -256,6 +297,16 @@ impl PlannedCommand {
       },
       CommandRunner::TaskRun(task_run) => PlannedCommand::TaskRun {
         task: task_run.task.clone(),
+      },
+      CommandRunner::JsonExtract(json_extract) => PlannedCommand::JsonExtract {
+        extract_json_from: json_extract.extract_json_from.clone(),
+        json_path: json_extract.json_path.clone(),
+        save_as: json_extract.save_as.clone(),
+      },
+      CommandRunner::WriteOutput(write_output) => PlannedCommand::WriteOutput {
+        write_output: write_output.write_output.clone(),
+        to_file: write_output.to_file.clone(),
+        create_parents: write_output.create_parents.unwrap_or(false),
       },
     }
   }

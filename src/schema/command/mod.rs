@@ -15,11 +15,17 @@ use super::TaskContext;
 mod container_build;
 mod container_run;
 mod container_runtime;
+mod json_extract;
 mod local_run;
+mod ssh_run;
 mod task_run;
+mod write_output;
 
 pub use container_runtime::ContainerRuntime;
+pub use json_extract::JsonExtract;
 pub use local_run::LocalRun;
+pub use ssh_run::SshRun;
+pub use write_output::WriteOutput;
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 #[serde(untagged)]
@@ -27,7 +33,10 @@ pub use local_run::LocalRun;
 pub enum CommandRunner {
   ContainerBuild(container_build::ContainerBuild),
   ContainerRun(container_run::ContainerRun),
+  JsonExtract(json_extract::JsonExtract),
+  WriteOutput(write_output::WriteOutput),
   LocalRun(local_run::LocalRun),
+  SshRun(ssh_run::SshRun),
   TaskRun(task_run::TaskRun),
   CommandRun(String),
 }
@@ -51,8 +60,11 @@ impl CommandRunner {
     let result = match self {
       CommandRunner::ContainerBuild(container_build) => container_build.execute(context),
       CommandRunner::ContainerRun(container_run) => container_run.execute(context),
+      CommandRunner::JsonExtract(json_extract) => json_extract.execute(context),
+      CommandRunner::WriteOutput(write_output) => write_output.execute(context),
       CommandRunner::LocalRun(local_run) if allow_cancellation => local_run.execute_cancellable(context),
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
+      CommandRunner::SshRun(ssh_run) => ssh_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
       CommandRunner::CommandRun(command) => self.execute_command(context, command),
     };
@@ -103,7 +115,10 @@ impl CommandRunner {
     match self {
       CommandRunner::ContainerBuild(_) => "container_build",
       CommandRunner::ContainerRun(_) => "container_run",
+      CommandRunner::JsonExtract(_) => "json_extract",
+      CommandRunner::WriteOutput(_) => "write_output",
       CommandRunner::LocalRun(_) => "local_run",
+      CommandRunner::SshRun(_) => "ssh_run",
       CommandRunner::TaskRun(_) => "task_run",
       CommandRunner::CommandRun(_) => "command_run",
     }

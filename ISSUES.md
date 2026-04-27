@@ -7,80 +7,6 @@ Instruction for all the items in this file:
 - Prefer additive wording like "add", "replace", "update", "remove", "validate", "test".
 - Avoid broad goals without concrete implementation detail.
 
-## Task Labels
-
-Instruction for items in this section:
-- Keep labels as task metadata until a command explicitly uses them.
-- Use exact-match filtering first; avoid regex or expression syntax until needed.
-- Preserve deterministic task ordering when labels select multiple tasks.
-
-### Phase 1: Shared Label Matching
-
-- [x] Add shared label filter parsing and matching
-  - Add a reusable parser for `KEY` and `KEY=VALUE` label filters.
-  - Treat multiple label filters as AND filters.
-  - Match `KEY` by label existence.
-  - Match `KEY=VALUE` by exact label value.
-  - Add unit tests for existence, exact value, multiple filters, and no match.
-
-### Phase 2: List Integration
-
-- [x] Add label filters to `mk list`
-  - Add repeatable `--label <KEY>` and `--label <KEY=VALUE>` flags to `mk list`.
-  - Use the shared label matching helper.
-  - Keep sorted task output order after filtering.
-  - Add integration tests for text, plain, and JSON list output.
-
-- [x] Include labels in `mk list --json`
-  - Add a `labels` object to each task entry.
-  - Use `{}` for string shorthand tasks and tasks without labels.
-  - Keep JSON output sorted and stable.
-  - Update `tests/snapshots/list-json.snap`.
-
-### Phase 3: Run Integration
-
-- [x] Add label filters to `mk run`
-  - Add repeatable `--label <KEY>` and `--label <KEY=VALUE>` flags to `mk run`.
-  - Use the shared label matching helper.
-  - Require either a task name or at least one `--label` filter.
-  - Run all matching tasks in deterministic sorted order.
-  - Return an error when no task matches the label filter.
-  - Add integration tests for one match, multiple matches, and no matches.
-
-### Phase 4: Plan Integration
-
-- [x] Add label filters to `mk plan`
-  - Add repeatable `--label <KEY>` and `--label <KEY=VALUE>` flags to `mk plan`.
-  - Use the shared label matching helper.
-  - Print combined plans for all matching tasks in deterministic sorted order.
-  - Preserve current single-task `mk plan <task>` behavior.
-  - Add integration tests for text and JSON plan output.
-
-### Phase 5: Validation
-
-- [x] Add label validation rules
-  - Warn on empty label keys.
-  - Warn on empty label values.
-  - Warn on labels using reserved `mk.` prefix.
-  - Add validation tests for each warning.
-
-### Phase 6: Docs and Examples
-
-- [x] Document task label workflows
-  - Add README examples for `mk list --label area=ci`.
-  - Add README examples for `mk run --label kind=test`.
-  - Document multiple label filters as AND.
-  - Clarify task labels are separate from `container_build.labels`.
-
-## Task Selector
-
-- [x] Add fuzzy task selector to `mk run`
-  - Add `mk run --fzf` and `mk run -F`.
-  - Select one task with `fzf` first, then `sk`.
-  - Keep command `interactive: true` behavior unchanged.
-  - Allow `--label` filters to narrow selector candidates.
-  - Add integration tests for selection, fallback, missing backend, and cancel flow.
-
 ## Watch Mode
 
 Instruction for items in this section:
@@ -123,7 +49,7 @@ Instruction for items in this section:
   - Keep default output append-only when flag is absent.
   - Add integration test for flag parsing and screen-clear branch selection.
 
-- [ ] Add `.mkignore` support to `mk watch` (ignore crate of ripgrep)
+- [ ] Add `.mkignore` support to `mk watch` (use ignore crate of ripgrep)
   - Load ignore rules from `.mkignore` at config root using gitignore-style pattern semantics.
   - Apply ignore filtering to watched descendant paths for both explicit `--path` roots and inferred task `inputs`.
   - Keep ignore handling scoped to watch behavior and do not change cache `inputs` resolution semantics.
@@ -261,46 +187,6 @@ Instruction for items in this section:
 - [ ] Document conditional task workflows
   - Add README examples for OS-gated and env-gated tasks.
   - Clarify that failed conditions skip tasks instead of failing execution.
-
-## Doctor Command
-
-Instruction for items in this section:
-- Prefer read-only diagnostics.
-- Print actionable failures with exact missing path, binary, or setting.
-- Reuse existing config loading and runtime detection helpers where possible.
-
-### Phase 1: CLI Surface
-
-- [ ] Add `mk doctor` command
-  - Add `doctor` subcommand to CLI help and docs.
-  - Exit zero when all checks pass and non-zero when any required check fails.
-  - Add help snapshot coverage for `mk doctor --help`.
-
-### Phase 2: Core Diagnostics
-
-- [ ] Add config discovery diagnostics to `mk doctor`
-  - Print resolved config path or explicit missing-config result.
-  - Reuse current config file search order.
-  - Include detected config format in output.
-  - Add integration tests for found and missing config cases.
-
-- [ ] Add container runtime diagnostics to `mk doctor`
-  - Detect available `docker`, `podman`, and `nerdctl` binaries.
-  - Show which runtime `auto` would select on current system.
-  - Mark runtime checks as warnings when container features are unused.
-  - Add integration tests with mocked runtime binaries on `PATH`.
-
-- [ ] Add cache and secrets diagnostics to `mk doctor`
-  - Print cache metadata directory path and existence status.
-  - Print secrets backend availability without exposing secret values.
-  - Surface missing key material or unreadable vault path as failures.
-  - Add integration tests for healthy and missing secrets state.
-
-### Phase 3: Documentation
-
-- [ ] Document `mk doctor` troubleshooting workflows
-  - Add README examples for diagnosing missing config and runtime setup.
-  - Link to relevant wiki pages for secrets and configuration help.
 
 ## Extends Composition
 
@@ -467,26 +353,26 @@ Instruction for items in this section:
 
 ### Phase 1: Capture Expansion
 
-- [ ] Add stderr capture support for local commands
+- [x] Add stderr capture support for local commands
   - Add command field to save stderr under explicit output name.
   - Keep stdout capture behavior unchanged.
   - Add integration tests for stdout-only, stderr-only, and combined command output.
 
-- [ ] Add exit code capture support for local commands
+- [x] Add exit code capture support for local commands
   - Add command field to save process exit status for later interpolation.
   - Preserve current failure semantics when command exits non-zero.
   - Add integration tests for successful and failing commands with saved exit codes.
 
 ### Phase 2: Structured Extraction
 
-- [ ] Add JSON field extraction from saved command output
+- [x] Add JSON field extraction from saved command output
   - Add command field to parse saved stdout as JSON and extract a dot-path into named outputs.
   - Return validation or runtime errors for invalid JSON and missing paths.
   - Add integration tests for valid extraction, invalid JSON, and missing path cases.
 
 ### Phase 3: Artifact Writes
 
-- [ ] Add command field to write saved output to a file
+- [x] Add command field to write saved output to a file
   - Allow writing a named saved output into explicit file path after command completion.
   - Create parent directories when safe and requested by config.
   - Add integration tests for successful writes and existing-path conflicts.
@@ -520,82 +406,6 @@ Instruction for items in this section:
   - Print description, group, labels, dependencies, and resolved commands for one task.
   - Keep top-level Clap help behavior unchanged.
   - Add integration tests for existing and missing task names.
-
-### Phase 3: Examples
-
-- [ ] Add task `examples` metadata field
-  - Add optional string list field to task schema.
-  - Print examples in `mk help <task>`.
-  - Add schema and integration tests for example rendering.
-
-## Init Templates
-
-Instruction for items in this section:
-- Keep generated templates minimal and runnable.
-- Match template format to requested output extension.
-- Reuse shared sample task content where practical.
-
-### Phase 1: Format Support
-
-- [x] Add TOML template generation to `mk init`
-  - Generate sample config when output path ends with `.toml`.
-  - Keep YAML template behavior unchanged.
-  - Add integration snapshots for TOML init stdout and file contents.
-
-- [x] Add JSON template generation to `mk init`
-  - Generate sample config when output path ends with `.json`.
-  - Add integration snapshots for JSON init stdout and file contents.
-
-- [x] Add Lua template generation to `mk init`
-  - Generate sample config when output path ends with `.lua`.
-  - Add integration snapshots for Lua init stdout and file contents.
-
-### Phase 2: Validation
-
-- [x] Validate `mk init` output extension against supported template formats
-  - Reject unsupported extensions with actionable error text.
-  - Update existing init tests for supported and unsupported paths.
-
-## Cache Fingerprinting
-
-Instruction for items in this section:
-- Preserve cache correctness over cache hit rate.
-- Prefer explicit invalidation inputs over hidden heuristics.
-- Keep fingerprint serialization deterministic across runs and platforms.
-
-### Phase 1: Output and Input Correctness
-
-- [x] Invalidate cache when declared output content drifts
-  - Hash current declared output file contents or equivalent stable metadata during cache-hit evaluation instead of checking existence only.
-  - Treat missing or externally modified outputs as cache misses even when inputs and env are unchanged.
-  - Add integration tests for external output edits and output deletions after a cached run.
-
-- [x] Improve directory input fingerprinting
-  - Recurse into directory inputs and hash child entry paths and file contents instead of relying on directory metadata only.
-  - Keep deterministic traversal order across platforms.
-  - Add integration tests for nested file edits, file additions, and file removals inside directory inputs.
-
-### Phase 2: Fingerprint Stability
-
-- [x] Replace debug-string task fingerprint serialization with explicit structured hashing
-  - Stop relying on `Debug` formatting for `commands`, `preconditions`, and dependency data in cache fingerprints.
-  - Serialize fingerprint-relevant task fields in a stable explicit order.
-  - Add unit tests that lock fingerprint stability for equivalent task definitions.
-
-- [x] Add cache fingerprint coverage tests for task configuration changes
-  - Prove cache invalidates when command strings, outputs, env values, shell, execution mode, or secret path config changes.
-  - Add targeted tests for one-field changes instead of one broad snapshot.
-
-### Phase 3: Dynamic Input Visibility
-
-- [x] Warn when cached tasks contain dynamic shell-derived command inputs without declared `inputs`
-  - Detect shell substitutions or other runtime-derived command fragments in cacheable command fields where practical.
-  - Emit validation warnings that cache invalidation may miss undeclared dynamic dependencies.
-  - Add validation tests for warning and no-warning cases.
-
-- [x] Document cache fingerprint blind spots and declaration rules
-  - Clarify that undeclared runtime reads such as shell-derived values, git state, and external files do not invalidate cache automatically.
-  - Add README guidance to declare such dependencies in `inputs` or `env_file`.
 
 ## Remote Cache
 
@@ -634,3 +444,78 @@ Instruction for items in this section:
 - [ ] Document remote cache workflows
   - Add README examples for local and shared filesystem cache configuration.
   - Clarify cache consistency limits and recommended CI usage.
+
+## Markdown Task Files
+
+Instruction for items in this section:
+- Keep Markdown task files as small command-only wrapper over existing local shell task execution.
+- Parse explicit Markdown structure only; do not infer YAML-like config from prose.
+- Preserve current execution semantics for plain shell command strings.
+
+### Phase 1: Loader
+
+- [ ] Add markdown config file extension support
+  - Add `.md` and `.markdown` handling to task root file loader.
+  - Keep existing YAML, TOML, JSON, and Lua behavior unchanged.
+  - Return unsupported-format errors for other extensions as today.
+  - Add unit tests for supported markdown extensions.
+
+- [ ] Add Markdown heading-based task extraction
+  - Treat each level-2 heading `## Task Name` as one task definition.
+  - Use heading text as task name without additional slug generation.
+  - Keep task order deterministic based on file order.
+  - Add unit tests for one-task and multi-task markdown parsing.
+
+- [ ] Add markdown description extraction
+  - Use first non-empty paragraph after each task heading as task description.
+  - Keep description optional when paragraph text is absent.
+  - Stop description capture before first fenced code block under same heading.
+  - Add unit tests for present and missing descriptions.
+
+- [ ] Add fenced code block command extraction
+  - Convert fenced code blocks under a task heading into ordered local command entries.
+  - Accept unlabeled fences and shell-style info strings like `sh`, `bash`, `shell`, `zsh`, `pwsh`, and `powershell`.
+  - Preserve command text exactly as written inside each fence.
+  - Add unit tests for single-command and multi-command task sections.
+
+- [ ] Reject markdown tasks with no command blocks
+  - Return a user-facing error when a task heading has no fenced code block commands.
+  - Report the task heading name in the error output.
+  - Keep non-task Markdown content ignored outside task sections.
+  - Add unit tests for empty task section failures.
+
+### Phase 2: Execution Mapping
+
+- [ ] Map markdown tasks into existing shell command task structs
+  - Build parsed markdown tasks into existing task structs instead of introducing a new execution path.
+  - Map each fenced code block to existing plain shell command execution entries.
+  - Map extracted paragraph text to task description field.
+  - Add unit tests for task struct conversion.
+
+- [ ] Keep markdown task files command-only
+  - Reject Markdown-only extensions for dependencies, env, cache, labels, secrets, containers, and other YAML task fields.
+  - Keep markdown parsing limited to task name, description, and command blocks.
+  - Return actionable errors when unsupported markdown task metadata is introduced.
+  - Add validation tests for unsupported markdown features.
+
+### Phase 3: CLI Discovery And Init
+
+- [ ] Add markdown files to default config discovery
+  - Add `tasks.md`, `tasks.markdown`, `.mk/tasks.md`, and `.mk/tasks.markdown` to default config candidates.
+  - Update missing-config help text to mention markdown fallback files.
+  - Keep explicit `--config` behavior unchanged.
+  - Add CLI tests for markdown candidate discovery.
+
+- [ ] Add `mk init` markdown output support
+  - Allow `mk init` output paths ending in `.md` and `.markdown`.
+  - Render sample markdown config using `##` task headings, optional paragraph description, and fenced shell code blocks.
+  - Keep existing `.yaml`, `.yml`, `.toml`, `.json`, and `.lua` output behavior unchanged.
+  - Add tests for supported markdown init output paths.
+
+### Phase 4: Documentation
+
+- [ ] Document markdown task file workflow
+  - Add README examples for `tasks.md` and `mk -c tasks.md run <task>`.
+  - Document `##` heading task syntax, optional paragraph descriptions, and fenced command blocks.
+  - Clarify that markdown task files support command execution only and do not expose full YAML task schema.
+  - Add doc coverage for accepted fenced code block info strings.

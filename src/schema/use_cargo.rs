@@ -94,6 +94,8 @@ impl UseCargoArgs {
             retrigger: None,
             ignore_errors: None,
             save_output_as: None,
+            save_stderr_as: None,
+            save_exit_code_as: None,
             verbose: None,
           })],
           ..Default::default()
