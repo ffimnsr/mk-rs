@@ -1,9 +1,10 @@
 Run specific tasks
 
-Usage: mk run [OPTIONS] [TASK_NAME]
+Usage: mk run [OPTIONS] [TASK_NAME] [-- <TRAILING_ARGS>...]
 
 Arguments:
-  [TASK_NAME]  The task name to run
+  [TASK_NAME]         The task name to run
+  [TRAILING_ARGS]...  Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)
 
 Options:
       --dry-run         Print the resolved task plan without executing commands

@@ -175,6 +175,9 @@ jobs:
               sudo apt-get install -y --no-install-recommends binutils-s390x-linux-gnu ;;
           esac
           ${{ matrix.strip }} target/${{ matrix.target }}/release/mk
+      - name: Generate man pages
+        if: matrix.os != 'windows-latest'
+        run: cargo run --bin mk-manpages -- target/man/man1
       - name: Build archive
         shell: bash
         run: |
@@ -191,6 +194,8 @@ jobs:
             echo "ASSET_SUM=$archive_target.zip.sha256" >> $GITHUB_ENV
           else
             cp "target/${{ matrix.target }}/release/mk" "$archive_target/"
+            mkdir -p "$archive_target/man"
+            cp -R target/man/man1 "$archive_target/man/"
 
             tar czf "$archive_target.tar.gz" "$archive_target"
             shasum -a 256 "$archive_target.tar.gz" > "$archive_target.tar.gz.sha256"
@@ -232,6 +237,8 @@ jobs:
           echo "target dir is: ${{ env.TARGET_DIR }}"
       - name: Build release binary
         run: ${{ env.CARGO }} build --verbose --release --target ${{ env.TARGET }} ${{ env.TARGET_FLAGS }}
+      - name: Generate man pages
+        run: cargo run --bin mk-manpages -- target/man/man1
       - name: Build deb package
         run: ${{ env.CARGO }} deb --target ${{ env.TARGET }}
       - name: Build archive

@@ -69,9 +69,11 @@ main() {
     echo "Installed mk to ${BIN_DIR}"
 
     # Install manpages.
-    # ensure try_sudo mkdir -p -- "${MAN_DIR}/man1"
-    # ensure try_sudo cp -- "man/man1/"* "${MAN_DIR}/man1/"
-    # echo "Installed manpages to ${MAN_DIR}"
+    if [ -d "${_filename_no_ext}/man/man1" ]; then
+        ensure try_sudo mkdir -p -- "${MAN_DIR}/man1"
+        ensure try_sudo cp -- "${_filename_no_ext}/man/man1/"* "${MAN_DIR}/man1/"
+        echo "Installed manpages to ${MAN_DIR}"
+    fi
 
     # Install documentation.
     ensure try_sudo mkdir -p -- "${DOC_DIR}/mk"

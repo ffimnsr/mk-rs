@@ -51,6 +51,7 @@ pub struct TaskContext {
   pub force: bool,
   pub json_events: bool,
   pub is_nested: bool,
+  pub forwarded_args: Vec<String>,
   pub cache_store: Arc<Mutex<CacheStore>>,
   pub current_task_name: Option<String>,
   pub cancellation_requested: Arc<AtomicBool>,
@@ -74,6 +75,7 @@ impl TaskContext {
       force: false,
       json_events: false,
       is_nested: false,
+      forwarded_args: Vec::new(),
       cache_store: Arc::new(Mutex::new(CacheStore::default())),
       current_task_name: None,
       cancellation_requested: Arc::new(AtomicBool::new(false)),
@@ -97,6 +99,7 @@ impl TaskContext {
       force: false,
       json_events: false,
       is_nested: false,
+      forwarded_args: Vec::new(),
       cache_store: Arc::new(Mutex::new(CacheStore::default())),
       current_task_name: None,
       cancellation_requested: Arc::new(AtomicBool::new(false)),
@@ -120,25 +123,36 @@ impl TaskContext {
       force: false,
       json_events: false,
       is_nested: false,
+      forwarded_args: Vec::new(),
       cache_store: Arc::new(Mutex::new(cache_store)),
       current_task_name: None,
       cancellation_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
-  pub fn new_with_options(task_root: Arc<TaskRoot>, force: bool, json_events: bool) -> Self {
+  pub fn new_with_options(
+    task_root: Arc<TaskRoot>,
+    force: bool,
+    json_events: bool,
+    forwarded_args: Vec<String>,
+  ) -> Self {
     let cache_store = CacheStore::load_in_dir(&task_root.cache_base_dir()).unwrap_or_default();
     let multi = if json_events {
       Arc::new(MultiProgress::with_draw_target(ProgressDrawTarget::hidden()))
     } else {
       Arc::new(MultiProgress::new())
     };
+    let mut env_vars: HashMap<String, String> = HashMap::new();
+    env_vars.insert("MK_RUN_ARGC".to_string(), forwarded_args.len().to_string());
+    for (i, arg) in forwarded_args.iter().enumerate() {
+      env_vars.insert(format!("MK_RUN_ARG_{i}"), arg.clone());
+    }
     Self {
       task_root: task_root.clone(),
       active_tasks: Arc::new(Mutex::new(HashSet::new())),
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi,
-      env_vars: HashMap::new(),
+      env_vars,
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: None,
       shell: None,
@@ -148,6 +162,7 @@ impl TaskContext {
       force,
       json_events,
       is_nested: false,
+      forwarded_args,
       cache_store: Arc::new(Mutex::new(cache_store)),
       current_task_name: None,
       cancellation_requested: Arc::new(AtomicBool::new(false)),
@@ -170,6 +185,7 @@ impl TaskContext {
       force: context.force,
       json_events: context.json_events,
       is_nested: true,
+      forwarded_args: context.forwarded_args.clone(),
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
       cancellation_requested: context.cancellation_requested.clone(),
@@ -192,6 +208,7 @@ impl TaskContext {
       force: context.force,
       json_events: context.json_events,
       is_nested: true,
+      forwarded_args: context.forwarded_args.clone(),
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
       cancellation_requested: context.cancellation_requested.clone(),

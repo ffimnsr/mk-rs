@@ -1,0 +1,15 @@
+Watch files and re-run a task on changes
+
+Usage: mk watch [OPTIONS] [TASK_NAME] [-- <TRAILING_ARGS>...]
+
+Arguments:
+  [TASK_NAME]         The task name to run
+  [TRAILING_ARGS]...  Arguments forwarded to the task on each run (available as ${{ args.0 }}, ${{ args.1 }}, etc.)
+
+Options:
+      --label <FILTER>       Watch tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
+      --path <PATH>          Override watched paths (repeatable; defaults to task inputs when absent)
+      --debounce <DURATION>  Debounce duration for filesystem event coalescing (e.g. 500ms, 1s, 2.5s)
+      --clear                Clear terminal before each rerun (default: append output)
+  -h, --help                 Print help
+  -V, --version              Print version

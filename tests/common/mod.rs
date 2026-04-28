@@ -60,5 +60,5 @@ pub fn normalize_snapshot_text(text: &str, replacements: &[(&str, &str)]) -> Str
   for (from, to) in replacements {
     out = out.replace(from, to);
   }
-  out
+  out.lines().map(str::trim_end).collect::<Vec<_>>().join("\n")
 }

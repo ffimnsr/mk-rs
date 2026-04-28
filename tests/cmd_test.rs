@@ -5656,3 +5656,918 @@ fn test_output_plumbing_p3_write_output_with_create_parents() -> anyhow::Result<
   assert_eq!(std::fs::read_to_string(&dest_file)?, "nested-content");
   Ok(())
 }
+
+// --- Trailing args passthrough tests ---
+
+#[test]
+fn test_trailing_args_via_run_subcommand() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      greet:
+        commands:
+          - command: echo '${{ args.0 }} ${{ args.1 }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("greet")
+    .arg("--")
+    .arg("hello")
+    .arg("world")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("hello world"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_via_direct_task_shortcut() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      greet:
+        commands:
+          - command: echo '${{ args.0 }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("greet")
+    .arg("--")
+    .arg("alpha")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("alpha"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_len_expression() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      count:
+        commands:
+          - command: echo '${{ args.len }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("count")
+    .arg("--")
+    .arg("a")
+    .arg("b")
+    .arg("c")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("3"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_env_vars_injected() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      envcheck:
+        commands:
+          - command: echo \"argc=$MK_RUN_ARGC arg0=$MK_RUN_ARG_0\"
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("envcheck")
+    .arg("--")
+    .arg("first")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("argc=1"))
+    .stdout(predicates::str::contains("arg0=first"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_preserve_leading_hyphens() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      flags:
+        commands:
+          - command: echo '${{ args.0 }} ${{ args.1 }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("flags")
+    .arg("--")
+    .arg("--flag")
+    .arg("value")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("--flag value"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_out_of_range_fails_with_message() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      oob:
+        commands:
+          - command: echo '${{ args.5 }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("oob")
+    .arg("--")
+    .arg("only-one")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("args.5 is out of range"));
+
+  Ok(())
+}
+
+#[test]
+fn test_trailing_args_no_args_gives_zero_len() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      count:
+        commands:
+          - command: echo '${{ args.len }}'
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("count")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("0"));
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_requires_task_name_or_label() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Provide a task name or at least one --label filter",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_accepts_task_name() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  // Task has no inputs and no --path: watch should error with a clear message.
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .output()?;
+
+  assert!(!output.status.success());
+  assert!(
+    String::from_utf8_lossy(&output.stderr).contains("No watch paths"),
+    "expected 'No watch paths' in stderr, got: {}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_accepts_repeated_path_flags() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  // Create the directories so the watcher can actually watch them.
+  std::fs::create_dir_all(temp_dir.path().join("src"))?;
+  std::fs::create_dir_all(temp_dir.path().join("tests"))?;
+
+  // Multiple --path flags must parse without error; watcher starts and prints paths.
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .arg("--path")
+    .arg("src")
+    .arg("--path")
+    .arg("tests")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(500));
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.contains("src") && stdout.contains("tests"),
+    "expected path list in output, got: {}",
+    stdout
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_accepts_debounce_ms() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  // Task has no inputs and no --path: parse succeeds but exits with path error.
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .arg("--debounce")
+    .arg("500ms")
+    .output()?;
+
+  assert!(!output.status.success());
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  assert!(
+    !stderr.contains("invalid duration") && !stderr.contains("debounce"),
+    "debounce parse should not fail, got: {stderr}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_accepts_debounce_seconds() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  // Task has no inputs and no --path: parse succeeds but exits with path error.
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .arg("--debounce")
+    .arg("2s")
+    .output()?;
+
+  assert!(!output.status.success());
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  assert!(
+    !stderr.contains("invalid duration") && !stderr.contains("debounce"),
+    "debounce parse should not fail, got: {stderr}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_rejects_zero_debounce() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .arg("--debounce")
+    .arg("0ms")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "debounce duration must be greater than zero",
+    ));
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_rejects_invalid_debounce_format() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .arg("--debounce")
+    .arg("fast")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("invalid duration"));
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_label_filter_resolves_matching_tasks() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        labels:
+          kind: test
+        commands:
+          - command: echo build
+            verbose: false
+      deploy:
+        labels:
+          kind: deploy
+        commands:
+          - command: echo deploy
+            verbose: false
+    ",
+  )?;
+
+  // Error message names the matched task; unmatched task should not appear.
+  let src_dir = temp_dir.path().join("src");
+  std::fs::create_dir_all(&src_dir)?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("--label")
+    .arg("kind=test")
+    .arg("--path")
+    .arg("src")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(500));
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.contains("build"),
+    "expected matched task in output, got: {}",
+    stdout
+  );
+  assert!(
+    !stdout.contains("deploy"),
+    "unexpected task in output: {}",
+    stdout
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_label_filter_no_match_errors() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      noop:
+        commands:
+          - command: echo noop
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("--label")
+    .arg("kind=missing")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("No tasks matched"));
+
+  Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Watch Execution Behavior
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_watch_errors_when_no_paths_and_no_inputs() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  // No --path and no task inputs → must fail with a clear message.
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .output()?;
+
+  assert!(!output.status.success());
+  assert!(
+    String::from_utf8_lossy(&output.stderr).contains("No watch paths"),
+    "expected 'No watch paths' in stderr, got: {}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_uses_task_inputs_as_default_paths() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  // Create the file declared in task inputs so it resolves.
+  let input_file = temp_dir.path().join("input.txt");
+  std::fs::write(&input_file, "seed")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      build:
+        inputs:
+          - input.txt
+        commands:
+          - command: echo build-ran
+            verbose: false
+    ",
+  )?;
+
+  // No --path: watch must infer paths from task inputs and start successfully.
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("build")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(600));
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.contains("input.txt"),
+    "expected watched path in output, got: {stdout}"
+  );
+  assert!(
+    stdout.contains("build-ran"),
+    "expected initial task run in output, got: {stdout}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_file_change_triggers_rerun() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  // Create the watched file before starting the watcher.
+  let watched = temp_dir.path().join("trigger.txt");
+  std::fs::write(&watched, "v1")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      greet:
+        commands:
+          - command: echo greeted
+            verbose: false
+    ",
+  )?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("greet")
+    .arg("--path")
+    .arg(&watched)
+    .arg("--debounce")
+    .arg("100ms")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  // Wait for initial task run and watcher setup.
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  // Trigger a file change.
+  std::fs::write(&watched, "v2")?;
+
+  // Wait for debounce + rerun.
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  // Task output should appear at least twice (initial + rerun).
+  let occurrences = stdout.matches("greeted").count();
+  assert!(
+    occurrences >= 2,
+    "expected at least 2 task runs, got {occurrences} in:\n{stdout}"
+  );
+  assert!(
+    stdout.contains("Change detected") || stdout.contains("re-running"),
+    "expected rerun reason in output, got:\n{stdout}"
+  );
+
+  Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Quality of Life
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_watch_clear_flag_is_accepted() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let watched = temp_dir.path().join("src.txt");
+  std::fs::write(&watched, "init")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      echo:
+        commands:
+          - command: echo hello
+            verbose: false
+    ",
+  )?;
+
+  // --clear must parse without error; watcher starts normally.
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("echo")
+    .arg("--path")
+    .arg(&watched)
+    .arg("--clear")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(400));
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  // Watcher must have started (initial task run visible).
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.contains("hello"),
+    "expected initial run in output: {stdout}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_clear_flag_emits_ansi_clear_on_rerun() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let watched = temp_dir.path().join("trigger.txt");
+  std::fs::write(&watched, "v1")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      stamp:
+        commands:
+          - command: echo stamped
+            verbose: false
+    ",
+  )?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("stamp")
+    .arg("--path")
+    .arg(&watched)
+    .arg("--debounce")
+    .arg("100ms")
+    .arg("--clear")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(600));
+  std::fs::write(&watched, "v2")?;
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  // ANSI clear sequence must appear before the second run.
+  assert!(stdout.contains("\x1B[2J"), "expected ANSI clear escape in output");
+  assert!(
+    stdout.matches("stamped").count() >= 2,
+    "expected at least 2 task runs in output: {stdout}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_mkignore_suppresses_ignored_file_changes() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  // Two files: one matched by .mkignore, one not.
+  let ignored_file = temp_dir.path().join("build.log");
+  let watched_file = temp_dir.path().join("src.txt");
+  std::fs::write(&ignored_file, "old")?;
+  std::fs::write(&watched_file, "old")?;
+
+  // .mkignore lives at config root (same dir as tasks.yaml).
+  std::fs::write(temp_dir.path().join(".mkignore"), "*.log\n")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      count:
+        commands:
+          - command: echo run
+            verbose: false
+    ",
+  )?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("count")
+    .arg("--path")
+    .arg(temp_dir.path())
+    .arg("--debounce")
+    .arg("100ms")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  // Wait for watcher setup.
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  // Touch only the ignored file — should NOT trigger a rerun.
+  std::fs::write(&ignored_file, "new")?;
+  std::thread::sleep(std::time::Duration::from_millis(400));
+
+  // Touch the non-ignored file — SHOULD trigger a rerun.
+  std::fs::write(&watched_file, "new")?;
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  // At least 2 runs: initial + one rerun from src.txt change.
+  let runs = stdout.matches("run").count();
+  assert!(
+    runs >= 2,
+    "expected >=2 runs (initial + src.txt rerun), got {runs} in:\n{stdout}"
+  );
+
+  Ok(())
+}
+
+#[test]
+fn test_watch_mkignore_negated_pattern_reinclude() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  let special_log = temp_dir.path().join("important.log");
+  std::fs::write(&special_log, "old")?;
+
+  // Ignore all *.log but re-include important.log via negated pattern.
+  std::fs::write(temp_dir.path().join(".mkignore"), "*.log\n!important.log\n")?;
+
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      stamp:
+        commands:
+          - command: echo stamped
+            verbose: false
+    ",
+  )?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("watch")
+    .arg("stamp")
+    .arg("--path")
+    .arg(temp_dir.path())
+    .arg("--debounce")
+    .arg("100ms")
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .spawn()?;
+
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  // important.log is re-included, so this should trigger a rerun.
+  std::fs::write(&special_log, "new")?;
+  std::thread::sleep(std::time::Duration::from_millis(600));
+
+  child.kill()?;
+  let output = child.wait_with_output()?;
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.matches("stamped").count() >= 2,
+    "expected rerun from re-included path: {stdout}"
+  );
+
+  Ok(())
+}

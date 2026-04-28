@@ -92,6 +92,19 @@ fn snapshot_doctor_help() -> anyhow::Result<()> {
 }
 
 #[test]
+fn snapshot_watch_help() -> anyhow::Result<()> {
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("watch")
+    .arg("--help")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  assert_snapshot("watch-help.snap", &String::from_utf8(output)?)
+}
+
+#[test]
 fn snapshot_list_json() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_yaml(
@@ -208,6 +221,27 @@ fn snapshot_schema() -> anyhow::Result<()> {
     .stdout
     .clone();
   assert_snapshot("schema.snap", &String::from_utf8(output)?)
+}
+
+#[test]
+fn manpage_generator_writes_root_and_nested_pages() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let output_dir = temp_dir.path().join("man1");
+
+  Command::new(cargo::cargo_bin!("mk-manpages"))
+    .arg(&output_dir)
+    .assert()
+    .success();
+
+  let root = fs::read_to_string(output_dir.join("mk.1"))?;
+  let nested = fs::read_to_string(output_dir.join("mk-secrets-vault-store-secret.1"))?;
+
+  assert!(root.contains(".TH mk 1"));
+  assert!(root.contains("mk\\-watch(1)"));
+  assert!(nested.contains(".TH mk-secrets-vault-store-secret 1"));
+  assert!(nested.contains("\\fBmk secrets vault store\\-secret\\fR"));
+
+  Ok(())
 }
 
 #[test]

@@ -95,6 +95,24 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
         name
       )
     })
+  } else if value.starts_with("args.") {
+    let key = value.trim_start_matches("args.");
+    if key == "len" {
+      return Ok(context.forwarded_args.len().to_string());
+    }
+    let idx: usize = key.parse().map_err(|_| {
+      anyhow::anyhow!(
+        "Invalid args expression '{}': expected 'args.N' or 'args.len'",
+        value
+      )
+    })?;
+    context.forwarded_args.get(idx).cloned().ok_or_else(|| {
+      anyhow::anyhow!(
+        "args.{} is out of range: only {} argument(s) were forwarded",
+        idx,
+        context.forwarded_args.len()
+      )
+    })
   } else {
     Ok(value.to_string())
   }
@@ -164,5 +182,61 @@ mod test {
       extract_output_references("${{ outputs.first }}-${{ outputs.second }}"),
       vec!["first".to_string(), "second".to_string()]
     );
+  }
+
+  #[test]
+  fn test_args_len_with_no_args() -> anyhow::Result<()> {
+    let root = Arc::new(TaskRoot::default());
+    let context = TaskContext::empty_with_root(root);
+    assert_eq!(resolve_template_expression("args.len", &context)?, "0");
+    Ok(())
+  }
+
+  #[test]
+  fn test_args_len_with_args() -> anyhow::Result<()> {
+    let root = Arc::new(TaskRoot::default());
+    let mut context = TaskContext::empty_with_root(root);
+    context.forwarded_args = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+    assert_eq!(resolve_template_expression("args.len", &context)?, "3");
+    Ok(())
+  }
+
+  #[test]
+  fn test_args_indexed_access() -> anyhow::Result<()> {
+    let root = Arc::new(TaskRoot::default());
+    let mut context = TaskContext::empty_with_root(root);
+    context.forwarded_args = vec!["hello".to_string(), "world".to_string()];
+    assert_eq!(resolve_template_expression("args.0", &context)?, "hello");
+    assert_eq!(resolve_template_expression("args.1", &context)?, "world");
+    Ok(())
+  }
+
+  #[test]
+  fn test_args_out_of_range_returns_error() {
+    let root = Arc::new(TaskRoot::default());
+    let mut context = TaskContext::empty_with_root(root);
+    context.forwarded_args = vec!["only".to_string()];
+    let err = resolve_template_expression("args.5", &context).unwrap_err();
+    assert!(err.to_string().contains("args.5 is out of range"));
+  }
+
+  #[test]
+  fn test_args_invalid_key_returns_error() {
+    let root = Arc::new(TaskRoot::default());
+    let context = TaskContext::empty_with_root(root);
+    let err = resolve_template_expression("args.notanumber", &context).unwrap_err();
+    assert!(err.to_string().contains("Invalid args expression"));
+  }
+
+  #[test]
+  fn test_interpolate_with_args() -> anyhow::Result<()> {
+    let root = Arc::new(TaskRoot::default());
+    let mut context = TaskContext::empty_with_root(root);
+    context.forwarded_args = vec!["v1.0.0".to_string()];
+    assert_eq!(
+      interpolate_template_string("release ${{ args.0 }}", &context)?,
+      "release v1.0.0"
+    );
+    Ok(())
   }
 }

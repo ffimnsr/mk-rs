@@ -2,6 +2,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::path::Path;
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,6 +34,11 @@ use mk_lib::schema::{
   TaskRoot,
 };
 use mk_lib::version::get_version_digits;
+use notify::{
+  Event,
+  RecursiveMode,
+  Watcher,
+};
 use once_cell::sync::Lazy;
 use prettytable::format::consts;
 use prettytable::{
@@ -54,6 +60,34 @@ use serde::{
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 static INIT_SCHEMA_URL: &str = "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json";
+
+/// Parse a debounce duration string like "500ms", "1s", or "2.5s".
+/// Rejects zero and negative values.
+fn parse_debounce(s: &str) -> Result<Duration, String> {
+  if let Some(ms_str) = s.strip_suffix("ms") {
+    let millis: u64 = ms_str
+      .trim()
+      .parse()
+      .map_err(|_| format!("invalid duration '{s}': expected integer milliseconds before 'ms'"))?;
+    if millis == 0 {
+      return Err("debounce duration must be greater than zero".to_string());
+    }
+    return Ok(Duration::from_millis(millis));
+  }
+  if let Some(secs_str) = s.strip_suffix('s') {
+    let secs: f64 = secs_str
+      .trim()
+      .parse()
+      .map_err(|_| format!("invalid duration '{s}': expected a number before 's'"))?;
+    if secs <= 0.0 {
+      return Err("debounce duration must be greater than zero".to_string());
+    }
+    return Ok(Duration::from_secs_f64(secs));
+  }
+  Err(format!(
+    "invalid duration '{s}': use a suffix like '500ms' or '1s'"
+  ))
+}
 
 /// The CLI arguments
 #[derive(Debug, Parser)]
@@ -85,8 +119,18 @@ struct Args {
   #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
   task_name: Option<String>,
 
+  #[arg(
+    last = true,
+    help = "Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)"
+  )]
+  trailing_args: Vec<String>,
+
   #[command(subcommand)]
   command: Option<Command>,
+}
+
+pub(crate) fn command() -> clap::Command {
+  Args::command()
 }
 
 /// The available subcommands
@@ -131,6 +175,12 @@ enum Command {
       value_name = "FILTER"
     )]
     labels: Vec<String>,
+
+    #[arg(
+      last = true,
+      help = "Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)"
+    )]
+    trailing_args: Vec<String>,
   },
   #[command(visible_aliases = ["ls"], about = "List all available tasks")]
   List {
@@ -186,12 +236,67 @@ enum Command {
   Schema,
   #[command(about = "Diagnose mk setup and configuration")]
   Doctor,
+  #[command(about = "Watch files and re-run a task on changes")]
+  Watch {
+    #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
+    task_name: Option<String>,
+
+    #[arg(
+      long = "label",
+      help = "Watch tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.",
+      value_name = "FILTER"
+    )]
+    labels: Vec<String>,
+
+    #[arg(
+      long = "path",
+      help = "Override watched paths (repeatable; defaults to task inputs when absent)",
+      value_name = "PATH"
+    )]
+    paths: Vec<std::path::PathBuf>,
+
+    #[arg(
+      long = "debounce",
+      help = "Debounce duration for filesystem event coalescing (e.g. 500ms, 1s, 2.5s)",
+      value_name = "DURATION",
+      value_parser = parse_debounce
+    )]
+    debounce: Option<Duration>,
+
+    #[arg(
+      long = "clear",
+      help = "Clear terminal before each rerun (default: append output)"
+    )]
+    clear: bool,
+
+    #[arg(
+      last = true,
+      help = "Arguments forwarded to the task on each run (available as ${{ args.0 }}, ${{ args.1 }}, etc.)"
+    )]
+    trailing_args: Vec<String>,
+  },
 }
 
 /// The CLI entry
 pub(super) struct CliEntry {
   args: Args,
   task_root: Arc<TaskRoot>,
+}
+
+/// Build an ignore matcher from a `.mkignore` file at `base_dir`, if present.
+///
+/// Uses gitignore-style semantics (via the `ignore` crate). Returns `None`
+/// when no `.mkignore` file exists so callers can skip the check cheaply.
+fn build_ignore_matcher(base_dir: std::path::PathBuf) -> Option<ignore::gitignore::Gitignore> {
+  let mkignore = base_dir.join(".mkignore");
+  if !mkignore.exists() {
+    return None;
+  }
+  let (matcher, err) = ignore::gitignore::Gitignore::new(&mkignore);
+  if let Some(e) = err {
+    eprintln!("warning: could not parse .mkignore: {e}");
+  }
+  Some(matcher)
 }
 
 impl CliEntry {
@@ -449,6 +554,7 @@ impl CliEntry {
         json_events,
         fuzzy,
         labels,
+        trailing_args,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
         let names = if *fuzzy {
@@ -462,7 +568,7 @@ impl CliEntry {
           }
         } else {
           for name in &names {
-            self.run_task(name, *force, *json_events)?;
+            self.run_task(name, *force, *json_events, trailing_args.clone())?;
           }
         }
       },
@@ -510,9 +616,24 @@ impl CliEntry {
       Some(Command::Doctor) => {
         self.run_doctor()?;
       },
+      Some(Command::Watch {
+        task_name,
+        labels,
+        paths,
+        debounce,
+        clear,
+        trailing_args,
+      }) => {
+        let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
+        let debounce_duration = debounce.unwrap_or(Duration::from_millis(500));
+        for name in &names {
+          self.run_watch(name, paths, debounce_duration, *clear, trailing_args.clone())?;
+        }
+      },
       None => {
         if let Some(task_name) = &self.args.task_name {
-          self.run_task(task_name, false, false)?;
+          self.run_task(task_name, false, false, self.args.trailing_args.clone())?;
         } else {
           anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
         }
@@ -644,10 +765,157 @@ impl CliEntry {
   }
 
   /// Run the specified tasks
-  fn run_task(&self, task_name: &str, force: bool, json_events: bool) -> anyhow::Result<()> {
+  fn run_task(
+    &self,
+    task_name: &str,
+    force: bool,
+    json_events: bool,
+    args: Vec<String>,
+  ) -> anyhow::Result<()> {
     assert!(!task_name.is_empty());
-    let context = TaskContext::new_with_options(self.task_root.clone(), force, json_events);
+    let context = TaskContext::new_with_options(self.task_root.clone(), force, json_events, args);
     run_task_by_name(&context, task_name)
+  }
+
+  /// Resolve the paths to watch for a named task.
+  ///
+  /// Uses the explicit `paths` list when provided. Falls back to the task's
+  /// declared `inputs` patterns. Returns an error when neither exists.
+  fn resolve_watch_paths(
+    &self,
+    task_name: &str,
+    explicit_paths: &[std::path::PathBuf],
+  ) -> anyhow::Result<Vec<std::path::PathBuf>> {
+    if !explicit_paths.is_empty() {
+      // Resolve relative paths against CWD.
+      let resolved: Vec<std::path::PathBuf> = explicit_paths
+        .iter()
+        .map(|p| {
+          if p.is_absolute() {
+            p.clone()
+          } else {
+            std::env::current_dir().unwrap_or_default().join(p)
+          }
+        })
+        .collect();
+      return Ok(resolved);
+    }
+
+    // Infer from task inputs.
+    let inputs = match self.task_root.tasks.get(task_name) {
+      Some(Task::Task(args)) => args.inputs.clone(),
+      _ => vec![],
+    };
+
+    if inputs.is_empty() {
+      anyhow::bail!("No watch paths for task '{task_name}': provide --path or declare task inputs");
+    }
+
+    let base = self.task_root.config_base_dir();
+    let mut resolved = Vec::new();
+    for pattern in &inputs {
+      let full = mk_lib::cache::expand_patterns_in_dir(&base, std::slice::from_ref(pattern));
+      match full {
+        Ok(paths) if !paths.is_empty() => resolved.extend(paths),
+        // Skip patterns that resolve to nothing — don't panic.
+        Ok(_) | Err(_) => {},
+      }
+    }
+
+    if resolved.is_empty() {
+      anyhow::bail!("No watch paths for task '{task_name}': provide --path or declare task inputs");
+    }
+
+    Ok(resolved)
+  }
+
+  /// Run the filesystem watch loop for a single task.
+  fn run_watch(
+    &self,
+    task_name: &str,
+    explicit_paths: &[std::path::PathBuf],
+    debounce: Duration,
+    clear: bool,
+    task_args: Vec<String>,
+  ) -> anyhow::Result<()> {
+    let watch_paths = self.resolve_watch_paths(task_name, explicit_paths)?;
+    let ignore_matcher = build_ignore_matcher(self.task_root.config_base_dir());
+
+    println!("Watching {} path(s) for task '{task_name}':", watch_paths.len());
+    for p in &watch_paths {
+      println!("  {}", p.display_lossy());
+    }
+    println!("Debounce: {debounce:.0?}. Press Ctrl+C to stop.");
+    println!();
+
+    let (tx, rx) = channel::<notify::Result<Event>>();
+    let mut watcher = notify::recommended_watcher(tx)?;
+
+    for path in &watch_paths {
+      // Watch parent directory when the path doesn't exist yet (e.g. a future
+      // output file used as input). Fall back to CWD if no parent.
+      let target = if path.exists() {
+        path.clone()
+      } else {
+        path
+          .parent()
+          .map(Path::to_path_buf)
+          .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+      };
+      watcher.watch(&target, RecursiveMode::Recursive)?;
+    }
+
+    // Run the task once immediately before waiting for changes.
+    println!("Running initial task '{task_name}'...");
+    let _ = self.run_task(task_name, false, false, task_args.clone());
+
+    let mut pending_since: Option<std::time::Instant> = None;
+
+    loop {
+      // Drain all pending events or block until one arrives.
+      match rx.recv_timeout(Duration::from_millis(50)) {
+        Ok(Ok(event)) => {
+          // Only care about create/modify/remove events.
+          use notify::EventKind::*;
+          match event.kind {
+            Create(_) | Modify(_) | Remove(_) => {
+              // Check that at least one path in the event is not ignored.
+              let relevant = event.paths.iter().any(|p| {
+                ignore_matcher
+                  .as_ref()
+                  .map(|m| !m.matched(p, p.is_dir()).is_ignore())
+                  .unwrap_or(true)
+              });
+              if relevant && pending_since.is_none() {
+                pending_since = Some(std::time::Instant::now());
+              }
+            },
+            _ => {},
+          }
+        },
+        Ok(Err(e)) => {
+          eprintln!("watch error: {e}");
+        },
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {},
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+      }
+
+      if let Some(since) = pending_since {
+        if since.elapsed() >= debounce {
+          pending_since = None;
+          if clear {
+            // ANSI: clear screen and move cursor to top-left.
+            print!("\x1B[2J\x1B[1;1H");
+          } else {
+            println!();
+          }
+          println!("Change detected — re-running task '{task_name}'...");
+          let _ = self.run_task(task_name, false, false, task_args.clone());
+        }
+      }
+    }
+
+    Ok(())
   }
 
   /// Build contents of new task config, including auto-detected integrations.
@@ -972,7 +1240,7 @@ impl CliEntry {
   }
 
   fn write_completions(&self, shell: Shell) -> anyhow::Result<()> {
-    let mut app = Args::command();
+    let mut app = command();
     let mut output = Vec::new();
     clap_complete::generate(shell, &mut app, "mk", &mut output);
     let script = String::from_utf8(output).context("Generated completion script was not valid UTF-8")?;
@@ -1565,6 +1833,7 @@ mod tests {
     let args = Args {
       config: String::from("tasks.yaml"),
       task_name: None,
+      trailing_args: Vec::new(),
       command: Some(Command::CleanCache),
     };
 
@@ -1818,6 +2087,7 @@ mod tests {
       args: Args {
         config: String::from("tasks.yaml"),
         task_name: None,
+        trailing_args: Vec::new(),
         command: None,
       },
       task_root: Arc::new(task_root),

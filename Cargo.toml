@@ -37,6 +37,7 @@ anyhow = "1.0.102"
 chrono = { version = "0.4.44", features = ["clock", "serde", "std"], default-features = false }
 clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 clap_complete = "4.6.2"
+clap_mangen = "0.2.31"
 console = "0.16.3"
 libc = "0.2.186"
 env_logger = "0.11.10"
@@ -62,6 +63,8 @@ toml = "1.1.2"
 reqwest = { version = "0.12.28", features = ["blocking", "json"] }
 semver = "1.0.28"
 glob = "0.3.2"
+notify = "8"
+ignore = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2.2.1"
@@ -96,6 +99,36 @@ maintainer = "Edward Fitz Abucay gh:@ffimnsr"
 section = "utils"
 assets = [
   ["target/release/mk", "usr/bin/", "755"],
+  ["target/man/man1/mk.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-clean-cache.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-completion.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-doctor.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-init.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-list.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-plan.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-run.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-schema.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-doctor.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-export-secret.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-init-vault.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key-export-key.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key-generate-key.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key-import-key.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key-list-keys.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-key-purge-key.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-list-keys.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-export-secret.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-init-vault.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-list-secrets.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-purge-secret.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-show-secret.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-secrets-vault-store-secret.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-update.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-validate.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-watch.1", "usr/share/man/man1/", "644"],
   ["COPYRIGHT", "usr/share/doc/mk/", "644"],
   ["LICENSE-MIT", "usr/share/doc/mk/", "644"],
   ["LICENSE-APACHE", "usr/share/doc/mk/", "644"],

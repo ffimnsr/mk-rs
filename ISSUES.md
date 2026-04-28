@@ -16,13 +16,13 @@ Instruction for items in this section:
 
 ### Phase 1: CLI Surface
 
-- [ ] Add `mk watch <task>` command
+- [x] Add `mk watch <task>` command
   - Add `watch` subcommand to CLI help and docs.
   - Require a task name or label filter input using same selection rules as `mk run`.
   - Reuse current config file discovery and task resolution.
   - Add help snapshot coverage for `mk watch --help`.
 
-- [ ] Add watch path and debounce flags
+- [x] Add watch path and debounce flags
   - Add repeatable `--path <PATH>` flags to override watched inputs.
   - Add `--debounce <DURATION>` flag for filesystem event coalescing.
   - Validate duration parsing and reject zero debounce values.
@@ -30,13 +30,13 @@ Instruction for items in this section:
 
 ### Phase 2: Execution Behavior
 
-- [ ] Add filesystem watch loop for local task reruns
+- [x] Add filesystem watch loop for local task reruns
   - Watch explicit `--path` values when provided.
   - Re-run selected task after debounce when matching changes arrive.
   - Print a clear rerun reason before each execution.
   - Add integration test covering one file change and one rerun.
 
-- [ ] Reuse task `inputs` as default watch paths
+- [x] Reuse task `inputs` as default watch paths
   - Use declared task `inputs` when `mk watch` runs without `--path`.
   - Skip unresolved glob patterns without panicking.
   - Return a user-facing error when neither `--path` nor task `inputs` exist.
@@ -44,19 +44,19 @@ Instruction for items in this section:
 
 ### Phase 3: Quality of Life
 
-- [ ] Add `--clear` flag to `mk watch`
+- [x] Add `--clear` flag to `mk watch`
   - Clear terminal before each rerun when enabled.
   - Keep default output append-only when flag is absent.
   - Add integration test for flag parsing and screen-clear branch selection.
 
-- [ ] Add `.mkignore` support to `mk watch` (use ignore crate of ripgrep)
+- [x] Add `.mkignore` support to `mk watch` (use ignore crate of ripgrep)
   - Load ignore rules from `.mkignore` at config root using gitignore-style pattern semantics.
   - Apply ignore filtering to watched descendant paths for both explicit `--path` roots and inferred task `inputs`.
   - Keep ignore handling scoped to watch behavior and do not change cache `inputs` resolution semantics.
   - Allow negated patterns so users can re-include specific paths under ignored directories.
   - Add integration test coverage for ignored paths and negated re-includes.
 
-- [ ] Document watch workflows
+- [x] Document watch workflows
   - Add README examples for `mk watch test`.
   - Document default `inputs` reuse and explicit `--path` override behavior.
   - Document `.mkignore` usage, config-root lookup, and negated pattern behavior.

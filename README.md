@@ -243,6 +243,16 @@ if (-not (Select-String -Path $PROFILE -SimpleMatch '. "$HOME/mk-completion.ps1"
 }
 ```
 
+### Man page generation
+
+Generate man pages from current Clap command tree:
+
+```bash
+cargo run --bin mk-manpages -- target/man/man1
+```
+
+This writes `mk.1` plus subcommand pages like `mk-run.1` and `mk-secrets-vault-store-secret.1`. Release archives and Debian packages include generated pages under `man/man1` or `usr/share/man/man1`.
+
 Open new shell after writing startup-file changes, or source profile manually:
 
 ```bash
@@ -681,6 +691,71 @@ tasks:
 ```
 
 Set `retrigger: true` on a non-interactive local command to allow pressing `R` while it is running to stop and start it again manually. This is intended for long-running processes such as `go run .` without enabling file watching.
+
+### Watch mode
+
+`mk watch <task>` runs a task once immediately then re-runs it every time the watched files change.
+
+```bash
+# Watch files declared in task inputs and re-run the test task on any change.
+mk watch test
+
+# Override which paths to watch with one or more --path flags.
+mk watch test --path src --path tests
+
+# Use a custom debounce window (default is 500ms).
+mk watch build --debounce 200ms
+
+# Clear the terminal before each rerun.
+mk watch test --clear
+
+# Forward extra arguments to the task on every run (${{ args.0 }}, ${{ args.1 }}, …).
+mk watch test -- --nocapture
+
+# Watch all tasks matching a label filter.
+mk watch --label kind=test
+```
+
+**Default watch paths from task `inputs`**
+
+When `--path` is not given, `mk watch` falls back to the `inputs` declared on the task:
+
+```yaml
+tasks:
+  test:
+    inputs:
+      - src/**/*.rs
+      - tests/**/*.rs
+    commands:
+      - command: cargo test
+```
+
+Running `mk watch test` then watches the resolved set of `src/**/*.rs` and `tests/**/*.rs` paths. Glob patterns that resolve to no files are silently skipped. If neither `--path` nor `inputs` yield any paths, `mk watch` exits with an error.
+
+**Incremental cache and watch**
+
+`mk watch` always runs the task unconditionally — it bypasses the incremental cache. Cache state is not read or written during a watch session. This ensures reruns reflect the latest filesystem changes rather than serving stale cache hits.
+
+**`.mkignore` — filtering out noise**
+
+Create a `.mkignore` file next to your config file to suppress events from paths you do not care about. The file uses the same gitignore-style pattern syntax as ripgrep's `ignore` crate.
+
+Example `.mkignore` contents:
+
+```text
+target/
+*.log
+dist/
+
+!important.log
+```
+
+Rules:
+
+- `.mkignore` is loaded from the config root (the directory containing `tasks.yaml` or equivalent).
+- Patterns follow gitignore semantics: directories match recursively, `!` negates a previous rule.
+- Ignore filtering is scoped to watch behavior only — it does not affect cache `inputs` resolution.
+- When no `.mkignore` file is present, all events from watched paths are forwarded as normal.
 
 Use `ssh_run` for first-class remote execution while still reusing task outputs and templates locally:
 
