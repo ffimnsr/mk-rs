@@ -374,7 +374,7 @@ Instruction for items in this section:
 
 - [ ] Add Markdown heading-based task extraction
   - Treat each level-2 heading `## Task Name` as one task definition.
-  - Use heading text as task name without additional slug generation.
+  - Generate kebab-case task names from heading text (lowercase, spaces/underscores to hyphens).
   - Keep task order deterministic based on file order.
   - Add unit tests for one-task and multi-task markdown parsing.
 

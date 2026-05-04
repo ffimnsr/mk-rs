@@ -334,9 +334,13 @@ mod tests {
   use std::ffi::OsString;
   use std::fs;
   use std::path::{Path, PathBuf};
-  use std::sync::Mutex;
+  use std::sync::{Mutex, MutexGuard};
 
   static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+  fn lock_env() -> MutexGuard<'static, ()> {
+    ENV_LOCK.lock().unwrap_or_else(|error| error.into_inner())
+  }
 
   struct EnvGuard {
     original_path: Option<OsString>,
@@ -486,7 +490,7 @@ mod tests {
   #[cfg(unix)]
   #[test]
   fn load_makefile_task_root_imports_descriptions_and_dependencies() -> anyhow::Result<()> {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = lock_env();
     let temp_dir = TempDir::new()?;
     let config_path = temp_dir.path().join("Makefile");
 
@@ -529,7 +533,7 @@ mod tests {
   #[cfg(unix)]
   #[test]
   fn discover_make_targets_invokes_make_with_config_path_and_preserves_cwd() -> anyhow::Result<()> {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = lock_env();
     let temp_dir = TempDir::new()?;
     let cwd_dir = temp_dir.path().join("cwd");
     let config_dir = temp_dir.path().join("config");
@@ -564,7 +568,9 @@ mod tests {
       targets.into_iter().map(|target| target.name).collect::<Vec<_>>(),
       vec![String::from("all")]
     );
-    assert_eq!(fs::read_to_string(&pwd_file)?.trim(), cwd_dir.to_string_lossy());
+    let actual_cwd = Path::new(fs::read_to_string(&pwd_file)?.trim()).canonicalize()?;
+    let expected_cwd = cwd_dir.canonicalize()?;
+    assert_eq!(actual_cwd, expected_cwd);
 
     let args = fs::read_to_string(&args_file)?;
     assert!(args.contains("-pRrq"));
@@ -576,7 +582,7 @@ mod tests {
 
   #[test]
   fn discover_make_targets_reports_missing_make_binary() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = lock_env();
     let temp_dir = TempDir::new().unwrap();
     let _env_guard = install_test_path(temp_dir.path()).unwrap();
     let error = discover_make_imports(Path::new("Makefile")).unwrap_err();
