@@ -17,6 +17,7 @@ pub struct TaskPlan {
 #[derive(Debug, Serialize)]
 pub struct PlannedTask {
   pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub matrix: Option<BTreeMap<String, String>>,
   pub description: Option<String>,
   pub commands: Vec<PlannedCommand>,
