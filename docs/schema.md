@@ -200,12 +200,12 @@ tasks:
 
 ##### LocalRun
 
-Run the command in local available shell.
+Run the command with one local shell or interpreter.
 
 | Name | Type | Default Value | Required | Description |
 | --- | --- | --- | --- | --- |
 | command | String | - | true | The command to run. |
-| shell | String | sh | false | The shell to call. |
+| shell | String / ShellArgs object | sh | false | Interpreter or shell to call for this command. Use a string like `bash` or an object with `command` and optional `args` such as `python3` + `-c`, `lua` + `-e`, `bun` + `run`, or `node` + `-e`. |
 | test | String | - | false | A test command to run before executing the main command. |
 | work_dir | String | \<current-working-directory\> | false | The working directory to run the command into. |
 | interactive | bool | false | false | Run the command interactively (stdin/stdout attached). |
@@ -223,6 +223,30 @@ tasks:
       retrigger: true
       save_output_as: release_tag
       ignore_errors: true
+```
+
+Object form lets `local_run` use a single interpreter for one command.
+
+```yaml
+tasks:
+  runtimes:
+    commands:
+      - command: 'print("python")'
+        shell:
+          command: python3
+          args: [-c]
+      - command: 'print("lua")'
+        shell:
+          command: lua
+          args: [-e]
+      - command: 'console.log("bun")'
+        shell:
+          command: bun
+          args: [run]
+      - command: 'console.log("node")'
+        shell:
+          command: node
+          args: [-e]
 ```
 
 Saved outputs can be reused by later local commands in the same task with `${{ outputs.NAME }}`. Captured stdout keeps internal newlines and trims trailing newline characters.

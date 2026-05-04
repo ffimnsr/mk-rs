@@ -356,6 +356,8 @@ This new format is not only more editor-friendly but also supports code folding 
 
 As you can see, most of the fields are optional and can be omitted. You only need to modify them when deeper configuration is required.
 
+For `local_run`, `shell` can also be used as a single-command interpreter selector. That means one command can run with `bash`, next with `python3`, `lua`, `bun`, or `node`, as long as each command declares one interpreter.
+
 ### Sample real-world task yaml
 
 Let's create a sample yaml file called `tasks.yaml`.
@@ -385,6 +387,24 @@ tasks:
       FOO: bar
     env_file:
       - test.env
+  runtimes:
+    commands:
+      - command: 'print("python")'
+        shell:
+          command: python3
+          args: [-c]
+      - command: 'print("lua")'
+        shell:
+          command: lua
+          args: [-e]
+      - command: 'console.log("bun")'
+        shell:
+          command: bun
+          args: [run]
+      - command: 'console.log("node")'
+        shell:
+          command: node
+          args: [-e]
 ```
 
 Here's the `test.env` that needed by the yaml file:
