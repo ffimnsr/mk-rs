@@ -1,21 +1,81 @@
-# Reference from here:
-# https://github.com/dtolnay/syn/blob/master/.github/workflows/ci.yml
-name: ci
+name: CI
+
 on:
-  pull_request:
   push:
     branches:
       - main
+  pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
 
 jobs:
+  lint:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy, rustc-dev
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mk-rust-${{ runner.os }}
+          cache-on-failure: "true"
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Run clippy
+        run: cargo clippy --all-features --all-targets --tests --benches --locked -- -Dclippy::all
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mk-rust-${{ runner.os }}
+          cache-on-failure: "true"
+      - name: Build docs with warnings denied
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+  bench-smoke:
+    name: Bench Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mk-rust-${{ runner.os }}
+          cache-on-failure: "true"
+      - name: Compile benchmarks
+        run: cargo bench --workspace --no-run --locked
+
   check-pass:
+    name: Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.2
@@ -24,9 +84,16 @@ jobs:
         with:
           toolchain: stable
           components: rustc-dev
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mk-rust-${{ runner.os }}
+          cache-on-failure: "true"
       - name: Run cargo check tool
-        run: cargo check --all-targets --all-features --tests --benches --release --verbose
+        run: cargo check --all-targets --all-features --tests --benches --release --locked --verbose
+
   test:
+    name: Test (${{ matrix.build }})
     runs-on: ${{ matrix.os }}
     needs:
       - check-pass
@@ -82,6 +149,11 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: llvm-tools, rustc-dev
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mk-rust-${{ runner.os }}
+          cache-on-failure: "true"
       - name: Set up QEMU
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
         uses: docker/setup-qemu-action@v4
@@ -103,31 +175,10 @@ jobs:
           echo "target flag is: ${{ env.TARGET_FLAGS }}"
           echo "target dir is: ${{ env.TARGET_DIR }}"
       - name: Build binary
-        run: ${{ env.CARGO }} build --verbose ${{ env.TARGET_FLAGS }}
+        run: ${{ env.CARGO }} build --locked --verbose ${{ env.TARGET_FLAGS }}
       - name: Run tests
         if: matrix.os != 'ubuntu-latest' || matrix.target == ''
-        run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
+        run: ${{ env.CARGO }} test --locked --verbose ${{ env.TARGET_FLAGS }}
       - name: Run tests (cross)
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-        run: ${{ env.CARGO }} test --verbose ${{ env.TARGET_FLAGS }}
-  rustfmt:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
-          components: rustfmt
-      - name: Check formatting
-        run: cargo fmt --all --check
-  clippy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: clippy, rustc-dev
-      - run: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
+        run: ${{ env.CARGO }} test --locked --verbose ${{ env.TARGET_FLAGS }}
