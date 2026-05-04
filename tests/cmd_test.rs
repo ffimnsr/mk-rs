@@ -210,6 +210,34 @@ fn prepend_test_path(temp_dir: &TempDir) -> String {
   )
 }
 
+fn wait_for_file_line_count(
+  path: &std::path::Path,
+  expected_lines: usize,
+  timeout: std::time::Duration,
+) -> anyhow::Result<()> {
+  let deadline = std::time::Instant::now() + timeout;
+
+  loop {
+    let line_count = std::fs::read_to_string(path)
+      .ok()
+      .map(|contents| contents.lines().count())
+      .unwrap_or(0);
+    if line_count >= expected_lines {
+      return Ok(());
+    }
+
+    if std::time::Instant::now() >= deadline {
+      anyhow::bail!(
+        "timed out waiting for {} line(s) in {}",
+        expected_lines,
+        path.display()
+      );
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+  }
+}
+
 #[test]
 fn test_mk_1() -> anyhow::Result<()> {
   let mut cmd = Command::new(cargo::cargo_bin!("mk"));
@@ -7273,18 +7301,22 @@ fn test_watch_file_change_triggers_rerun() -> anyhow::Result<()> {
 
   // Create the watched file before starting the watcher.
   let watched = temp_dir.path().join("trigger.txt");
+  let run_log = temp_dir.path().join("greet-runs.log");
   std::fs::write(&watched, "v1")?;
 
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "tasks.yaml",
-    "
+    &format!(
+      "
     tasks:
       greet:
         commands:
-          - command: echo greeted
+          - command: printf 'greeted\\n' >> \"{}\"
             verbose: false
     ",
+      run_log.to_utf8()?
+    ),
   )?;
 
   let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
@@ -7301,25 +7333,20 @@ fn test_watch_file_change_triggers_rerun() -> anyhow::Result<()> {
     .stderr(std::process::Stdio::piped())
     .spawn()?;
 
-  // Wait for initial task run and watcher setup.
-  std::thread::sleep(std::time::Duration::from_millis(600));
+  wait_for_file_line_count(&run_log, 1, std::time::Duration::from_secs(5))?;
 
   // Trigger a file change.
   std::fs::write(&watched, "v2")?;
 
-  // Wait for debounce + rerun.
-  std::thread::sleep(std::time::Duration::from_millis(600));
+  wait_for_file_line_count(&run_log, 2, std::time::Duration::from_secs(5))?;
 
   child.kill()?;
   let output = child.wait_with_output()?;
 
   let stdout = String::from_utf8_lossy(&output.stdout);
-  // Task output should appear at least twice (initial + rerun).
-  let occurrences = stdout.matches("greeted").count();
-  assert!(
-    occurrences >= 2,
-    "expected at least 2 task runs, got {occurrences} in:\n{stdout}"
-  );
+  let run_log_contents = std::fs::read_to_string(&run_log)?;
+  let occurrences = run_log_contents.lines().count();
+  assert!(occurrences >= 2, "expected at least 2 task runs, got {occurrences} in:\n{run_log_contents}");
   assert!(
     stdout.contains("Change detected") || stdout.contains("re-running"),
     "expected rerun reason in output, got:\n{stdout}"
@@ -7377,18 +7404,22 @@ fn test_watch_clear_flag_is_accepted() -> anyhow::Result<()> {
 fn test_watch_clear_flag_emits_ansi_clear_on_rerun() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let watched = temp_dir.path().join("trigger.txt");
+  let run_log = temp_dir.path().join("stamp-runs.log");
   std::fs::write(&watched, "v1")?;
 
   let config_file_path = common::setup_yaml(
     &temp_dir,
     "tasks.yaml",
-    "
+    &format!(
+      "
     tasks:
       stamp:
         commands:
-          - command: echo stamped
+          - command: printf 'stamped\\n' >> \"{}\"
             verbose: false
     ",
+      run_log.to_utf8()?
+    ),
   )?;
 
   let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
@@ -7406,9 +7437,9 @@ fn test_watch_clear_flag_emits_ansi_clear_on_rerun() -> anyhow::Result<()> {
     .stderr(std::process::Stdio::piped())
     .spawn()?;
 
-  std::thread::sleep(std::time::Duration::from_millis(600));
+  wait_for_file_line_count(&run_log, 1, std::time::Duration::from_secs(5))?;
   std::fs::write(&watched, "v2")?;
-  std::thread::sleep(std::time::Duration::from_millis(600));
+  wait_for_file_line_count(&run_log, 2, std::time::Duration::from_secs(5))?;
 
   child.kill()?;
   let output = child.wait_with_output()?;
@@ -7417,8 +7448,8 @@ fn test_watch_clear_flag_emits_ansi_clear_on_rerun() -> anyhow::Result<()> {
   // ANSI clear sequence must appear before the second run.
   assert!(stdout.contains("\x1B[2J"), "expected ANSI clear escape in output");
   assert!(
-    stdout.matches("stamped").count() >= 2,
-    "expected at least 2 task runs in output: {stdout}"
+    std::fs::read_to_string(&run_log)?.lines().count() >= 2,
+    "expected at least 2 task runs in output log"
   );
 
   Ok(())
