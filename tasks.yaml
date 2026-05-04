@@ -34,6 +34,12 @@ tasks:
     commands:
       - command: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
     description: Lint check the project
+  lint-stable:
+    commands:
+      - command: cargo clippy --all-features --all-targets --tests --benches -- -Dclippy::all
+    description: Lint check the project on stable Rust
+    environment:
+      RUSTUP_TOOLCHAIN: stable
   check:
     commands:
       - command: cargo c

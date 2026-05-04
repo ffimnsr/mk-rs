@@ -60,6 +60,7 @@ hex = "0.4.3"
 hashbrown = { version = "0.17.0", features = ["serde"] }
 mlua = { version = "0.11.6", features = ["lua54", "serialize", "anyhow", "vendored"] }
 toml = "1.1.2"
+zeroize = { version = "1", features = ["derive"] }
 reqwest = { version = "0.12.28", features = ["blocking", "json"] }
 semver = "1.0.28"
 glob = "0.3.2"

@@ -58,7 +58,7 @@ impl ShowSecret {
 
     if self.plain {
       let mut stdout = std::io::stdout().lock();
-      write!(stdout, "{}", value)?;
+      write!(stdout, "{}", *value)?;
       stdout.flush()?;
       return Ok(());
     }
@@ -66,7 +66,7 @@ impl ShowSecret {
     let mut table = Table::new();
     table.set_format(*consts::FORMAT_CLEAN);
     table.set_titles(row![Fbb->"Name", Fbb->"Value"]);
-    table.add_row(row![b->&path, Fg->&value]);
+    table.add_row(row![b->&path, Fg->value.as_str()]);
 
     let msg = style("Available secret:").bold().cyan();
     println!();

@@ -56,10 +56,10 @@ impl ExportSecret {
 
     if let Some(output) = &self.output {
       let mut output_file = File::create(output)?;
-      write!(output_file, "{}", value)?;
+      write!(output_file, "{}", *value)?;
       output_file.flush()?;
     } else {
-      println!("{}", value);
+      println!("{}", *value);
     }
 
     Ok(())

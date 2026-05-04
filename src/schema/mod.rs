@@ -77,13 +77,14 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
     Ok(value.to_string())
   } else if value.starts_with("secrets.") {
     let path = value.trim_start_matches("secrets.");
-    load_secret_value(
+    let s = load_secret_value(
       path,
       context
         .secret_config
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Secret config missing from task context"))?,
-    )
+    )?;
+    Ok(s.as_str().to_owned())
   } else if value.starts_with("outputs.") {
     let name = value.trim_start_matches("outputs.");
     context.get_task_output(name)?.ok_or_else(|| {

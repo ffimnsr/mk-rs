@@ -9,6 +9,7 @@ use hashbrown::HashMap;
 use pgp::composed::{Deserializable as _, Message, SignedSecretKey};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::file::ToUtf8 as _;
 use crate::utils::{parse_env_contents, resolve_path};
@@ -383,7 +384,7 @@ pub fn resolve_secret_config(
   }
 }
 
-pub fn load_secret_values(path: &str, config: &SecretConfig) -> anyhow::Result<Vec<String>> {
+pub fn load_secret_values(path: &str, config: &SecretConfig) -> anyhow::Result<Vec<Zeroizing<String>>> {
   verify_vault(&config.vault_location)?;
 
   let secret_path = config.vault_location.join(path);
@@ -430,9 +431,11 @@ pub fn load_secret_values(path: &str, config: &SecretConfig) -> anyhow::Result<V
       let mut data_file = std::io::BufReader::new(File::open(&data_path)?);
       let (message, _) = Message::from_armor(&mut data_file)?;
       let mut decrypted_message = message.decrypt(&pgp::types::Password::empty(), key)?;
-      decrypted_message
-        .as_data_string()
-        .context("Failed to read secret value")?
+      Zeroizing::new(
+        decrypted_message
+          .as_data_string()
+          .context("Failed to read secret value")?,
+      )
     };
     values.push(value);
   }
@@ -447,7 +450,7 @@ pub fn load_secret_values(path: &str, config: &SecretConfig) -> anyhow::Result<V
   Ok(values)
 }
 
-pub fn load_secret_value(path: &str, config: &SecretConfig) -> anyhow::Result<String> {
+pub fn load_secret_value(path: &str, config: &SecretConfig) -> anyhow::Result<Zeroizing<String>> {
   let values = load_secret_values(path, config)?;
   match values.as_slice() {
     [value] => Ok(value.clone()),
@@ -489,7 +492,7 @@ pub fn load_secret_env(config: &SecretConfig) -> anyhow::Result<HashMap<String, 
 
   for path in &config.secrets_path {
     for value in load_secret_values(path, config)? {
-      env_vars.extend(parse_env_contents(&value));
+      env_vars.extend(parse_env_contents(value.as_str()));
     }
   }
 
@@ -545,7 +548,7 @@ pub fn encrypt_with_gpg(gpg_key_id: &str, plaintext: &[u8]) -> anyhow::Result<Ve
 
 /// Decrypt a vault `data.asc` file using the system `gpg` binary.
 /// GPG-agent handles PIN/passphrase prompts automatically (including YubiKey via pinentry).
-fn decrypt_with_gpg(data_path: &Path, _gpg_key_id: &str) -> anyhow::Result<String> {
+fn decrypt_with_gpg(data_path: &Path, _gpg_key_id: &str) -> anyhow::Result<Zeroizing<String>> {
   let path_str = data_path
     .to_str()
     .ok_or_else(|| anyhow::anyhow!("Non-UTF-8 path: {:?}", data_path))?;
@@ -563,7 +566,9 @@ fn decrypt_with_gpg(data_path: &Path, _gpg_key_id: &str) -> anyhow::Result<Strin
     let stderr = String::from_utf8_lossy(&output.stderr);
     anyhow::bail!("gpg decryption failed: {}", stderr.trim());
   }
-  String::from_utf8(output.stdout).context("gpg decrypt output is not valid UTF-8")
+  let mut raw = Zeroizing::new(output.stdout);
+  let s = String::from_utf8(std::mem::take(&mut *raw)).context("gpg decrypt output is not valid UTF-8")?;
+  Ok(Zeroizing::new(s))
 }
 
 fn default_keys_location() -> PathBuf {
