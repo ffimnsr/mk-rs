@@ -668,6 +668,7 @@ fn test_makefile_plan_shows_delegated_execution_and_dependencies() -> anyhow::Re
     &config_path,
     "build: prep ## Build app\n\t@echo build\nprep: ## Prepare deps\n\t@echo prep\n",
   )?;
+  let expected_config_path = config_path.canonicalize().unwrap_or_else(|_| config_path.clone());
   write_fake_make(&temp_dir)?;
 
   Command::new(cargo::cargo_bin!("mk"))
@@ -688,7 +689,10 @@ fn test_makefile_plan_shows_delegated_execution_and_dependencies() -> anyhow::Re
     .stdout(predicates::str::contains("2. build"))
     .stdout(predicates::str::contains("description: Build app"))
     .stdout(predicates::str::contains("depends_on: prep"))
-    .stdout(predicates::str::contains(format!("make: make -f {} build", config_path.to_string_lossy())));
+    .stdout(predicates::str::contains(format!(
+      "make: make -f {} build",
+      expected_config_path.to_string_lossy()
+    )));
 
   Ok(())
 }
