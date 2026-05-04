@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::Context as _;
-use hashbrown::HashMap;
+use std::collections::HashMap;
 
 use crate::file::ToUtf8 as _;
 use crate::schema::{Task, TaskArgs, TaskContext, TaskDependency, TaskRoot, TaskRootFormat};

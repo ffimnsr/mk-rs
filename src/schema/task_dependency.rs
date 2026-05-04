@@ -98,7 +98,7 @@ pub fn run_task_by_name(context: &TaskContext, task_name: &str) -> anyhow::Resul
 
 #[cfg(test)]
 mod test {
-  use hashbrown::HashMap;
+  use std::collections::HashMap;
   use std::sync::Arc;
 
   use crate::schema::{Task, TaskRoot};

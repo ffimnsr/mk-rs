@@ -18,7 +18,7 @@ impl LabelFilter {
   }
 
   /// Returns true when this filter matches `labels`.
-  pub fn matches(&self, labels: &hashbrown::HashMap<String, String>) -> bool {
+  pub fn matches(&self, labels: &std::collections::HashMap<String, String>) -> bool {
     match self {
       Self::Exists(key) => labels.contains_key(key),
       Self::Equals(key, value) => labels.get(key).map(|v| v == value).unwrap_or(false),
@@ -28,14 +28,14 @@ impl LabelFilter {
 
 /// Returns true when all `filters` match `labels` (AND semantics).
 /// An empty filter list always returns true.
-pub fn matches_all(filters: &[LabelFilter], labels: &hashbrown::HashMap<String, String>) -> bool {
+pub fn matches_all(filters: &[LabelFilter], labels: &std::collections::HashMap<String, String>) -> bool {
   filters.iter().all(|f| f.matches(labels))
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use hashbrown::HashMap;
+  use std::collections::HashMap;
 
   fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
     pairs

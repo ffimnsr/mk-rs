@@ -1,6 +1,6 @@
-use hashbrown::HashMap;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::utils::resolve_path;
 

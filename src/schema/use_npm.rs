@@ -3,9 +3,9 @@ use std::io::BufReader;
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use hashbrown::HashMap;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::defaults::default_node_package_manager;
 use crate::file::DisplayPath as _;
@@ -104,8 +104,8 @@ impl UseNpmArgs {
     let tasks: HashMap<String, Task> = package
       .scripts
       .unwrap_or_default()
-      .into_iter()
-      .map(|(k, _)| {
+      .into_keys()
+      .map(|k| {
         let command = format!("{package_manager} run {k}");
         let task = Task::Task(Box::new(TaskArgs {
           commands: vec![CommandRunner::LocalRun(LocalRun {

@@ -1,8 +1,8 @@
 use anyhow::Context;
-use hashbrown::HashMap;
 use mlua::{Lua, LuaSerdeExt};
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use std::fs::File;
 use std::io::{BufReader, Read as _};

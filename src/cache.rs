@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use glob::glob;
-use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::file::ToUtf8 as _;
 use crate::utils::resolve_path;

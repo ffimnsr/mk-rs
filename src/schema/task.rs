@@ -1,8 +1,8 @@
-use hashbrown::HashMap;
 use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use rand::Rng as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use std::fmt::Write as _;
 use std::io::BufRead as _;

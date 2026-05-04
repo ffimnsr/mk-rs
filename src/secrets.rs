@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::Context as _;
-use hashbrown::HashMap;
 use pgp::composed::{Deserializable as _, Message, SignedSecretKey};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use zeroize::Zeroizing;
 
 use crate::file::ToUtf8 as _;

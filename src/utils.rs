@@ -2,10 +2,10 @@ use std::path::{Component, Path, PathBuf};
 use std::{fmt, fs};
 
 use anyhow::Context as _;
-use hashbrown::HashMap;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 
 use crate::file::ToUtf8 as _;
 
