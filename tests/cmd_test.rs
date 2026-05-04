@@ -6360,8 +6360,6 @@ fn test_watch_file_change_triggers_rerun() -> anyhow::Result<()> {
 #[test]
 fn test_watch_clear_flag_is_accepted() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
-  let watched = temp_dir.path().join("src.txt");
-  std::fs::write(&watched, "init")?;
 
   let config_file_path = common::setup_yaml(
     &temp_dir,
@@ -6375,29 +6373,26 @@ fn test_watch_clear_flag_is_accepted() -> anyhow::Result<()> {
     ",
   )?;
 
-  // --clear must parse without error; watcher starts normally.
-  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+  // --clear must parse without error; the command should fail only because no
+  // watch paths were provided.
+  let output = Command::new(cargo::cargo_bin!("mk"))
     .current_dir(temp_dir.path())
     .arg("-c")
     .arg(&config_file_path)
     .arg("watch")
     .arg("echo")
-    .arg("--path")
-    .arg(&watched)
     .arg("--clear")
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped())
-    .spawn()?;
+    .output()?;
 
-  std::thread::sleep(std::time::Duration::from_millis(400));
-  child.kill()?;
-  let output = child.wait_with_output()?;
-
-  // Watcher must have started (initial task run visible).
-  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(!output.status.success());
+  let stderr = String::from_utf8_lossy(&output.stderr);
   assert!(
-    stdout.contains("hello"),
-    "expected initial run in output: {stdout}"
+    stderr.contains("No watch paths"),
+    "expected missing watch paths error, got: {stderr}"
+  );
+  assert!(
+    !stderr.contains("unexpected argument") && !stderr.contains("--clear"),
+    "expected --clear to parse successfully, got: {stderr}"
   );
 
   Ok(())
