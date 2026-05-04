@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.18 - 2026-05-05
+
+### Features
+
+- Add matrix task variants and --set filtering support (`57e3e81`)
+
+### Fixes
+
+- omit empty matrix field from plan json (`b577df3`)
+
+### Tests
+
+- harden watch rerun timing assertions (`8da7fe3`)
+
+### Maintenance
+
+- align serde-yaml dependencies with workspace (`9fc8cf5`)
+- use std::collections::HashMap and workspace dependencies (`dcc5555`)
+- clear out finished tasks from ISSUES and README (`5a05f0d`)
+
+### Other Changes
+
+- update clippy error on path (`2afc81b`)
+
 ## 0.7.17 - 2026-05-04
 
 ### Features
