@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.17 - 2026-05-04
+
+### Features
+
+- implement GNU Make config support milestone 1 and 2 parity (`9a8e0e3`)
+
+### Fixes
+
+- resolve macOS CI test failures and update markdown task naming spec (`171713e`)
+- normalize macOS path in makefile integration test (`95eb189`)
+
+### Documentation
+
+- add on roadmap to support multiple interpreter (`f0cd838`)
+- update wording so shell is now interpreter so can run depending on interpreter (`1964797`)
+
 ## 0.7.16 - 2026-05-04
 
 ### Features
