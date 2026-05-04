@@ -2,10 +2,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::file::ToUtf8 as _;
-use crate::schema::{
-  interpolate_template_string,
-  TaskContext,
-};
+use crate::schema::{interpolate_template_string, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct WriteOutput {
@@ -63,10 +60,7 @@ mod test {
   use tempfile::TempDir;
 
   use super::*;
-  use crate::schema::{
-    TaskContext,
-    TaskRoot,
-  };
+  use crate::schema::{TaskContext, TaskRoot};
 
   fn ctx_with_output(name: &str, value: &str) -> (TaskContext, Arc<TaskRoot>) {
     let root = Arc::new(TaskRoot::default());

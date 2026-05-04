@@ -1,7 +1,4 @@
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
+use std::io::{BufRead as _, BufReader};
 use std::thread;
 
 use crate::handle_output;

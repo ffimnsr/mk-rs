@@ -4,12 +4,7 @@ use serde::Deserialize;
 
 use crate::utils::resolve_path;
 
-use super::{
-  CommandRunner,
-  LocalRun,
-  Task,
-  TaskArgs,
-};
+use super::{CommandRunner, LocalRun, Task, TaskArgs};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct UseCargoArgs {

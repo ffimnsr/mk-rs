@@ -1,15 +1,7 @@
-use std::fmt::{
-  self,
-  Debug,
-  Display,
-  Write as _,
-};
+use std::fmt::{self, Debug, Display, Write as _};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
-use std::{
-  slice,
-  str,
-};
+use std::{slice, str};
 
 #[derive(Copy, Clone)]
 pub(crate) struct CStr<'a> {

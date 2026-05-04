@@ -1,21 +1,12 @@
-use std::fs::{
-  self,
-  File,
-};
+use std::fs::{self, File};
 use std::path::Path;
 
 use clap::Args;
 use console::style;
-use pgp::composed::{
-  Deserializable as _,
-  SignedSecretKey,
-};
+use pgp::composed::{Deserializable as _, SignedSecretKey};
 use pgp::types::KeyDetails as _;
 use prettytable::format::consts;
-use prettytable::{
-  row,
-  Table,
-};
+use prettytable::{row, Table};
 
 use crate::secrets::context::Context;
 

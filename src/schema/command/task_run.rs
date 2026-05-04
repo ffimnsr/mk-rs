@@ -1,14 +1,8 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::defaults::{
-  default_ignore_errors,
-  default_verbose,
-};
-use crate::schema::{
-  run_task_by_name,
-  TaskContext,
-};
+use crate::defaults::{default_ignore_errors, default_verbose};
+use crate::schema::{run_task_by_name, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct TaskRun {

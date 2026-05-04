@@ -7,56 +7,24 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::secrets::Secrets;
-use crate::task_selector::{
-  FuzzyTaskSelector,
-  TaskSelectorCandidate,
-};
+use crate::task_selector::{FuzzyTaskSelector, TaskSelectorCandidate};
 use anyhow::Context as _;
-use clap::{
-  crate_authors,
-  CommandFactory,
-  Parser,
-  Subcommand,
-};
+use clap::{crate_authors, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use console::style;
 use mk_lib::file::DisplayPath as _;
-use mk_lib::label_filter::{
-  matches_all,
-  LabelFilter,
-};
-use mk_lib::schema::{
-  run_task_by_name,
-  ContainerRuntime,
-  Task,
-  TaskContext,
-  TaskPlan,
-  TaskRoot,
-};
+use mk_lib::label_filter::{matches_all, LabelFilter};
+use mk_lib::schema::{run_task_by_name, ContainerRuntime, Task, TaskContext, TaskPlan, TaskRoot};
 use mk_lib::version::get_version_digits;
-use notify::{
-  Event,
-  RecursiveMode,
-  Watcher,
-};
+use notify::{Event, RecursiveMode, Watcher};
 use once_cell::sync::Lazy;
 use prettytable::format::consts;
-use prettytable::{
-  row,
-  Table,
-};
+use prettytable::{row, Table};
 use reqwest::blocking::Client;
-use reqwest::header::{
-  HeaderMap,
-  ACCEPT,
-  USER_AGENT,
-};
+use reqwest::header::{HeaderMap, ACCEPT, USER_AGENT};
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 static INIT_SCHEMA_URL: &str = "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json";
@@ -1794,21 +1762,11 @@ struct GitHubApiError {
 
 #[cfg(test)]
 mod tests {
-  use super::{
-    Args,
-    CliEntry,
-    Command,
-  };
-  use mk_lib::schema::{
-    Task,
-    TaskRoot,
-  };
+  use super::{Args, CliEntry, Command};
+  use mk_lib::schema::{Task, TaskRoot};
   use std::io::Read as _;
   use std::net::TcpListener;
-  use std::sync::{
-    mpsc,
-    Arc,
-  };
+  use std::sync::{mpsc, Arc};
   use std::thread;
 
   #[test]

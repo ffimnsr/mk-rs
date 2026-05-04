@@ -3,22 +3,10 @@
 use indoc::indoc;
 use serde::de::Deserialize;
 #[cfg(not(miri))]
-use serde::de::{
-  SeqAccess,
-  Visitor,
-};
-use serde_derive::{
-  Deserialize,
-  Serialize,
-};
-use serde_yaml::value::{
-  Tag,
-  TaggedValue,
-};
-use serde_yaml::{
-  Deserializer,
-  Value,
-};
+use serde::de::{SeqAccess, Visitor};
+use serde_derive::{Deserialize, Serialize};
+use serde_yaml::value::{Tag, TaggedValue};
+use serde_yaml::{Deserializer, Value};
 #[cfg(not(miri))]
 use std::collections::BTreeMap;
 #[cfg(not(miri))]

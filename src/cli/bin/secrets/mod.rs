@@ -1,7 +1,4 @@
-use clap::{
-  Args,
-  Subcommand,
-};
+use clap::{Args, Subcommand};
 use context::Context;
 use key::KEY_LOCATION_HELP;
 use mk_lib::schema::TaskRoot;

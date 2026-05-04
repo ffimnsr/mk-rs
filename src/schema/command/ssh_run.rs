@@ -1,13 +1,5 @@
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
-use std::process::{
-  Child,
-  Command as ProcessCommand,
-  ExitStatus,
-  Stdio,
-};
+use std::io::{BufRead as _, BufReader};
+use std::process::{Child, Command as ProcessCommand, ExitStatus, Stdio};
 use std::thread;
 
 use anyhow::Context as _;
@@ -15,17 +7,9 @@ use indicatif::ProgressDrawTarget;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::defaults::{
-  default_ignore_errors,
-  default_verbose,
-};
+use crate::defaults::{default_ignore_errors, default_verbose};
 use crate::handle_output;
-use crate::schema::{
-  get_output_handler,
-  interpolate_template_string,
-  Shell,
-  TaskContext,
-};
+use crate::schema::{get_output_handler, interpolate_template_string, Shell, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct SshRunArgs {

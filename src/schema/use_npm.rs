@@ -11,12 +11,7 @@ use crate::defaults::default_node_package_manager;
 use crate::file::DisplayPath as _;
 use crate::utils::resolve_path;
 
-use super::{
-  CommandRunner,
-  LocalRun,
-  Task,
-  TaskArgs,
-};
+use super::{CommandRunner, LocalRun, Task, TaskArgs};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

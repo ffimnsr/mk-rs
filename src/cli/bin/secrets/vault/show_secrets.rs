@@ -1,14 +1,8 @@
 use clap::Args;
 use console::style;
-use mk_lib::secrets::{
-  load_secret_value,
-  verify_vault,
-};
+use mk_lib::secrets::{load_secret_value, verify_vault};
 use prettytable::format::consts;
-use prettytable::{
-  row,
-  Table,
-};
+use prettytable::{row, Table};
 use std::io::Write as _;
 
 use crate::secrets::context::Context;

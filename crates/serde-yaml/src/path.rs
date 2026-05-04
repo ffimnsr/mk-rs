@@ -1,7 +1,4 @@
-use std::fmt::{
-  self,
-  Display,
-};
+use std::fmt::{self, Display};
 
 /// Path to the current value in the input, like `dependencies.serde.typo1`.
 #[derive(Copy, Clone)]

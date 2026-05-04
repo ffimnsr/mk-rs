@@ -1,9 +1,5 @@
 use prettytable::format::Alignment;
-use prettytable::{
-  table,
-  Cell,
-  Row,
-};
+use prettytable::{table, Cell, Row};
 
 fn main() {
   /*

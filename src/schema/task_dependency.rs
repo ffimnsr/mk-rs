@@ -97,10 +97,7 @@ mod test {
   use hashbrown::HashMap;
   use std::sync::Arc;
 
-  use crate::schema::{
-    Task,
-    TaskRoot,
-  };
+  use crate::schema::{Task, TaskRoot};
 
   use super::*;
 

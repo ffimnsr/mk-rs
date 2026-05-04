@@ -1,10 +1,7 @@
 use std::path::PathBuf;
 
 use schemars::JsonSchema;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::{Deserialize, Serialize};
 use which::which;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]

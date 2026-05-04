@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::path::Path;
 
 /// This has been adapted from cross-rs file.rs source
-/// https://github.com/cross-rs/cross/blob/4090beca3cfffa44371a5bba524de3a578aa46c3/src/file.rs#L12
+/// <https://github.com/cross-rs/cross/blob/4090beca3cfffa44371a5bba524de3a578aa46c3/src/file.rs#L12>
 pub trait ToUtf8 {
   fn to_utf8(&self) -> anyhow::Result<&str>;
 }

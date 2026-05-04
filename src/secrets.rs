@@ -1,36 +1,17 @@
 use std::env;
-use std::fs::{
-  self,
-  File,
-};
+use std::fs::{self, File};
 use std::io::Write as _;
-use std::path::{
-  Path,
-  PathBuf,
-};
-use std::process::{
-  Command,
-  Stdio,
-};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::Context as _;
 use hashbrown::HashMap;
-use pgp::composed::{
-  Deserializable as _,
-  Message,
-  SignedSecretKey,
-};
+use pgp::composed::{Deserializable as _, Message, SignedSecretKey};
 use schemars::JsonSchema;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 use crate::file::ToUtf8 as _;
-use crate::utils::{
-  parse_env_contents,
-  resolve_path,
-};
+use crate::utils::{parse_env_contents, resolve_path};
 
 const VAULT_META_FILE: &str = ".vault-meta.toml";
 

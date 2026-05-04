@@ -1,58 +1,26 @@
 use hashbrown::HashMap;
-use indicatif::{
-  HumanDuration,
-  ProgressBar,
-  ProgressStyle,
-};
+use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use rand::Rng as _;
 use schemars::JsonSchema;
-use serde::{
-  Deserialize,
-  Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 use std::fmt::Write as _;
 use std::io::BufRead as _;
-use std::sync::mpsc::{
-  channel,
-  Receiver,
-  Sender,
-};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
-use std::time::{
-  Duration,
-  Instant,
-};
+use std::time::{Duration, Instant};
 
 use super::{
-  contains_output_reference,
-  extract_output_references,
-  interpolate_template_string,
-  is_shell_command,
-  CommandRunner,
-  Precondition,
-  Shell,
-  TaskContext,
-  TaskDependency,
+  contains_output_reference, extract_output_references, interpolate_template_string, is_shell_command,
+  CommandRunner, Precondition, Shell, TaskContext, TaskDependency,
 };
-use crate::cache::{
-  compute_fingerprint,
-  expand_patterns_in_dir,
-  CacheEntry,
-};
+use crate::cache::{compute_fingerprint, expand_patterns_in_dir, CacheEntry};
 use crate::defaults::default_verbose;
 use crate::run_shell_command;
 use crate::secrets::{
-  load_secret_env,
-  merge_optional_secret_settings,
-  resolve_secret_config,
-  SecretSettings,
+  load_secret_env, merge_optional_secret_settings, resolve_secret_config, SecretSettings,
 };
-use crate::utils::{
-  deserialize_environment,
-  load_env_files_in_dir,
-  resolve_path,
-};
+use crate::utils::{deserialize_environment, load_env_files_in_dir, resolve_path};
 
 fn default_cache_enabled() -> bool {
   true

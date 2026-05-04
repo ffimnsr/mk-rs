@@ -7,32 +7,13 @@
 //! A formatted and aligned table printer written in rust
 
 use std::fmt;
-use std::io::{
-  self,
-  Error,
-  Write,
-};
-use std::iter::{
-  FromIterator,
-  IntoIterator,
-};
-use std::ops::{
-  Index,
-  IndexMut,
-};
-use std::slice::{
-  Iter,
-  IterMut,
-};
+use std::io::{self, Error, Write};
+use std::iter::{FromIterator, IntoIterator};
+use std::ops::{Index, IndexMut};
+use std::slice::{Iter, IterMut};
 
-pub use term::{
-  color,
-  Attr,
-};
-pub(crate) use term::{
-  stdout,
-  Terminal,
-};
+pub use term::{color, Attr};
+pub(crate) use term::{stdout, Terminal};
 
 mod cell;
 pub mod format;
@@ -46,11 +27,7 @@ pub mod csv;
 pub mod evcxr;
 
 pub use cell::Cell;
-use format::{
-  consts,
-  LinePosition,
-  TableFormat,
-};
+use format::{consts, LinePosition, TableFormat};
 pub use row::Row;
 use utils::StringWriter;
 
@@ -654,21 +631,8 @@ macro_rules! ptable {
 #[cfg(test)]
 mod tests {
   use crate::utils::StringWriter;
-  use crate::{
-    format,
-    AsTableSlice,
-    Cell,
-    Row,
-    Slice,
-    Table,
-  };
-  use format::consts::{
-    FORMAT_BOX_CHARS,
-    FORMAT_CLEAN,
-    FORMAT_DEFAULT,
-    FORMAT_NO_COLSEP,
-    FORMAT_NO_LINESEP,
-  };
+  use crate::{format, AsTableSlice, Cell, Row, Slice, Table};
+  use format::consts::{FORMAT_BOX_CHARS, FORMAT_CLEAN, FORMAT_DEFAULT, FORMAT_NO_COLSEP, FORMAT_NO_LINESEP};
 
   #[test]
   fn table() {

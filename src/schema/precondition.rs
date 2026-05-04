@@ -1,16 +1,10 @@
 use anyhow::Context as _;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
+use std::io::{BufRead as _, BufReader};
 use std::thread;
 
-use super::{
-  Shell,
-  TaskContext,
-};
+use super::{Shell, TaskContext};
 use crate::defaults::default_verbose;
 use crate::handle_output;
 use crate::schema::get_output_handler;

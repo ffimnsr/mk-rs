@@ -1,39 +1,17 @@
 use anyhow::Context;
 use hashbrown::HashMap;
-use mlua::{
-  Lua,
-  LuaSerdeExt,
-};
+use mlua::{Lua, LuaSerdeExt};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use std::fs::File;
-use std::io::{
-  BufReader,
-  Read as _,
-};
-use std::path::{
-  Path,
-  PathBuf,
-};
+use std::io::{BufReader, Read as _};
+use std::path::{Path, PathBuf};
 
-use super::{
-  ContainerRuntime,
-  Include,
-  Task,
-  UseCargo,
-  UseNpm,
-};
+use super::{ContainerRuntime, Include, Task, UseCargo, UseNpm};
 use crate::file::ToUtf8 as _;
-use crate::secrets::{
-  merge_optional_secret_settings,
-  SecretSettings,
-};
-use crate::utils::{
-  deserialize_environment,
-  expand_home_path,
-  resolve_path,
-};
+use crate::secrets::{merge_optional_secret_settings, SecretSettings};
+use crate::utils::{deserialize_environment, expand_home_path, resolve_path};
 
 const MK_COMMANDS: [&str; 11] = [
   "run",
@@ -457,10 +435,7 @@ fn rename_tasks(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::schema::{
-    CommandRunner,
-    TaskDependency,
-  };
+  use crate::schema::{CommandRunner, TaskDependency};
   use assert_fs::TempDir;
 
   #[test]

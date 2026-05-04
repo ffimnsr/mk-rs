@@ -1,7 +1,4 @@
-use assert_cmd::{
-  cargo,
-  Command,
-};
+use assert_cmd::{cargo, Command};
 use assert_fs::TempDir;
 use mk_lib::file::ToUtf8 as _;
 use mk_lib::secrets::read_vault_gpg_key_id;

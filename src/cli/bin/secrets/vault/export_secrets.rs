@@ -1,8 +1,5 @@
 use clap::Args;
-use mk_lib::secrets::{
-  load_secret_value,
-  verify_vault,
-};
+use mk_lib::secrets::{load_secret_value, verify_vault};
 use std::fs::File;
 use std::io::Write as _;
 

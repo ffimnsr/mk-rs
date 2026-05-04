@@ -1,39 +1,13 @@
-use crate::value::tagged::{
-  self,
-  TagStringVisitor,
-};
+use crate::value::tagged::{self, TagStringVisitor};
 use crate::value::TaggedValue;
-use crate::{
-  number,
-  Error,
-  Mapping,
-  Sequence,
-  Value,
-};
-use serde::de::value::{
-  BorrowedStrDeserializer,
-  StrDeserializer,
-};
+use crate::{number, Error, Mapping, Sequence, Value};
+use serde::de::value::{BorrowedStrDeserializer, StrDeserializer};
 use serde::de::{
-  self,
-  Deserialize,
-  DeserializeSeed,
-  Deserializer,
-  EnumAccess,
-  Error as _,
-  Expected,
-  MapAccess,
-  SeqAccess,
-  Unexpected,
-  VariantAccess,
-  Visitor,
+  self, Deserialize, DeserializeSeed, Deserializer, EnumAccess, Error as _, Expected, MapAccess, SeqAccess,
+  Unexpected, VariantAccess, Visitor,
 };
 use serde::forward_to_deserialize_any;
-use std::{
-  fmt,
-  slice,
-  vec,
-};
+use std::{fmt, slice, vec};
 
 impl<'de> Deserialize<'de> for Value {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

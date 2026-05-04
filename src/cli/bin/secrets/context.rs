@@ -1,15 +1,7 @@
-use std::path::{
-  Path,
-  PathBuf,
-};
+use std::path::{Path, PathBuf};
 
 use mk_lib::schema::TaskRoot;
-use mk_lib::secrets::{
-  resolve_secret_config,
-  SecretBackend,
-  SecretConfig,
-  SecretSettings,
-};
+use mk_lib::secrets::{resolve_secret_config, SecretBackend, SecretConfig, SecretSettings};
 
 pub(super) struct Context {
   settings: SecretSettings,

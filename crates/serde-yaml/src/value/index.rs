@@ -1,14 +1,6 @@
 use crate::mapping::Entry;
-use crate::{
-  mapping,
-  private,
-  Mapping,
-  Value,
-};
-use std::fmt::{
-  self,
-  Debug,
-};
+use crate::{mapping, private, Mapping, Value};
+use std::fmt::{self, Debug};
 use std::ops;
 
 /// A type that can be used to index into a `serde_yaml::Value`. See the `get`

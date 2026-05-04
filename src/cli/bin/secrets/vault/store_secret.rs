@@ -1,27 +1,11 @@
 use clap::Args;
 use mk_lib::file::DisplayPath as _;
-use mk_lib::secrets::{
-  encrypt_with_gpg,
-  verify_vault,
-  SecretBackend,
-};
-use pgp::composed::{
-  ArmorOptions,
-  Deserializable,
-  SignedSecretKey,
-};
+use mk_lib::secrets::{encrypt_with_gpg, verify_vault, SecretBackend};
+use pgp::composed::{ArmorOptions, Deserializable, SignedSecretKey};
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use rand::thread_rng;
-use std::fs::{
-  self,
-  File,
-};
-use std::io::{
-  self,
-  IsTerminal,
-  Read as _,
-  Write as _,
-};
+use std::fs::{self, File};
+use std::io::{self, IsTerminal, Read as _, Write as _};
 use std::path::Path;
 
 use crate::secrets::context::Context;

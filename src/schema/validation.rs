@@ -4,22 +4,11 @@ use std::path::Path;
 use serde::Serialize;
 
 use super::{
-  contains_output_reference,
-  extract_output_references,
-  CommandRunner,
-  ContainerRuntime,
-  Include,
-  Task,
-  TaskRoot,
-  UseCargo,
-  UseNpm,
+  contains_output_reference, extract_output_references, CommandRunner, ContainerRuntime, Include, Task,
+  TaskRoot, UseCargo, UseNpm,
 };
 use crate::schema::Precondition;
-use crate::secrets::{
-  merge_optional_secret_settings,
-  SecretBackend,
-  SecretSettings,
-};
+use crate::secrets::{merge_optional_secret_settings, SecretBackend, SecretSettings};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidationIssue {

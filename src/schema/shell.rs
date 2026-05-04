@@ -134,11 +134,7 @@ fn shell_eval_flag(command: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-  use super::{
-    default_shell_command,
-    Shell,
-    ShellArgs,
-  };
+  use super::{default_shell_command, Shell, ShellArgs};
 
   #[test]
   fn shell_default_matches_platform() {

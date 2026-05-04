@@ -1,40 +1,16 @@
-use crate::error::{
-  self,
-  Error,
-  ErrorImpl,
-};
+use crate::error::{self, Error, ErrorImpl};
 use crate::libyaml::error::Mark;
-use crate::libyaml::parser::{
-  MappingStart,
-  Scalar,
-  ScalarStyle,
-  SequenceStart,
-};
+use crate::libyaml::parser::{MappingStart, Scalar, ScalarStyle, SequenceStart};
 use crate::libyaml::tag::Tag;
-use crate::loader::{
-  Document,
-  Loader,
-};
+use crate::loader::{Document, Loader};
 use crate::path::Path;
 use serde::de::value::StrDeserializer;
 use serde::de::{
-  self,
-  Deserialize,
-  DeserializeOwned,
-  DeserializeSeed,
-  Expected,
-  IgnoredAny,
-  Unexpected,
-  Visitor,
+  self, Deserialize, DeserializeOwned, DeserializeSeed, Expected, IgnoredAny, Unexpected, Visitor,
 };
 use std::num::ParseIntError;
 use std::sync::Arc;
-use std::{
-  fmt,
-  io,
-  mem,
-  str,
-};
+use std::{fmt, io, mem, str};
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 

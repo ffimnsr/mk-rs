@@ -1,25 +1,13 @@
 //! This module contains definition of table rows stuff
-use std::io::{
-  Error,
-  Write,
-};
+use std::io::{Error, Write};
 use std::iter::FromIterator;
-use std::slice::{
-  Iter,
-  IterMut,
-};
+use std::slice::{Iter, IterMut};
 // use std::vec::IntoIter;
-use std::ops::{
-  Index,
-  IndexMut,
-};
+use std::ops::{Index, IndexMut};
 
 use super::Terminal;
 
-use super::format::{
-  ColumnPosition,
-  TableFormat,
-};
+use super::format::{ColumnPosition, TableFormat};
 use super::utils::NEWLINE;
 use super::Cell;
 

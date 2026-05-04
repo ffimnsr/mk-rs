@@ -1,11 +1,5 @@
-use std::io::{
-  ErrorKind,
-  Write as _,
-};
-use std::process::{
-  Command,
-  Stdio,
-};
+use std::io::{ErrorKind, Write as _};
+use std::process::{Command, Stdio};
 
 use anyhow::Context as _;
 
@@ -116,17 +110,10 @@ fn parse_selection(stdout: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-  use super::{
-    format_candidates,
-    parse_selection,
-    TaskSelectorCandidate,
-  };
+  use super::{format_candidates, parse_selection, TaskSelectorCandidate};
 
   #[cfg(unix)]
-  use super::{
-    detect_backend,
-    Backend,
-  };
+  use super::{detect_backend, Backend};
 
   #[test]
   fn parse_selection_reads_first_tsv_column() {

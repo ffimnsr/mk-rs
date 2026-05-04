@@ -1,8 +1,4 @@
-use prettytable::{
-  format,
-  row,
-  table,
-};
+use prettytable::{format, row, table};
 
 fn main() {
   let mut table = table!(["Value 1", "Value 2"], ["Value three", "Value four"]);

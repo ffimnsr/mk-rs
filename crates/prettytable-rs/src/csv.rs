@@ -2,17 +2,9 @@
 
 use csv;
 
-pub use self::csv::{
-  Reader,
-  ReaderBuilder,
-  Result,
-  Writer,
-};
+pub use self::csv::{Reader, ReaderBuilder, Result, Writer};
 use crate::AsTableSlice;
-use std::io::{
-  Read,
-  Write,
-};
+use std::io::{Read, Write};
 use std::path::Path;
 
 impl super::TableSlice<'_> {
@@ -83,11 +75,7 @@ impl super::Table {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    Cell,
-    Row,
-    Table,
-  };
+  use crate::{Cell, Row, Table};
 
   static CSV_S: &str = "ABC,DEFG,HIJKLMN\n\
                         foobar,bar,foo\n\

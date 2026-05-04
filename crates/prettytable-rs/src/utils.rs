@@ -1,17 +1,8 @@
 //! Internal only utilities
-use std::io::{
-  Error,
-  Write,
-};
-use std::{
-  fmt,
-  str,
-};
+use std::io::{Error, Write};
+use std::{fmt, str};
 
-use unicode_width::{
-  UnicodeWidthChar,
-  UnicodeWidthStr,
-};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::format::Alignment;
 

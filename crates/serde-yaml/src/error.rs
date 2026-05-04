@@ -1,24 +1,10 @@
-use crate::libyaml::{
-  emitter,
-  error as libyaml,
-};
+use crate::libyaml::{emitter, error as libyaml};
 use crate::path::Path;
-use serde::{
-  de,
-  ser,
-};
+use serde::{de, ser};
 use std::error::Error as StdError;
-use std::fmt::{
-  self,
-  Debug,
-  Display,
-};
+use std::fmt::{self, Debug, Display};
 use std::sync::Arc;
-use std::{
-  io,
-  result,
-  string,
-};
+use std::{io, result, string};
 
 /// An error that happened serializing or deserializing YAML data.
 pub struct Error(Box<ErrorImpl>);

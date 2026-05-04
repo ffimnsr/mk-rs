@@ -1,10 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use assert_cmd::{
-  cargo,
-  Command,
-};
+use assert_cmd::{cargo, Command};
 use assert_fs::TempDir;
 use mk_lib::file::ToUtf8 as _;
 

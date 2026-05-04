@@ -1,13 +1,5 @@
-use std::io::{
-  BufRead as _,
-  BufReader,
-  IsTerminal as _,
-};
-use std::process::{
-  Child,
-  ExitStatus,
-  Stdio,
-};
+use std::io::{BufRead as _, BufReader, IsTerminal as _};
+use std::process::{Child, ExitStatus, Stdio};
 use std::thread;
 #[cfg(unix)]
 use std::time::Duration;
@@ -24,19 +16,11 @@ use std::os::fd::AsRawFd as _;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt as _;
 
-use crate::defaults::{
-  default_ignore_errors,
-  default_verbose,
-};
+use crate::defaults::{default_ignore_errors, default_verbose};
 use crate::handle_output;
 #[cfg(unix)]
 use crate::schema::ExecutionInterrupted;
-use crate::schema::{
-  get_output_handler,
-  interpolate_template_string,
-  Shell,
-  TaskContext,
-};
+use crate::schema::{get_output_handler, interpolate_template_string, Shell, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct LocalRun {

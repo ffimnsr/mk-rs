@@ -1,25 +1,12 @@
 //! A YAML mapping and its iterator types.
 
-use crate::{
-  private,
-  Value,
-};
+use crate::{private, Value};
 use indexmap::IndexMap;
-use serde::{
-  Deserialize,
-  Deserializer,
-  Serialize,
-};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::{
-  self,
-  Display,
-};
-use std::hash::{
-  Hash,
-  Hasher,
-};
+use std::fmt::{self, Display};
+use std::hash::{Hash, Hasher};
 use std::mem;
 
 /// A YAML mapping in which the keys and values are both `serde_yaml::Value`.

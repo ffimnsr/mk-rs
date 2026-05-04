@@ -72,35 +72,15 @@
 ///   value: 1
 /// ```
 pub mod singleton_map {
-  use crate::value::{
-    Mapping,
-    Sequence,
-    Value,
-  };
+  use crate::value::{Mapping, Sequence, Value};
   use serde::de::{
-    self,
-    Deserialize,
-    DeserializeSeed,
-    Deserializer,
-    EnumAccess,
-    IgnoredAny,
-    MapAccess,
-    Unexpected,
-    VariantAccess,
-    Visitor,
+    self, Deserialize, DeserializeSeed, Deserializer, EnumAccess, IgnoredAny, MapAccess, Unexpected,
+    VariantAccess, Visitor,
   };
   use serde::ser::{
-    self,
-    Serialize,
-    SerializeMap,
-    SerializeStructVariant,
-    SerializeTupleVariant,
-    Serializer,
+    self, Serialize, SerializeMap, SerializeStructVariant, SerializeTupleVariant, Serializer,
   };
-  use std::fmt::{
-    self,
-    Display,
-  };
+  use std::fmt::{self, Display};
 
   #[allow(missing_docs)]
   pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
@@ -926,40 +906,16 @@ pub mod singleton_map {
 /// }
 /// ```
 pub mod singleton_map_recursive {
-  use crate::value::{
-    Mapping,
-    Sequence,
-    Value,
-  };
+  use crate::value::{Mapping, Sequence, Value};
   use serde::de::{
-    self,
-    Deserialize,
-    DeserializeSeed,
-    Deserializer,
-    EnumAccess,
-    IgnoredAny,
-    MapAccess,
-    SeqAccess,
-    Unexpected,
-    VariantAccess,
-    Visitor,
+    self, Deserialize, DeserializeSeed, Deserializer, EnumAccess, IgnoredAny, MapAccess, SeqAccess,
+    Unexpected, VariantAccess, Visitor,
   };
   use serde::ser::{
-    self,
-    Serialize,
-    SerializeMap,
-    SerializeSeq,
-    SerializeStruct,
-    SerializeStructVariant,
-    SerializeTuple,
-    SerializeTupleStruct,
-    SerializeTupleVariant,
-    Serializer,
+    self, Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
+    SerializeTupleStruct, SerializeTupleVariant, Serializer,
   };
-  use std::fmt::{
-    self,
-    Display,
-  };
+  use std::fmt::{self, Display};
 
   #[allow(missing_docs)]
   pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>

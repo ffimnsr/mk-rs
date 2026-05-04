@@ -1,9 +1,6 @@
 use clap::Args;
 
-use mk_lib::secrets::{
-  SecretBackend,
-  SecretValueSource,
-};
+use mk_lib::secrets::{SecretBackend, SecretValueSource};
 
 use crate::secrets::context::Context;
 

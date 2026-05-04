@@ -1,10 +1,7 @@
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::schema::{
-  interpolate_template_string,
-  TaskContext,
-};
+use crate::schema::{interpolate_template_string, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct JsonExtract {
@@ -74,10 +71,7 @@ mod test {
   use std::sync::Arc;
 
   use super::*;
-  use crate::schema::{
-    TaskContext,
-    TaskRoot,
-  };
+  use crate::schema::{TaskContext, TaskRoot};
 
   fn ctx_with_output(name: &str, value: &str) -> TaskContext {
     let context = TaskContext::empty_with_root(Arc::new(TaskRoot::default()));

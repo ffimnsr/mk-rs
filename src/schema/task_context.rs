@@ -1,36 +1,17 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::{
-  AtomicBool,
-  Ordering,
-};
-use std::sync::{
-  Arc,
-  Mutex,
-};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use hashbrown::HashMap;
-use indicatif::{
-  MultiProgress,
-  ProgressDrawTarget,
-};
+use indicatif::{MultiProgress, ProgressDrawTarget};
 use serde::Serialize;
 
 use crate::cache::CacheStore;
-use crate::defaults::{
-  default_ignore_errors,
-  default_shell,
-  default_verbose,
-};
+use crate::defaults::{default_ignore_errors, default_shell, default_verbose};
 use crate::secrets::SecretConfig;
 
-use super::{
-  ActiveTasks,
-  CompletedTasks,
-  ContainerRuntime,
-  Shell,
-  TaskRoot,
-};
+use super::{ActiveTasks, CompletedTasks, ContainerRuntime, Shell, TaskRoot};
 
 /// Used to pass information to tasks
 /// This use arc to allow for sharing of data between tasks

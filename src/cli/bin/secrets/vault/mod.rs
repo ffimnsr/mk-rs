@@ -1,9 +1,6 @@
 use std::path::Path;
 
-use clap::{
-  Args,
-  Subcommand,
-};
+use clap::{Args, Subcommand};
 
 pub use export_secrets::ExportSecret;
 pub use init_vault::InitVault;

@@ -1,9 +1,5 @@
 use crate::libyaml::cstr::CStr;
-use std::fmt::{
-  self,
-  Debug,
-  Display,
-};
+use std::fmt::{self, Debug, Display};
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 use unsafe_libyaml as sys;

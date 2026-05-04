@@ -3,11 +3,7 @@ use std::io::Write as _;
 use std::path::Path;
 
 use clap::Args;
-use pgp::composed::{
-  ArmorOptions,
-  Deserializable as _,
-  SignedSecretKey,
-};
+use pgp::composed::{ArmorOptions, Deserializable as _, SignedSecretKey};
 
 use crate::secrets::context::Context;
 

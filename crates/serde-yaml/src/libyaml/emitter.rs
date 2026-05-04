@@ -1,18 +1,9 @@
 use crate::libyaml;
 use crate::libyaml::util::Owned;
 use std::ffi::c_void;
-use std::mem::{
-  self,
-  MaybeUninit,
-};
-use std::ptr::{
-  self,
-  addr_of_mut,
-};
-use std::{
-  io,
-  slice,
-};
+use std::mem::{self, MaybeUninit};
+use std::ptr::{self, addr_of_mut};
+use std::{io, slice};
 use unsafe_libyaml as sys;
 
 #[derive(Debug)]

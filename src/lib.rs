@@ -40,10 +40,7 @@ pub mod utils;
 pub mod label_filter;
 
 /// Shared task execution state types
-pub use schema::{
-  ActiveTasks,
-  CompletedTasks,
-};
+pub use schema::{ActiveTasks, CompletedTasks};
 
 /// Generate the JSON Schema for the task configuration file as a pretty-printed JSON string.
 pub fn generate_schema() -> anyhow::Result<String> {

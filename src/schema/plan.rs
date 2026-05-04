@@ -4,13 +4,7 @@ use serde::Serialize;
 
 use crate::defaults::default_shell;
 
-use super::{
-  CommandRunner,
-  Shell,
-  Task,
-  TaskArgs,
-  TaskRoot,
-};
+use super::{CommandRunner, Shell, Task, TaskArgs, TaskRoot};
 
 #[derive(Debug, Serialize)]
 pub struct TaskPlan {

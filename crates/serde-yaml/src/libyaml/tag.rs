@@ -1,8 +1,5 @@
 use crate::libyaml::cstr;
-use std::fmt::{
-  self,
-  Debug,
-};
+use std::fmt::{self, Debug};
 use std::ops::Deref;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq)]

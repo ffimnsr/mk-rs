@@ -7,14 +7,8 @@
 use indoc::indoc;
 use serde::de::IntoDeserializer;
 use serde::Deserialize as _;
-use serde_derive::{
-  Deserialize,
-  Serialize,
-};
-use serde_yaml::{
-  Number,
-  Value,
-};
+use serde_derive::{Deserialize, Serialize};
+use serde_yaml::{Number, Value};
 
 #[test]
 fn test_nan() {

@@ -1,14 +1,5 @@
 use prettytable::format::*;
-use prettytable::{
-  color,
-  ptable,
-  row,
-  table,
-  Attr,
-  Cell,
-  Row,
-  Table,
-}; // Import macros
+use prettytable::{color, ptable, row, table, Attr, Cell, Row, Table}; // Import macros
 
 // trace_macros!(true);
 

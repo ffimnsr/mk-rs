@@ -8,11 +8,7 @@
 
 use indoc::indoc;
 use serde_derive::Deserialize;
-use serde_yaml::{
-  Deserializer,
-  Number,
-  Value,
-};
+use serde_yaml::{Deserializer, Number, Value};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 

@@ -1,13 +1,6 @@
 use crate::mapping::Mapping;
-use crate::value::{
-  Number,
-  Value,
-};
-use std::fmt::{
-  self,
-  Debug,
-  Display,
-};
+use crate::value::{Number, Value};
+use std::fmt::{self, Debug, Display};
 
 impl Debug for Value {
   fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

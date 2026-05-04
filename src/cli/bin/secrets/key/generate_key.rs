@@ -1,18 +1,10 @@
-use std::fs::{
-  self,
-  File,
-};
+use std::fs::{self, File};
 use std::io::Write as _;
 use std::path::Path;
 
 use clap::Args;
 use mk_lib::file::DisplayPath as _;
-use pgp::composed::{
-  ArmorOptions,
-  EncryptionCaps,
-  KeyType,
-  SecretKeyParamsBuilder,
-};
+use pgp::composed::{ArmorOptions, EncryptionCaps, KeyType, SecretKeyParamsBuilder};
 use rand::thread_rng;
 
 use crate::secrets::context::Context;

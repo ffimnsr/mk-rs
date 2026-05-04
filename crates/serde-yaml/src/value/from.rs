@@ -1,7 +1,4 @@
-use crate::{
-  Mapping,
-  Value,
-};
+use crate::{Mapping, Value};
 
 // Implement a bunch of conversion to make it easier to create YAML values
 // on the fly.

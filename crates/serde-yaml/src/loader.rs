@@ -1,18 +1,7 @@
-use crate::de::{
-  Event,
-  Progress,
-};
-use crate::error::{
-  self,
-  Error,
-  ErrorImpl,
-  Result,
-};
+use crate::de::{Event, Progress};
+use crate::error::{self, Error, ErrorImpl, Result};
 use crate::libyaml::error::Mark;
-use crate::libyaml::parser::{
-  Event as YamlEvent,
-  Parser,
-};
+use crate::libyaml::parser::{Event as YamlEvent, Parser};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;

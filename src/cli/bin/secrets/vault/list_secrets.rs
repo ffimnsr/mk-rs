@@ -2,10 +2,7 @@ use clap::Args;
 use console::style;
 use mk_lib::secrets::list_secret_paths;
 use prettytable::format::consts;
-use prettytable::{
-  row,
-  Table,
-};
+use prettytable::{row, Table};
 
 use crate::secrets::context::Context;
 

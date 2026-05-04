@@ -1,11 +1,4 @@
-use prettytable::{
-  ptable,
-  row,
-  table,
-  Cell,
-  Row,
-  Table,
-};
+use prettytable::{ptable, row, table, Cell, Row, Table};
 
 /*
     Following main function will print :

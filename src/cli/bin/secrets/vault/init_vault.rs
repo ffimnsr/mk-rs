@@ -4,17 +4,9 @@ use std::path::Path;
 use clap::Args;
 use mk_lib::file::ToUtf8 as _;
 use mk_lib::secrets::{
-  read_vault_gpg_key_id,
-  write_vault_meta,
-  SecretBackend,
-  SecretConfig,
-  SecretSettings,
-  VaultMeta,
+  read_vault_gpg_key_id, write_vault_meta, SecretBackend, SecretConfig, SecretSettings, VaultMeta,
 };
-use serde_yaml::{
-  Mapping,
-  Value,
-};
+use serde_yaml::{Mapping, Value};
 
 use crate::secrets::context::Context;
 

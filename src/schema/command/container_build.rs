@@ -1,7 +1,4 @@
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
+use std::io::{BufRead as _, BufReader};
 use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 use std::thread;
@@ -13,17 +10,9 @@ use serde::Deserialize;
 
 use crate::defaults::default_verbose;
 use crate::schema::{
-  get_output_handler,
-  is_shell_command,
-  is_template_command,
-  ContainerRuntime,
-  TaskContext,
+  get_output_handler, is_shell_command, is_template_command, ContainerRuntime, TaskContext,
 };
-use crate::{
-  get_template_command_value,
-  handle_output,
-  run_shell_command,
-};
+use crate::{get_template_command_value, handle_output, run_shell_command};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContainerBuildArgs {

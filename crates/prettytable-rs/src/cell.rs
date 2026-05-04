@@ -1,20 +1,9 @@
 //! This module contains definition of table/row cells stuff
 
 use super::format::Alignment;
-use super::utils::{
-  display_width,
-  print_align,
-  HtmlEscape,
-};
-use super::{
-  color,
-  Attr,
-  Terminal,
-};
-use std::io::{
-  Error,
-  Write,
-};
+use super::utils::{display_width, print_align, HtmlEscape};
+use super::{color, Attr, Terminal};
+use std::io::{Error, Write};
 use std::str::FromStr;
 use std::string::ToString;
 
@@ -403,10 +392,7 @@ mod tests {
   use super::Cell;
   use crate::format::Alignment;
   use crate::utils::StringWriter;
-  use term::{
-    color,
-    Attr,
-  };
+  use term::{color, Attr};
 
   #[test]
   fn get_content() {

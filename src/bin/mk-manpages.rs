@@ -1,13 +1,7 @@
 #![allow(dead_code)]
 
-use std::path::{
-  Path,
-  PathBuf,
-};
-use std::{
-  env,
-  fs,
-};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use clap::Command;
 use clap_mangen::Man;

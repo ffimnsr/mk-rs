@@ -1,9 +1,6 @@
 //! Define table formatting utilities
 
-use std::io::{
-  Error,
-  Write,
-};
+use std::io::{Error, Write};
 
 use encode_unicode::Utf8Char;
 
@@ -355,12 +352,7 @@ impl From<TableFormat> for FormatBuilder {
 /// Predifined formats. Those constants are lazily evaluated when
 /// the corresponding struct is dereferenced
 pub mod consts {
-  use super::{
-    FormatBuilder,
-    LinePosition,
-    LineSeparator,
-    TableFormat,
-  };
+  use super::{FormatBuilder, LinePosition, LineSeparator, TableFormat};
   use once_cell::sync::Lazy;
 
   /// A line separator made of `-` and `+`

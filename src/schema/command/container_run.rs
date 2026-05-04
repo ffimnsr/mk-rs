@@ -1,7 +1,4 @@
-use std::io::{
-  BufRead as _,
-  BufReader,
-};
+use std::io::{BufRead as _, BufReader};
 use std::process::Command as ProcessCommand;
 use std::thread;
 
@@ -9,17 +6,10 @@ use anyhow::Context;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use crate::defaults::{
-  default_ignore_errors,
-  default_verbose,
-};
+use crate::defaults::{default_ignore_errors, default_verbose};
 use crate::file::ToUtf8 as _;
 use crate::handle_output;
-use crate::schema::{
-  get_output_handler,
-  ContainerRuntime,
-  TaskContext,
-};
+use crate::schema::{get_output_handler, ContainerRuntime, TaskContext};
 
 #[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContainerRun {

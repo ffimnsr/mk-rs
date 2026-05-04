@@ -14,10 +14,7 @@ mod validation;
 use std::collections::HashSet;
 use std::fmt;
 use std::process::Stdio;
-use std::sync::{
-  Arc,
-  Mutex,
-};
+use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 use regex::Regex;

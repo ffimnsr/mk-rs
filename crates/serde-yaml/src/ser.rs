@@ -2,40 +2,15 @@
 //!
 //! This module provides YAML serialization with the type `Serializer`.
 
-use crate::error::{
-  self,
-  Error,
-  ErrorImpl,
-};
+use crate::error::{self, Error, ErrorImpl};
 use crate::libyaml;
-use crate::libyaml::emitter::{
-  Emitter,
-  Event,
-  Mapping,
-  Scalar,
-  ScalarStyle,
-  Sequence,
-};
-use crate::value::tagged::{
-  self,
-  MaybeTag,
-};
+use crate::libyaml::emitter::{Emitter, Event, Mapping, Scalar, ScalarStyle, Sequence};
+use crate::value::tagged::{self, MaybeTag};
 use serde::de::Visitor;
-use serde::ser::{
-  self,
-  Serializer as _,
-};
-use std::fmt::{
-  self,
-  Display,
-};
+use serde::ser::{self, Serializer as _};
+use std::fmt::{self, Display};
 use std::marker::PhantomData;
-use std::{
-  io,
-  mem,
-  num,
-  str,
-};
+use std::{io, mem, num, str};
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 

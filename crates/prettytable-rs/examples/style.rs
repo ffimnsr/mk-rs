@@ -1,14 +1,4 @@
-use prettytable::{
-  cell,
-  color,
-  ptable,
-  row,
-  table,
-  Attr,
-  Cell,
-  Row,
-  Table,
-};
+use prettytable::{cell, color, ptable, row, table, Attr, Cell, Row, Table};
 
 #[allow(dead_code)]
 fn main() {
