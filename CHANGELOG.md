@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.7.14 - 2026-05-04
+
+### Features
+
+- add nerdctl runtime support (`1bfdaef`)
+- add fuzzy task selector (`9f39d53`)
+- expand init templates and cache coverage (`27f437e`)
+- update tasks and coverage report (`e471407`)
+- add ssh_run, json_extract, write_output commands and mk doctor (`885ce8a`)
+- watch mode with trailing args and man page generation (`3fd346e`)
+- add release workflow for macos aarch64 (`3ee2354`)
+- update workflow to have cache (`a417a76`)
+- add zeroize for secrets to be remove from mem (`fd95670`)
+
+### Fixes
+
+- align fuzzy selector descriptions (`4140274`)
+- guard test_run_fzf_reports_missing_backend with cfg(unix) (`702e34a`)
+
+### Documentation
+
+- add wiki submodule docs (`4ef5c41`)
+
+### Maintenance
+
+- update the formatter issue nightly vs stable (`1bd2fa2`)
+
 ## 0.7.13 - 2026-04-26
 
 ### Features
