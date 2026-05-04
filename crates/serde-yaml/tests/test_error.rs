@@ -1,10 +1,10 @@
 #![allow(clippy::zero_sized_map_values)]
 
 use indoc::indoc;
-use serde::de::Deserialize;
+use serde::de::Deserialize as DeDeserialize;
 #[cfg(not(miri))]
 use serde::de::{SeqAccess, Visitor};
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_yaml::value::{Tag, TaggedValue};
 use serde_yaml::{Deserializer, Value};
 #[cfg(not(miri))]
@@ -15,7 +15,7 @@ use std::fmt::Debug;
 
 fn test_error<'de, T>(yaml: &'de str, expected: &str)
 where
-  T: Deserialize<'de> + Debug,
+  T: DeDeserialize<'de> + Debug,
 {
   let result = serde_yaml::from_str::<T>(yaml);
   assert_eq!(expected, result.unwrap_err().to_string());
