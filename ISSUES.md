@@ -474,7 +474,7 @@ Instruction for items in this section:
 
 - [ ] Add fenced code block command extraction
   - Convert fenced code blocks under a task heading into ordered local command entries.
-  - Accept unlabeled fences and shell-style info strings like `sh`, `bash`, `shell`, `zsh`, `pwsh`, and `powershell`.
+  - Accept unlabeled fences, shell-style info strings like `sh`, `bash`, `shell`, `zsh`, `pwsh`, and `powershell`, as well as interpreter info strings like `python`, `lua`, `javascript`, `typescript`, `node`, and `bun`.
   - Preserve command text exactly as written inside each fence.
   - Add unit tests for single-command and multi-command task sections.
 
@@ -488,7 +488,7 @@ Instruction for items in this section:
 
 - [ ] Map markdown tasks into existing shell command task structs
   - Build parsed markdown tasks into existing task structs instead of introducing a new execution path.
-  - Map each fenced code block to existing plain shell command execution entries.
+  - Map each fenced code block to existing plain shell command execution entries, mapping interpreter languages directly to the `shell` execution attribute.
   - Map extracted paragraph text to task description field.
   - Add unit tests for task struct conversion.
 
