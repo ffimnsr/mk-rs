@@ -7,61 +7,6 @@ Instruction for all the items in this file:
 - Prefer additive wording like "add", "replace", "update", "remove", "validate", "test".
 - Avoid broad goals without concrete implementation detail.
 
-## Watch Mode
-
-Instruction for items in this section:
-- Keep watch behavior deterministic and explicit.
-- Reuse existing task resolution, validation, and cache semantics where possible.
-- Prefer additive CLI flags over implicit background behavior.
-
-### Phase 1: CLI Surface
-
-- [x] Add `mk watch <task>` command
-  - Add `watch` subcommand to CLI help and docs.
-  - Require a task name or label filter input using same selection rules as `mk run`.
-  - Reuse current config file discovery and task resolution.
-  - Add help snapshot coverage for `mk watch --help`.
-
-- [x] Add watch path and debounce flags
-  - Add repeatable `--path <PATH>` flags to override watched inputs.
-  - Add `--debounce <DURATION>` flag for filesystem event coalescing.
-  - Validate duration parsing and reject zero debounce values.
-  - Add CLI parsing tests for repeated paths and invalid durations.
-
-### Phase 2: Execution Behavior
-
-- [x] Add filesystem watch loop for local task reruns
-  - Watch explicit `--path` values when provided.
-  - Re-run selected task after debounce when matching changes arrive.
-  - Print a clear rerun reason before each execution.
-  - Add integration test covering one file change and one rerun.
-
-- [x] Reuse task `inputs` as default watch paths
-  - Use declared task `inputs` when `mk watch` runs without `--path`.
-  - Skip unresolved glob patterns without panicking.
-  - Return a user-facing error when neither `--path` nor task `inputs` exist.
-  - Add integration tests for inferred paths and empty watch target errors.
-
-### Phase 3: Quality of Life
-
-- [x] Add `--clear` flag to `mk watch`
-  - Clear terminal before each rerun when enabled.
-  - Keep default output append-only when flag is absent.
-  - Add integration test for flag parsing and screen-clear branch selection.
-
-- [x] Add `.mkignore` support to `mk watch` (use ignore crate of ripgrep)
-  - Load ignore rules from `.mkignore` at config root using gitignore-style pattern semantics.
-  - Apply ignore filtering to watched descendant paths for both explicit `--path` roots and inferred task `inputs`.
-  - Keep ignore handling scoped to watch behavior and do not change cache `inputs` resolution semantics.
-  - Allow negated patterns so users can re-include specific paths under ignored directories.
-  - Add integration test coverage for ignored paths and negated re-includes.
-
-- [x] Document watch workflows
-  - Add README examples for `mk watch test`.
-  - Document default `inputs` reuse and explicit `--path` override behavior.
-  - Document `.mkignore` usage, config-root lookup, and negated pattern behavior.
-  - Clarify interaction with incremental cache hits during reruns.
-
 ## Matrix Tasks
 
 Instruction for items in this section:
@@ -344,39 +289,6 @@ Instruction for items in this section:
   - Clarify difference between `vars` interpolation and process `env`.
   - Document phase limitations for parallel tasks, planning, and shell-computed vars if enabled later.
 
-## Output Plumbing
-
-Instruction for items in this section:
-- Extend existing `save_output_as` feature without breaking current syntax.
-- Keep output capture explicit and predictable.
-- Avoid hidden shell-specific parsing behavior.
-
-### Phase 1: Capture Expansion
-
-- [x] Add stderr capture support for local commands
-  - Add command field to save stderr under explicit output name.
-  - Keep stdout capture behavior unchanged.
-  - Add integration tests for stdout-only, stderr-only, and combined command output.
-
-- [x] Add exit code capture support for local commands
-  - Add command field to save process exit status for later interpolation.
-  - Preserve current failure semantics when command exits non-zero.
-  - Add integration tests for successful and failing commands with saved exit codes.
-
-### Phase 2: Structured Extraction
-
-- [x] Add JSON field extraction from saved command output
-  - Add command field to parse saved stdout as JSON and extract a dot-path into named outputs.
-  - Return validation or runtime errors for invalid JSON and missing paths.
-  - Add integration tests for valid extraction, invalid JSON, and missing path cases.
-
-### Phase 3: Artifact Writes
-
-- [x] Add command field to write saved output to a file
-  - Allow writing a named saved output into explicit file path after command completion.
-  - Create parent directories when safe and requested by config.
-  - Add integration tests for successful writes and existing-path conflicts.
-
 ## Task Metadata Docs
 
 Instruction for items in this section:
@@ -474,7 +386,7 @@ Instruction for items in this section:
 
 - [ ] Add fenced code block command extraction
   - Convert fenced code blocks under a task heading into ordered local command entries.
-  - Accept unlabeled fences, shell-style info strings like `sh`, `bash`, `shell`, `zsh`, `pwsh`, and `powershell`, as well as interpreter info strings like `python`, `lua`, `javascript`, `typescript`, `node`, and `bun`.
+  - Accept unlabeled fences, shell-style info strings like `sh`, `bash`, `shell`, `zsh`, `pwsh`, and `powershell`, as well as interpreter info strings like `python`, `lua`, `javascript`, `typescript`, `perl`, `node`, and `bun`.
   - Preserve command text exactly as written inside each fence.
   - Add unit tests for single-command and multi-command task sections.
 
@@ -532,13 +444,13 @@ Instruction for items in this section:
 
 #### Phase 1: Config Discovery
 
-- [ ] Add Makefile config candidates to default config lookup
+- [x] Add Makefile config candidates to default config lookup
   - Add `Makefile`, `makefile`, and `GNUmakefile` to default config candidates.
   - Apply same candidate order in regular config resolution and completion config resolution.
   - Keep existing structured config candidates ahead of Makefile candidates to avoid surprising current users.
   - Add tests for fallback discovery order and explicit `-c Makefile` behavior.
 
-- [ ] Replace extension-only config detection with path-name aware format detection
+- [x] Replace extension-only config detection with path-name aware format detection
   - Replace extension-only branching in task root loader with helper that recognizes `Makefile`, `makefile`, and `GNUmakefile` by file name.
   - Keep `.yaml`, `.yml`, `.toml`, `.json`, and `.lua` behavior unchanged.
   - Remove current hard error for Makefiles once named-file detection exists.
@@ -546,19 +458,19 @@ Instruction for items in this section:
 
 #### Phase 2: Target Discovery
 
-- [ ] Add reusable GNU Make target discovery helper
+- [x] Add reusable GNU Make target discovery helper
   - Add helper module that executes `make` against chosen config path and returns discovered target names in deterministic sorted order.
   - Resolve targets from configured Makefile path without changing current working directory semantics used by `mk`.
   - Return actionable errors when `make` binary is missing or target discovery command fails.
   - Add unit or integration tests for successful discovery and missing `make` binary failure.
 
-- [ ] Filter discovered targets to user-runnable targets only
+- [x] Filter discovered targets to user-runnable targets only
   - Exclude internal pattern rules, suffix rules, and special built-in targets from discovery results.
   - Keep explicit `.PHONY` targets included.
   - Preserve deterministic sorted output for list, completion, and selector behavior.
   - Add tests covering normal targets, `.PHONY` targets, and filtered special targets.
 
-- [ ] Add Make-backed `TaskRoot` adapter with minimal task metadata
+- [x] Add Make-backed `TaskRoot` adapter with minimal task metadata
   - Convert discovered Make targets into synthesized `TaskRoot.tasks` entries before existing CLI task flows consume them.
   - Populate task name and fallback description only; do not infer labels, watch inputs, or cache metadata in milestone 1.
   - Set `source_path` and config base dir consistently with other config formats.
@@ -566,24 +478,24 @@ Instruction for items in this section:
 
 #### Phase 3: CLI Parity Baseline
 
-- [ ] Load Make-backed configs through existing CLI entry path
+- [x] Load Make-backed configs through existing CLI entry path
   - Reuse current CLI load paths so `mk`, `mk run`, `mk list`, and completion work with imported Make targets.
   - Keep existing YAML, TOML, JSON, and Lua flows unchanged.
   - Add integration tests for `mk -c Makefile list` and implicit `Makefile` discovery.
 
-- [ ] Add `mk list` support for Make-backed targets
+- [x] Add `mk list` support for Make-backed targets
   - Show imported target names in plain, table, and JSON list output using existing task listing flow.
   - Use fallback description text when Make metadata is absent.
   - Keep label filtering unavailable for imported Make targets instead of inventing synthetic labels.
   - Add integration tests for plain and JSON list output from Makefile config.
 
-- [ ] Add dynamic completion support for Make-backed targets
+- [x] Add dynamic completion support for Make-backed targets
   - Reuse completion config resolution so shell completion returns imported Make targets.
   - Keep current Bash, Zsh, and Fish dynamic completion behavior unchanged for structured configs.
   - Add integration test covering completion prefix filtering against Makefile config.
   - Add integration test covering implicit config fallback to `Makefile` for completion.
 
-- [ ] Add delegated `mk run <target>` execution for Make-backed configs
+- [x] Add delegated `mk run <target>` execution for Make-backed configs
   - Run selected imported target by invoking `make` against active Makefile path instead of synthesizing command bodies.
   - Preserve current exit-code handling and user-facing task selection semantics.
   - Reject `mk` forwarded trailing args for Make-backed configs with explicit error until argument mapping is designed.
@@ -591,13 +503,13 @@ Instruction for items in this section:
 
 #### Phase 4: Milestone 1 Guardrails
 
-- [ ] Add explicit unsupported-operation errors for milestone 1 gaps
+- [x] Add explicit unsupported-operation errors for milestone 1 gaps
   - Return clear user-facing errors when Make-backed configs use `mk plan`, `mk watch`, or label filters in milestone 1.
   - Keep errors specific to Make-backed configs so structured config behavior does not change.
   - Add integration tests for each unsupported command or flag path.
   - Document milestone 1 support matrix in `README.md`.
 
-- [ ] Update docs for Makefile milestone 1 support
+- [x] Update docs for Makefile milestone 1 support
   - Add README examples for `mk -c Makefile list` and `mk -c Makefile run <target>`.
   - Document supported config names: `Makefile`, `makefile`, `GNUmakefile`.
   - Document milestone 1 limitations: no labels, no watch, no plan, no forwarded args.
@@ -607,13 +519,13 @@ Instruction for items in this section:
 
 #### Phase 1: Imported Metadata
 
-- [ ] Add target description extraction for imported Make targets
+- [x] Add target description extraction for imported Make targets
   - Parse conventional inline target comments such as `target: ## description` when present.
   - Keep fallback description when comment metadata is absent.
   - Do not infer descriptions from recipe lines.
   - Add tests for comment-derived descriptions and fallback descriptions.
 
-- [ ] Import explicit prerequisites into synthesized task dependencies where safe
+- [x] Import explicit prerequisites into synthesized task dependencies where safe
   - Convert plain target prerequisites into `depends_on` entries when prerequisite also resolves to imported runnable target.
   - Skip file prerequisites and pattern prerequisites instead of treating them as task dependencies.
   - Preserve deterministic dependency ordering.
@@ -621,13 +533,13 @@ Instruction for items in this section:
 
 #### Phase 2: Plan And Validate
 
-- [ ] Add `mk plan` support for Make-backed configs
+- [x] Add `mk plan` support for Make-backed configs
   - Produce plan output for imported Make targets using synthesized dependency graph plus delegated execution summary.
   - Show final execution step as `make <target>` against active Makefile path instead of fake recipe expansion.
   - Keep JSON and text plan output stable and explicit about delegated Make execution.
   - Add integration tests for text and JSON plan output.
 
-- [ ] Add `mk validate` support for Make-backed configs
+- [x] Add `mk validate` support for Make-backed configs
   - Validate Makefile path existence, `make` binary availability, imported target discovery success, and selected target existence.
   - Report unsupported Make-backed features as warnings or explicit notes instead of silent success.
   - Keep structured config validation rules unchanged.
@@ -635,18 +547,18 @@ Instruction for items in this section:
 
 #### Phase 3: CLI Quality
 
-- [ ] Add doctor output for Make-backed configs
+- [x] Add doctor output for Make-backed configs
   - Update doctor reporting to show detected config format as Makefile.
   - Report located `make` binary or missing-binary failure in doctor output.
   - Keep container runtime checks unchanged.
   - Add integration test or snapshot for doctor output with Make-backed config.
 
-- [ ] Add task selector support for imported Make targets
+- [x] Add task selector support for imported Make targets
   - Reuse existing selector candidate flow for Make-backed targets with description fallback or imported comment description.
   - Keep label-based filtering unsupported unless Make labels are explicitly designed later.
   - Add integration test for fuzzy selector candidate generation from imported Make targets.
 
-- [ ] Add clear watch limitation messaging for Make-backed configs
+- [x] Add clear watch limitation messaging for Make-backed configs
   - Detect Make-backed config early in `mk watch` path and return explicit unsupported message until watch input semantics are designed.
   - Do not attempt to infer watch paths from Make prerequisites in milestone 2.
   - Add integration test for Make-backed watch rejection.
@@ -654,13 +566,13 @@ Instruction for items in this section:
 
 #### Phase 4: Docs And Compatibility Matrix
 
-- [ ] Add Makefile capability matrix to README
+- [x] Add Makefile capability matrix to README
   - Document exact parity level for `list`, `completion`, `run`, `plan`, `validate`, `doctor`, `watch`, and labels.
   - Separate milestone 1 baseline from milestone 2 parity in changelog or roadmap wording.
   - Clarify GNU Make first-class support and BSD make non-goal for now.
   - Add examples for Makefile target descriptions and prerequisite-based planning.
 
-- [ ] Add regression coverage for mixed-format discovery
+- [x] Add regression coverage for mixed-format discovery
   - Add integration tests proving `tasks.yaml` still wins over `Makefile` when both exist and no explicit config path is passed.
   - Add integration tests proving explicit `-c Makefile` bypasses structured config fallback.
   - Add integration tests proving unsupported arbitrary file names still fail with actionable error.

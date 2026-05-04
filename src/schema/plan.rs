@@ -34,6 +34,10 @@ pub enum PlannedExecutionMode {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlannedCommand {
+  MakeRun {
+    makefile: String,
+    target: String,
+  },
   CommandRun {
     command: String,
     shell: String,
@@ -87,6 +91,9 @@ pub enum PlannedCommand {
 impl PlannedCommand {
   pub fn summary(&self) -> String {
     match self {
+      PlannedCommand::MakeRun { makefile, target } => {
+        format!("make: make -f {} {}", makefile, target)
+      },
       PlannedCommand::CommandRun { command, .. } => format!("command: {}", command),
       PlannedCommand::LocalRun { command, .. } => format!("local: {}", command),
       PlannedCommand::SshRun { host, command, .. } => format!("ssh:{} -> {}", host, command),
@@ -167,6 +174,23 @@ impl Planner {
           self.visit_task(root, dependency.resolve_name())?;
         }
 
+        let commands = if root.is_makefile_config() {
+          vec![PlannedCommand::MakeRun {
+            makefile: root
+              .source_path
+              .as_ref()
+              .map(|path| path.to_string_lossy().into_owned())
+              .unwrap_or_else(|| String::from("Makefile")),
+            target: task_name.to_string(),
+          }]
+        } else {
+          task
+            .commands
+            .iter()
+            .map(|command| PlannedCommand::from_task_command(root, task, command))
+            .collect()
+        };
+
         PlannedTask {
           name: task_name.to_string(),
           description: if task.description.is_empty() {
@@ -174,11 +198,7 @@ impl Planner {
           } else {
             Some(task.description.clone())
           },
-          commands: task
-            .commands
-            .iter()
-            .map(|command| PlannedCommand::from_task_command(root, task, command))
-            .collect(),
+          commands,
           dependencies: task
             .depends_on
             .iter()

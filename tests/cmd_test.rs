@@ -149,6 +149,67 @@ exec /bin/sh -c "$remote_command"
   Ok(path)
 }
 
+#[cfg(unix)]
+fn write_fake_make(temp_dir: &TempDir) -> anyhow::Result<std::path::PathBuf> {
+  use std::os::unix::fs::PermissionsExt as _;
+
+  let path = temp_dir.path().join("make");
+  std::fs::write(
+    &path,
+    r#"#!/bin/sh
+mode=run
+for arg in "$@"; do
+  if [ "$arg" = "-pRrq" ]; then
+    mode=discover
+    break
+  fi
+done
+
+if [ "$mode" = "discover" ]; then
+  if [ -n "$MK_TEST_MAKE_DISCOVERY_ARGS_FILE" ]; then
+    printf '%s
+' "$@" > "$MK_TEST_MAKE_DISCOVERY_ARGS_FILE"
+  fi
+  printf '%s' "$MK_TEST_MAKE_DISCOVERY_STDOUT"
+  exit "${MK_TEST_MAKE_DISCOVERY_EXIT_CODE:-0}"
+fi
+
+if [ -n "$MK_TEST_MAKE_RUN_ARGS_FILE" ]; then
+  printf '%s
+' "$@" > "$MK_TEST_MAKE_RUN_ARGS_FILE"
+fi
+
+if [ -n "$MK_TEST_MAKE_RUN_MARKER_FILE" ]; then
+  printf 'ran
+' > "$MK_TEST_MAKE_RUN_MARKER_FILE"
+fi
+
+if [ -n "$MK_TEST_MAKE_RUN_STDOUT" ]; then
+  printf '%s
+' "$MK_TEST_MAKE_RUN_STDOUT"
+fi
+
+if [ -n "$MK_TEST_MAKE_RUN_STDERR" ]; then
+  printf '%s
+' "$MK_TEST_MAKE_RUN_STDERR" >&2
+fi
+
+exit "${MK_TEST_MAKE_RUN_EXIT_CODE:-0}"
+"#,
+  )?;
+  std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+  Ok(path)
+}
+
+#[cfg(unix)]
+fn prepend_test_path(temp_dir: &TempDir) -> String {
+  format!(
+    "{}:{}",
+    temp_dir.path().to_string_lossy(),
+    std::env::var("PATH").unwrap_or_default()
+  )
+}
+
 #[test]
 fn test_mk_1() -> anyhow::Result<()> {
   let mut cmd = Command::new(cargo::cargo_bin!("mk"));
@@ -257,6 +318,616 @@ fn test_completion_task_candidates_respect_prefix_and_config() -> anyhow::Result
     .stdout(predicates::str::contains("build"))
     .stdout(predicates::str::contains("bundle"))
     .stdout(predicates::str::contains("lint").not());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_list_plain_with_explicit_config() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_path = temp_dir.path().join("Makefile");
+  std::fs::write(&config_path, "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\nclean:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("list")
+    .arg("--plain")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("build"))
+    .stdout(predicates::str::contains("clean"));
+
+  Ok(())
+}
+
+#[test]
+fn test_implicit_discovery_prefers_tasks_yaml_over_makefile() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      yaml-task:
+        commands:
+          - command: echo yaml
+            verbose: false
+    ",
+  )?;
+  std::fs::write(temp_dir.path().join("Makefile"), "make-task:\n\t@echo make\n")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("list")
+    .arg("--plain")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("yaml-task"))
+    .stdout(predicates::str::contains("make-task").not());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_explicit_makefile_bypasses_structured_config_fallback() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  common::setup_yaml(
+    &temp_dir,
+    "tasks.yaml",
+    "
+    tasks:
+      yaml-task:
+        commands:
+          - command: echo yaml
+            verbose: false
+    ",
+  )?;
+  std::fs::write(temp_dir.path().join("Makefile"), "make-task:\n\t@echo make\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nmake-task:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("list")
+    .arg("--plain")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("make-task"))
+    .stdout(predicates::str::contains("yaml-task").not());
+
+  Ok(())
+}
+
+#[test]
+fn test_unsupported_arbitrary_config_name_fails_with_actionable_error() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Taskfile"), "build:\n\t@echo build\n")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg("Taskfile")
+    .arg("list")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("Unsupported config file 'Taskfile'"))
+    .stderr(predicates::str::contains(
+      "Supported formats: Makefile, makefile, GNUmakefile",
+    ));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_list_json_uses_fallback_description() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_path = temp_dir.path().join("Makefile");
+  std::fs::write(&config_path, "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("list")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Imported from Makefile target"))
+    .stdout(predicates::str::contains("\"name\": \"build\""));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_implicit_discovery_uses_list_entry_path() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("list")
+    .arg("--plain")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("build"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_completion_respects_prefix_with_explicit_config() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env("MK_COMPLETE_TASKS", "1")
+    .env("MK_COMPLETE_PREFIX", "bu")
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\nbundle:\n#  File has not been updated.\n\nlint:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("build"))
+    .stdout(predicates::str::contains("bundle"))
+    .stdout(predicates::str::contains("lint").not());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_completion_uses_implicit_makefile_fallback() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env("MK_COMPLETE_TASKS", "1")
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("build"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_run_delegates_to_make() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_path = temp_dir.path().join("Makefile");
+  let run_args_file = temp_dir.path().join("run-args.txt");
+  let marker_file = temp_dir.path().join("ran.txt");
+  std::fs::write(&config_path, "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .env("MK_TEST_MAKE_RUN_ARGS_FILE", &run_args_file)
+    .env("MK_TEST_MAKE_RUN_MARKER_FILE", &marker_file)
+    .env("MK_TEST_MAKE_RUN_STDOUT", "running build")
+    .arg("-c")
+    .arg("Makefile")
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("running build"));
+
+  assert!(marker_file.exists());
+  let args = std::fs::read_to_string(&run_args_file)?;
+  assert!(args.contains("-f"));
+  assert!(args.contains(config_path.to_string_lossy().as_ref()));
+  assert!(args.contains("build"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_run_failure_propagates_non_zero_exit() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .env("MK_TEST_MAKE_RUN_EXIT_CODE", "2")
+    .env("MK_TEST_MAKE_RUN_STDERR", "build failed")
+    .arg("-c")
+    .arg("Makefile")
+    .arg("run")
+    .arg("build")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains("build failed"))
+    .stderr(predicates::str::contains("Make target 'build' failed"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_run_rejects_forwarded_args() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let run_args_file = temp_dir.path().join("run-args.txt");
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .env("MK_TEST_MAKE_RUN_ARGS_FILE", &run_args_file)
+    .arg("-c")
+    .arg("Makefile")
+    .arg("run")
+    .arg("build")
+    .arg("--")
+    .arg("extra")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Forwarded arguments are not supported for Makefile configs yet",
+    ));
+
+  assert!(!run_args_file.exists());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_list_rejects_label_filters() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("list")
+    .arg("--label")
+    .arg("area=ci")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Label filters are not supported for Makefile configs in milestone 1",
+    ));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_plan_shows_delegated_execution_and_dependencies() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_path = temp_dir.path().join("Makefile");
+  std::fs::write(
+    &config_path,
+    "build: prep ## Build app\n\t@echo build\nprep: ## Prepare deps\n\t@echo prep\n",
+  )?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild: prep README.md\n#  File has not been updated.\n\nprep:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("plan")
+    .arg("build")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Plan for task: build"))
+    .stdout(predicates::str::contains("1. prep"))
+    .stdout(predicates::str::contains("2. build"))
+    .stdout(predicates::str::contains("description: Build app"))
+    .stdout(predicates::str::contains("depends_on: prep"))
+    .stdout(predicates::str::contains(format!("make: make -f {} build", config_path.to_string_lossy())));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_plan_json_shows_make_run_command() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_path = temp_dir.path().join("Makefile");
+  std::fs::write(
+    &config_path,
+    "build: prep ## Build app\n\t@echo build\nprep:\n\t@echo prep\n",
+  )?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild: prep\n#  File has not been updated.\n\nprep:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("plan")
+    .arg("build")
+    .arg("--json")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("\"type\": \"make_run\""))
+    .stdout(predicates::str::contains("\"target\": \"build\""))
+    .stdout(predicates::str::contains("\"dependencies\": [\n        \"prep\"\n      ]"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_run_dry_run_uses_make_plan() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("ran.txt");
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .env("MK_TEST_MAKE_RUN_MARKER_FILE", &marker_file)
+    .arg("-c")
+    .arg("Makefile")
+    .arg("run")
+    .arg("build")
+    .arg("--dry-run")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Plan for task: build"))
+    .stdout(predicates::str::contains("make: make -f"));
+
+  assert!(!marker_file.exists());
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_validate_reports_supported_make_config() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("validate")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Validation passed"))
+    .stdout(predicates::str::contains("delegated GNU Make support"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_validate_reports_missing_make_binary() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", temp_dir.path())
+    .arg("-c")
+    .arg("Makefile")
+    .arg("validate")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("Validation failed"))
+    .stdout(predicates::str::contains("GNU Make is not available in PATH"))
+    .stderr(predicates::str::contains("Validation failed"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_doctor_reports_format_and_make_binary() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("doctor")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("format: makefile"))
+    .stdout(predicates::str::contains("GNU Make:"))
+    .stdout(predicates::str::contains("[ok]   make:"))
+    .stdout(predicates::str::contains("All checks passed."));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_doctor_reports_missing_make_binary() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_sh(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", temp_dir.path())
+    .arg("-c")
+    .arg("Makefile")
+    .arg("doctor")
+    .assert()
+    .failure()
+    .stdout(predicates::str::contains("format: makefile"))
+    .stdout(predicates::str::contains("GNU Make:"))
+    .stdout(predicates::str::contains(
+      "[fail] make: GNU Make is not available in PATH",
+    ))
+    .stderr(predicates::str::contains("One or more checks failed."));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_run_fzf_uses_imported_target_descriptions() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker_file = temp_dir.path().join("selected.txt");
+  let capture_file = temp_dir.path().join("fzf-input.txt");
+  let config_path = temp_dir.path().join("Makefile");
+  let run_args_file = temp_dir.path().join("run-args.txt");
+  std::fs::write(
+    &config_path,
+    "zebra: ## Zebra task\n\t@echo zebra\nalpha: ## Alpha task\n\t@echo alpha\n",
+  )?;
+  write_fake_make(&temp_dir)?;
+  write_fake_selector(
+    &temp_dir,
+    "fzf",
+    &format!(
+      "#!/bin/sh\nwhile IFS= read -r line; do printf '%s\\n' \"$line\"; done > \"{}\"\nprintf 'zebra\\tZebra task\\n'\n",
+      common::sh_path(&capture_file)
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nzebra:\n#  File has not been updated.\n\nalpha:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .env("MK_TEST_MAKE_RUN_ARGS_FILE", &run_args_file)
+    .env("MK_TEST_MAKE_RUN_MARKER_FILE", &marker_file)
+    .arg("-c")
+    .arg("Makefile")
+    .arg("run")
+    .arg("--fzf")
+    .assert()
+    .success();
+
+  assert_eq!(
+    std::fs::read_to_string(&capture_file)?,
+    "alpha\tAlpha task\nzebra\tZebra task\n"
+  );
+  assert!(marker_file.exists());
+  assert!(std::fs::read_to_string(&run_args_file)?.contains("zebra"));
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_makefile_watch_rejects_with_clearer_limitation_message() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+  write_fake_make(&temp_dir)?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env(
+      "MK_TEST_MAKE_DISCOVERY_STDOUT",
+      "# GNU Make 4.4\n# Files\nbuild:\n#  File has not been updated.\n\n# files hash-table stats:\n",
+    )
+    .arg("-c")
+    .arg("Makefile")
+    .arg("watch")
+    .arg("build")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "`mk watch` is not supported for Makefile configs yet",
+    ))
+    .stderr(predicates::str::contains(
+      "does not infer watch paths from Make prerequisites",
+    ));
 
   Ok(())
 }

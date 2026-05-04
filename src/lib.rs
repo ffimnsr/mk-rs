@@ -1,6 +1,7 @@
 //! # mk-lib
 //!
-//! `mk-lib` is a library for parsing and running tasks defined in a YAML file.
+//! `mk-lib` is a library for parsing and running tasks defined in structured task files,
+//! with delegated GNU Make target discovery support.
 //!
 //! ## Data formats
 //!
@@ -8,6 +9,10 @@
 //!
 //! - [YAML], a self-proclaimed human-friendly configuration language that ain't
 //!   markup language.
+//! - TOML
+//! - JSON
+//! - Lua
+//! - GNU Make files via delegated target discovery and execution (`Makefile`, `makefile`, `GNUmakefile`).
 //!
 //! [YAML]: https://github.com/dtolnay/serde-yaml
 
@@ -19,6 +24,8 @@ pub mod defaults;
 
 /// The file module contains the file path handling functions
 pub mod file;
+
+pub mod make;
 
 /// The schema module contains the data structures used to represent the tasks
 pub mod schema;

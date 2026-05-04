@@ -314,7 +314,15 @@ impl CliEntry {
     }
 
     let task_root = if config.exists() {
-      Arc::new(TaskRoot::from_file(&config)?)
+      let task_root = if matches!(
+        args.command,
+        Some(Command::Validate { .. }) | Some(Command::Doctor)
+      ) {
+        TaskRoot::from_file_for_validate(&config)?
+      } else {
+        TaskRoot::from_file(&config)?
+      };
+      Arc::new(task_root)
     } else {
       debug_assert!(allow_without_config);
       let mut task_root = TaskRoot::default();
@@ -400,12 +408,8 @@ impl CliEntry {
   fn resolve_config(args: &Args) -> anyhow::Result<(std::path::PathBuf, bool)> {
     let mut config = Path::new(&args.config).to_path_buf();
     if !config.exists() && args.config == "tasks.yaml" {
-      for candidate in Self::default_config_candidates() {
-        let fallback = Path::new(candidate);
-        if fallback.exists() {
-          config = fallback.to_path_buf();
-          break;
-        }
+      if let Some(candidate) = Self::default_config_candidate(&env::current_dir()?) {
+        config = Path::new(candidate).to_path_buf();
       }
     }
 
@@ -444,7 +448,17 @@ impl CliEntry {
       ".mk/tasks.toml",
       ".mk/tasks.json",
       ".mk/tasks.lua",
+      "Makefile",
+      "makefile",
+      "GNUmakefile",
     ]
+  }
+
+  fn default_config_candidate(base_dir: &Path) -> Option<&'static str> {
+    Self::default_config_candidates()
+      .iter()
+      .copied()
+      .find(|candidate| base_dir.join(candidate).exists())
   }
 
   fn absolute_config_path(config: &Path) -> anyhow::Result<std::path::PathBuf> {
@@ -483,12 +497,8 @@ impl CliEntry {
     }
 
     if !config.exists() && config == Path::new("tasks.yaml") {
-      for candidate in Self::default_config_candidates() {
-        let candidate = std::path::PathBuf::from(candidate);
-        if candidate.exists() {
-          config = candidate;
-          break;
-        }
+      if let Some(candidate) = Self::default_config_candidate(&env::current_dir()?) {
+        config = std::path::PathBuf::from(candidate);
       }
     }
 
@@ -525,6 +535,7 @@ impl CliEntry {
         trailing_args,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        self.ensure_makefile_label_filters_supported(&filters)?;
         let names = if *fuzzy {
           vec![self.select_run_task(&filters)?]
         } else {
@@ -547,6 +558,7 @@ impl CliEntry {
         labels,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        self.ensure_makefile_label_filters_supported(&filters)?;
         self.print_available_tasks(*plain, *json, *no_color, &filters)?;
       },
       Some(Command::Completion { shell }) => {
@@ -561,6 +573,7 @@ impl CliEntry {
         labels,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        self.ensure_makefile_label_filters_supported(&filters)?;
         let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
         for name in &names {
           self.print_plan(name, *json)?;
@@ -592,7 +605,9 @@ impl CliEntry {
         clear,
         trailing_args,
       }) => {
+        self.ensure_makefile_watch_supported()?;
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
+        self.ensure_makefile_label_filters_supported(&filters)?;
         let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
         let debounce_duration = debounce.unwrap_or(Duration::from_millis(500));
         for name in &names {
@@ -679,6 +694,26 @@ impl CliEntry {
           println!("Visit https://github.com/ffimnsr/mk-rs/releases/latest to update");
         }
       },
+    }
+
+    Ok(())
+  }
+
+  fn ensure_makefile_label_filters_supported(&self, filters: &[LabelFilter]) -> anyhow::Result<()> {
+    if self.task_root.is_makefile_config() && !filters.is_empty() {
+      anyhow::bail!(
+        "Label filters are not supported for Makefile configs in milestone 1. Use `mk list` or `mk run <target>` without `--label`."
+      );
+    }
+
+    Ok(())
+  }
+
+  fn ensure_makefile_watch_supported(&self) -> anyhow::Result<()> {
+    if self.task_root.is_makefile_config() {
+      anyhow::bail!(
+        "`mk watch` is not supported for Makefile configs yet. Watch input semantics for imported Make targets are not designed; `mk` does not infer watch paths from Make prerequisites."
+      );
     }
 
     Ok(())
@@ -922,6 +957,17 @@ impl CliEntry {
       },
     }
 
+    if self.task_root.is_makefile_config() {
+      println!("GNU Make:");
+      match mk_lib::make::locate_make_binary() {
+        Ok(path) => println!("  [ok]   make: {}", path.display_lossy()),
+        Err(error) => {
+          println!("  [fail] make: {error}");
+          any_failure = true;
+        },
+      }
+    }
+
     // --- Container runtime ---
     println!("Container runtime:");
     for name in &["docker", "nerdctl", "podman"] {
@@ -1001,6 +1047,11 @@ impl CliEntry {
   }
 
   fn detect_config_format(path: &std::path::Path) -> &'static str {
+    match path.file_name().and_then(|name| name.to_str()) {
+      Some("Makefile") | Some("makefile") | Some("GNUmakefile") => return "makefile",
+      _ => {},
+    }
+
     match path.extension().and_then(|e| e.to_str()) {
       Some("yaml") | Some("yml") => "yaml",
       Some("toml") => "toml",
@@ -1764,6 +1815,7 @@ struct GitHubApiError {
 mod tests {
   use super::{Args, CliEntry, Command};
   use mk_lib::schema::{Task, TaskRoot};
+  use std::fs;
   use std::io::Read as _;
   use std::net::TcpListener;
   use std::sync::{mpsc, Arc};
@@ -1905,6 +1957,53 @@ mod tests {
     assert!(candidates.contains(&"tasks.toml"));
     assert!(candidates.contains(&"tasks.json"));
     assert!(candidates.contains(&"tasks.lua"));
+    assert!(candidates.contains(&"Makefile"));
+    assert!(candidates.contains(&"makefile"));
+    assert!(candidates.contains(&"GNUmakefile"));
+  }
+
+  #[test]
+  fn default_config_candidate_prefers_structured_configs_before_makefiles() -> anyhow::Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    fs::write(
+      temp_dir.path().join("tasks.toml"),
+      "[tasks]\nhello = 'echo hello'\n",
+    )?;
+    fs::write(temp_dir.path().join("Makefile"), "hello:\n\t@echo hello\n")?;
+
+    assert_eq!(
+      CliEntry::default_config_candidate(temp_dir.path()),
+      Some("tasks.toml")
+    );
+
+    fs::remove_file(temp_dir.path().join("tasks.toml"))?;
+    assert_eq!(
+      CliEntry::default_config_candidate(temp_dir.path()),
+      Some("Makefile")
+    );
+
+    Ok(())
+  }
+
+  #[test]
+  fn resolve_config_keeps_explicit_makefile_path() -> anyhow::Result<()> {
+    let args = Args {
+      config: String::from("Makefile"),
+      task_name: None,
+      trailing_args: Vec::new(),
+      command: Some(Command::List {
+        plain: false,
+        json: false,
+        no_color: false,
+        labels: Vec::new(),
+      }),
+    };
+
+    let (config, allow_without_config) = CliEntry::resolve_config(&args)?;
+    assert_eq!(config, std::path::PathBuf::from("Makefile"));
+    assert!(!allow_without_config);
+
+    Ok(())
   }
 
   fn os(s: &str) -> std::ffi::OsString {

@@ -27,6 +27,13 @@ const MK_COMMANDS: [&str; 11] = [
   "schema",
 ];
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TaskRootFormat {
+  #[default]
+  Structured,
+  Makefile,
+}
+
 /// This struct represents the root of the task schema. It contains all the tasks
 /// that can be executed.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -104,11 +111,28 @@ pub struct TaskRoot {
   #[schemars(skip)]
   #[serde(skip)]
   pub(crate) raw_secrets: Option<SecretSettings>,
+
+  /// Internal source format marker used for delegated Makefile behavior.
+  #[schemars(skip)]
+  #[serde(skip)]
+  pub(crate) format: TaskRootFormat,
 }
 
 impl TaskRoot {
   pub fn from_file(file: impl AsRef<Path>) -> anyhow::Result<Self> {
     Self::from_file_with_stack(file.as_ref(), &mut Vec::new())
+  }
+
+  pub fn from_file_for_validate(file: impl AsRef<Path>) -> anyhow::Result<Self> {
+    let file_path = normalize_task_file_path(file.as_ref())?;
+    match detect_task_file_format(&file_path)? {
+      TaskFileFormat::Makefile => Ok(TaskRoot {
+        source_path: Some(file_path),
+        format: TaskRootFormat::Makefile,
+        ..Default::default()
+      }),
+      _ => Self::from_file(&file_path),
+    }
   }
 
   fn from_file_with_stack(file: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<Self> {
@@ -148,6 +172,7 @@ impl TaskRoot {
       source_path: None,
       raw_legacy_secret_settings: None,
       raw_secrets: None,
+      format: TaskRootFormat::Structured,
     }
   }
 
@@ -165,6 +190,10 @@ impl TaskRoot {
 
   pub fn resolve_from_config(&self, value: &str) -> PathBuf {
     resolve_path(&self.config_base_dir(), value)
+  }
+
+  pub fn is_makefile_config(&self) -> bool {
+    self.format == TaskRootFormat::Makefile
   }
 
   pub fn normalized_secret_settings(&self) -> Option<SecretSettings> {
@@ -236,23 +265,50 @@ fn normalize_task_file_path(file: &Path) -> anyhow::Result<PathBuf> {
   }
 }
 
-fn load_task_root(file_path: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<TaskRoot> {
-  let file_extension = file_path
-    .extension()
-    .and_then(|ext| ext.to_str())
-    .context("Failed to get file extension")?;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskFileFormat {
+  Yaml,
+  Lua,
+  Json,
+  Toml,
+  Makefile,
+}
 
-  let mut root = match file_extension {
-    "yaml" | "yml" => load_yaml_file(file_path, stack),
-    "lua" => load_lua_file(file_path, stack),
-    "json" => load_json_file(file_path, stack),
-    "toml" => load_toml_file(file_path, stack),
-    "json5" => anyhow::bail!("JSON5 files are not supported yet. Use YAML, TOML, JSON, or Lua instead."),
-    "makefile" | "mk" => anyhow::bail!("Makefiles are not supported. Use a tasks.yaml file instead."),
-    _ => anyhow::bail!(
-      "Unsupported config file extension '{}'. Supported formats: yaml, yml, toml, json, lua.",
+fn detect_task_file_format(file_path: &Path) -> anyhow::Result<TaskFileFormat> {
+  match file_path.file_name().and_then(|name| name.to_str()) {
+    Some("Makefile") | Some("makefile") | Some("GNUmakefile") => return Ok(TaskFileFormat::Makefile),
+    _ => {},
+  }
+
+  match file_path.extension().and_then(|ext| ext.to_str()) {
+    Some("yaml") | Some("yml") => Ok(TaskFileFormat::Yaml),
+    Some("lua") => Ok(TaskFileFormat::Lua),
+    Some("json") => Ok(TaskFileFormat::Json),
+    Some("toml") => Ok(TaskFileFormat::Toml),
+    Some("json5") => anyhow::bail!(
+      "JSON5 files are not supported yet. Use YAML, TOML, JSON, or Lua instead."
+    ),
+    Some(file_extension) => anyhow::bail!(
+      "Unsupported config file extension '{}'. Supported formats: yaml, yml, toml, json, lua, Makefile, makefile, GNUmakefile.",
       file_extension
     ),
+    None => anyhow::bail!(
+      "Unsupported config file '{}'. Supported formats: Makefile, makefile, GNUmakefile, *.yaml, *.yml, *.toml, *.json, *.lua.",
+      file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("<non-utf8-path>")
+    ),
+  }
+}
+
+fn load_task_root(file_path: &Path, stack: &mut Vec<PathBuf>) -> anyhow::Result<TaskRoot> {
+  let mut root = match detect_task_file_format(file_path)? {
+    TaskFileFormat::Yaml => load_yaml_file(file_path, stack),
+    TaskFileFormat::Lua => load_lua_file(file_path, stack),
+    TaskFileFormat::Json => load_json_file(file_path, stack),
+    TaskFileFormat::Toml => load_toml_file(file_path, stack),
+    TaskFileFormat::Makefile => crate::make::load_makefile_task_root(file_path),
   }?;
 
   if root.include.is_some() {
@@ -435,6 +491,7 @@ fn rename_tasks(
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::make::MAKE_TARGET_FALLBACK_DESCRIPTION;
   use crate::schema::{CommandRunner, TaskDependency};
   use assert_fs::TempDir;
 
@@ -870,6 +927,136 @@ mod test {
     assert!(error
       .to_string()
       .contains("`include` is no longer supported. Use `extends` instead."));
+    Ok(())
+  }
+
+  #[test]
+  fn test_detect_task_file_format_recognizes_named_makefiles() -> anyhow::Result<()> {
+    assert_eq!(
+      detect_task_file_format(Path::new("Makefile"))?,
+      TaskFileFormat::Makefile
+    );
+    assert_eq!(
+      detect_task_file_format(Path::new("makefile"))?,
+      TaskFileFormat::Makefile
+    );
+    assert_eq!(
+      detect_task_file_format(Path::new("GNUmakefile"))?,
+      TaskFileFormat::Makefile
+    );
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_detect_task_file_format_rejects_unsupported_file_names() {
+    let error = detect_task_file_format(Path::new("Taskfile")).unwrap_err();
+    assert!(error.to_string().contains("Unsupported config file 'Taskfile'"));
+  }
+
+  #[cfg(unix)]
+  #[test]
+  fn test_task_root_from_makefile_imports_targets_with_source_path() -> anyhow::Result<()> {
+    use once_cell::sync::Lazy;
+    use std::env;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    struct EnvGuard {
+      original_path: Option<OsString>,
+    }
+
+    impl Drop for EnvGuard {
+      fn drop(&mut self) {
+        unsafe {
+          match &self.original_path {
+            Some(path) => env::set_var("PATH", path),
+            None => env::remove_var("PATH"),
+          }
+          env::remove_var("MK_TEST_MAKE_ARGS_FILE");
+          env::remove_var("MK_TEST_MAKE_PWD_FILE");
+        }
+      }
+    }
+
+    let _lock = ENV_LOCK.lock().unwrap();
+    let temp_dir = TempDir::new()?;
+    let args_file = temp_dir.path().join("args.txt");
+    let make_path = temp_dir.path().join("make");
+    let config_path = temp_dir.path().join("Makefile");
+
+    let script = "#!/bin/sh
+if [ -n \"$MK_TEST_MAKE_ARGS_FILE\" ]; then
+  printf '%s\n' \"$@\" > \"$MK_TEST_MAKE_ARGS_FILE\"
+fi
+cat <<'EOF'
+# GNU Make 4.4
+# Files
+
+# Not a target:
+clean:
+#  File has not been updated.
+
+build:
+#  File has not been updated.
+
+.PHONY: clean
+#  File has not been updated.
+
+# files hash-table stats:
+EOF
+";
+    fs::write(&make_path, script)?;
+    fs::set_permissions(&make_path, fs::Permissions::from_mode(0o755))?;
+    fs::write(&config_path, "build:\n\t@echo build\n")?;
+
+    let original_path = env::var_os("PATH");
+    let joined_path = match &original_path {
+      Some(path) => env::join_paths(
+        std::iter::once(temp_dir.path().as_os_str()).chain(
+          env::split_paths(path)
+            .map(|p| p.into_os_string())
+            .collect::<Vec<_>>()
+            .iter()
+            .map(|p| p.as_os_str()),
+        ),
+      )?,
+      None => env::join_paths([temp_dir.path().as_os_str()])?,
+    };
+    unsafe {
+      env::set_var("PATH", joined_path);
+      env::set_var("MK_TEST_MAKE_ARGS_FILE", &args_file);
+    }
+    let _env_guard = EnvGuard { original_path };
+
+    let task_root = TaskRoot::from_file(&config_path)?;
+
+    let task_names = {
+      let mut names = task_root.tasks.keys().cloned().collect::<Vec<_>>();
+      names.sort();
+      names
+    };
+    assert_eq!(task_names, vec![String::from("build"), String::from("clean")]);
+    assert_eq!(task_root.source_path, Some(PathBuf::from(&config_path)));
+
+    for task_name in &task_names {
+      match &task_root.tasks[task_name] {
+        Task::Task(task) => {
+          assert_eq!(task.description, MAKE_TARGET_FALLBACK_DESCRIPTION);
+          assert!(task.commands.is_empty());
+        },
+        Task::String(_) => panic!("Expected imported Make target to use Task::Task"),
+      }
+    }
+
+    let args = fs::read_to_string(&args_file)?;
+    assert!(args.contains(config_path.to_string_lossy().as_ref()));
+
     Ok(())
   }
 

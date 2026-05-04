@@ -11,24 +11,26 @@
 
 Yet another simple task runner.
 
-`mk` is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows.
+`mk` is a powerful and flexible task runner designed to help you automate and manage your tasks efficiently. It supports running commands both locally and inside containers, making it versatile for various environments and use cases. Running tasks in containers is a first-class citizen, ensuring seamless integration with containerized workflows. `mk` also supports delegated GNU Make workflows for existing Makefiles.
 
 ![preview](./docs/images/preview.png)
 
 ## Features
 
-- **Simple Configuration**: Define your tasks in a straightforward YAML file.
+- **Simple Configuration**: Define your tasks in YAML, JSON, TOML, or Lua, or reuse existing GNU Make targets.
 - **Flexible Execution**: Run tasks locally, in containers, or as nested tasks.
 - **Error Handling**: Control how errors are handled with `ignore_errors`.
 - **Verbose Output**: Enable verbose output for detailed logs.
 
 ## Configuration format support
 
-Other supported file type configurations format:
+Supported config formats:
 
-- JSON
-- TOML
-- Lua
+- YAML (`tasks.yaml`, `tasks.yml`)
+- TOML (`mk.toml`, `tasks.toml`)
+- JSON (`tasks.json`)
+- Lua (`tasks.lua`)
+- GNU Make delegated configs (`Makefile`, `makefile`, `GNUmakefile`)
 
 See example folder for sample configuration file.
 
@@ -120,8 +122,83 @@ mk run <task_name>
 ```
 
 Both commands above are equivalent. The config file can be omitted as `mk` defaults to file `tasks.yaml`.
-When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, `mk.toml`, `tasks.toml`, `tasks.json`, `tasks.lua`, `.mk/tasks.toml`, `.mk/tasks.json`, and `.mk/tasks.lua`.
+When `tasks.yaml` is missing, `mk` also checks `tasks.yml`, `.mk/tasks.yaml`, `.mk/tasks.yml`, `mk.toml`, `tasks.toml`, `tasks.json`, `tasks.lua`, `.mk/tasks.toml`, `.mk/tasks.json`, `.mk/tasks.lua`, `Makefile`, `makefile`, and `GNUmakefile`.
 `mk init` writes sample configs for `.yaml`, `.yml`, `.toml`, `.json`, and `.lua` output paths.
+
+### Makefile support
+
+`mk` can reuse existing GNU Make configs through delegated GNU Make execution. Milestone 1 baseline is complete. Milestone 2 deeper parity is in progress.
+
+Supported config names:
+
+- `Makefile`
+- `makefile`
+- `GNUmakefile`
+
+Common commands:
+
+- `mk -c Makefile list`
+- `mk -c Makefile run <target>`
+- `mk -c Makefile plan <target>`
+- `mk -c Makefile validate`
+- `mk -c Makefile doctor`
+- dynamic shell completion for imported targets
+- `mk run --dry-run` for Make-backed targets
+
+Examples:
+
+```bash
+mk -c Makefile list
+mk -c Makefile run build
+mk -c Makefile plan build
+mk -c Makefile validate
+mk -c Makefile doctor
+```
+
+Makefile target descriptions and prerequisite-based planning use conventional GNU Make metadata:
+
+```makefile
+build: prep ## Build release artifacts
+  @echo build
+
+prep: ## Prepare dependencies
+  @echo prep
+```
+
+`mk plan build` imports:
+
+- description from `## Build release artifacts`
+- dependency edge from `build: prep`
+- final delegated execution step as `make -f Makefile build`
+
+Discovery and compatibility notes:
+
+- implicit config discovery still prefers structured task files before Makefiles
+- explicit `-c Makefile` always bypasses structured fallback files
+- GNU Make is first-class support for delegated workflows
+- BSD make is not a target in this compatibility track
+
+Current limitations:
+
+- no `mk watch`
+- no `--label` filters on Make-backed configs
+- no forwarded args after `--`
+
+Capability matrix:
+
+- `list`: supported
+- `completion`: supported
+- `run`: supported
+- `plan`: supported
+- `validate`: supported
+- `doctor`: supported
+- `watch`: unsupported
+- `labels`: unsupported
+
+Roadmap split:
+
+- milestone 1 baseline: discovery, import, list, completion, delegated run, docs, guardrails
+- milestone 2 parity: imported descriptions, prerequisite graph import, plan, validate, doctor, selector quality
 
 Recent workflow features:
 

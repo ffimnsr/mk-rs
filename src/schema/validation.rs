@@ -7,6 +7,7 @@ use super::{
   contains_output_reference, extract_output_references, CommandRunner, ContainerRuntime, Include, Task,
   TaskRoot, UseCargo, UseNpm,
 };
+use crate::file::ToUtf8 as _;
 use crate::schema::Precondition;
 use crate::secrets::{merge_optional_secret_settings, SecretBackend, SecretSettings};
 
@@ -90,16 +91,64 @@ impl TaskRoot {
   pub fn validate(&self) -> ValidationReport {
     let mut report = ValidationReport::default();
 
-    self.validate_root(&mut report);
-
-    for (task_name, task) in &self.tasks {
-      self.validate_task(task_name, task, &mut report);
+    if self.is_makefile_config() {
+      self.validate_makefile_config(&mut report);
+      report.sort_issues();
+      return report;
     }
 
-    self.validate_cycles(&mut report);
+    self.validate_loaded_config(&mut report);
     report.sort_issues();
 
     report
+  }
+
+  fn validate_loaded_config(&self, report: &mut ValidationReport) {
+    self.validate_root(report);
+
+    for (task_name, task) in &self.tasks {
+      self.validate_task(task_name, task, report);
+    }
+
+    self.validate_cycles(report);
+  }
+
+  fn validate_makefile_config(&self, report: &mut ValidationReport) {
+    let Some(source_path) = self.source_path.as_deref() else {
+      report.push_error(None, Some("config"), "Makefile config path is missing");
+      return;
+    };
+
+    if !source_path.exists() {
+      report.push_error(
+        None,
+        Some("config"),
+        format!(
+          "Makefile config not found: {}",
+          source_path.to_utf8().unwrap_or("<non-utf8-path>")
+        ),
+      );
+      return;
+    }
+
+    if let Err(error) = crate::make::locate_make_binary() {
+      report.push_error(None, Some("make"), error.to_string());
+      return;
+    }
+
+    match crate::make::load_makefile_task_root(source_path) {
+      Ok(imported_root) => {
+        report.push_warning(
+          None,
+          Some("config"),
+          "Make-backed config uses delegated GNU Make support. Label filters, watch, and forwarded args remain unsupported.",
+        );
+        imported_root.validate_loaded_config(report);
+      },
+      Err(error) => {
+        report.push_error(None, Some("config"), error.to_string());
+      },
+    }
   }
 
   fn validate_root(&self, report: &mut ValidationReport) {
@@ -140,7 +189,7 @@ impl TaskRoot {
         }
       },
       Task::Task(task) => {
-        if task.commands.is_empty() {
+        if task.commands.is_empty() && !self.is_makefile_config() {
           report.push_error(
             Some(task_name),
             Some("commands"),

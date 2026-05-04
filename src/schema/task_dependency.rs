@@ -69,7 +69,11 @@ pub fn run_task_by_name(context: &TaskContext, task_name: &str) -> anyhow::Resul
       "event": "task_started",
       "task": task_name,
     }))?;
-    task.run(&mut child_context)
+    if child_context.task_root.is_makefile_config() {
+      crate::make::run_make_target(&child_context, task_name)
+    } else {
+      task.run(&mut child_context)
+    }
   };
 
   context.unmark_task_active(task_name)?;
