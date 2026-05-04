@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.16 - 2026-05-04
+
+### Features
+
+- update ISSUES.md for make support and workflow updates (`8ffa351`)
+
 ## 0.7.15 - 2026-05-04
 
 ### Features
