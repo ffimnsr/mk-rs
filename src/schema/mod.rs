@@ -11,9 +11,11 @@ mod use_cargo;
 mod use_npm;
 mod validation;
 
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::process::Stdio;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
@@ -24,6 +26,40 @@ pub type CompletedTasks = Arc<Mutex<HashSet<String>>>;
 
 #[derive(Debug)]
 pub struct ExecutionInterrupted;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatrixSelector {
+  pub key: String,
+  pub value: String,
+}
+
+impl FromStr for MatrixSelector {
+  type Err = String;
+
+  fn from_str(value: &str) -> Result<Self, Self::Err> {
+    let Some((key, selector_value)) = value.split_once('=') else {
+      return Err(format!("Invalid matrix selector '{}': expected KEY=VALUE", value));
+    };
+    let key = key.trim();
+    let selector_value = selector_value.trim();
+    if key.is_empty() {
+      return Err(format!(
+        "Invalid matrix selector '{}': key must not be empty",
+        value
+      ));
+    }
+    if selector_value.is_empty() {
+      return Err(format!(
+        "Invalid matrix selector '{}': value must not be empty",
+        value
+      ));
+    }
+    Ok(Self {
+      key: key.to_string(),
+      value: selector_value.to_string(),
+    })
+  }
+}
 
 impl fmt::Display for ExecutionInterrupted {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -75,6 +111,13 @@ pub fn resolve_template_expression(value: &str, context: &TaskContext) -> anyhow
       .get(value)
       .ok_or_else(|| anyhow::anyhow!("Environment variable '{}' is not defined", value))?;
     Ok(value.to_string())
+  } else if value.starts_with("matrix.") {
+    let key = value.trim_start_matches("matrix.");
+    context
+      .matrix_vars
+      .get(key)
+      .cloned()
+      .ok_or_else(|| anyhow::anyhow!("Matrix key '{}' is not defined", key))
   } else if value.starts_with("secrets.") {
     let path = value.trim_start_matches("secrets.");
     let s = load_secret_value(
@@ -134,18 +177,57 @@ pub fn interpolate_template_string(value: &str, context: &TaskContext) -> anyhow
   Ok(result)
 }
 
-pub fn extract_output_references(value: &str) -> Vec<String> {
+pub fn interpolate_matrix_template_string(value: &str, matrix: &BTreeMap<String, String>) -> String {
+  let mut result = String::with_capacity(value.len());
+  let mut last_end = 0usize;
+  for captures in TEMPLATE_EXPR_RE.captures_iter(value) {
+    let Some(full_match) = captures.get(0) else {
+      continue;
+    };
+    let Some(expr) = captures.get(1) else {
+      continue;
+    };
+    result.push_str(&value[last_end..full_match.start()]);
+    let expr = expr.as_str().trim();
+    if let Some(key) = expr.strip_prefix("matrix.") {
+      if let Some(value) = matrix.get(key) {
+        result.push_str(value);
+      } else {
+        result.push_str(full_match.as_str());
+      }
+    } else {
+      result.push_str(full_match.as_str());
+    }
+    last_end = full_match.end();
+  }
+  result.push_str(&value[last_end..]);
+  result
+}
+
+fn extract_template_references(value: &str, prefix: &str) -> Vec<String> {
   TEMPLATE_EXPR_RE
     .captures_iter(value)
     .filter_map(|captures| captures.get(1))
     .map(|expr| expr.as_str().trim())
-    .filter_map(|expr| expr.strip_prefix("outputs."))
+    .filter_map(|expr| expr.strip_prefix(prefix))
     .map(str::to_string)
     .collect()
 }
 
+pub fn extract_output_references(value: &str) -> Vec<String> {
+  extract_template_references(value, "outputs.")
+}
+
+pub fn extract_matrix_references(value: &str) -> Vec<String> {
+  extract_template_references(value, "matrix.")
+}
+
 pub fn contains_output_reference(value: &str) -> bool {
   !extract_output_references(value).is_empty()
+}
+
+pub fn contains_matrix_reference(value: &str) -> bool {
+  !extract_matrix_references(value).is_empty()
 }
 
 pub fn get_output_handler(verbose: bool) -> Stdio {
@@ -179,6 +261,14 @@ mod test {
     assert_eq!(
       extract_output_references("${{ outputs.first }}-${{ outputs.second }}"),
       vec!["first".to_string(), "second".to_string()]
+    );
+  }
+
+  #[test]
+  fn test_extract_matrix_references_finds_all_matrix_templates() {
+    assert_eq!(
+      extract_matrix_references("build-${{ matrix.os }}-${{ matrix.arch }}"),
+      vec!["os".to_string(), "arch".to_string()]
     );
   }
 
@@ -236,5 +326,54 @@ mod test {
       "release v1.0.0"
     );
     Ok(())
+  }
+
+  #[test]
+  fn test_interpolate_template_string_resolves_matrix_values() -> anyhow::Result<()> {
+    let root = Arc::new(TaskRoot::default());
+    let mut context = TaskContext::empty_with_root(root);
+    context.matrix_vars.insert("os".to_string(), "linux".to_string());
+    context
+      .matrix_vars
+      .insert("arch".to_string(), "x86_64".to_string());
+
+    assert_eq!(
+      interpolate_template_string("build-${{ matrix.os }}-${{ matrix.arch }}", &context)?,
+      "build-linux-x86_64"
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn test_interpolate_template_string_rejects_unknown_matrix_key() {
+    let root = Arc::new(TaskRoot::default());
+    let context = TaskContext::empty_with_root(root);
+
+    let err = interpolate_template_string("build-${{ matrix.os }}", &context).unwrap_err();
+    assert!(err.to_string().contains("Matrix key 'os' is not defined"));
+  }
+
+  #[test]
+  fn test_interpolate_matrix_template_string_only_resolves_matrix_expressions() {
+    let mut matrix = BTreeMap::new();
+    matrix.insert("os".to_string(), "linux".to_string());
+
+    assert_eq!(
+      interpolate_matrix_template_string("build-${{ matrix.os }}-${{ outputs.version }}", &matrix),
+      "build-linux-${{ outputs.version }}"
+    );
+  }
+
+  #[test]
+  fn test_parse_matrix_selector() {
+    let selector = MatrixSelector::from_str("os=linux").expect("selector should parse");
+    assert_eq!(selector.key, "os");
+    assert_eq!(selector.value, "linux");
+  }
+
+  #[test]
+  fn test_parse_matrix_selector_rejects_invalid_shape() {
+    let err = MatrixSelector::from_str("os-linux").expect_err("selector should fail");
+    assert!(err.contains("expected KEY=VALUE"));
   }
 }

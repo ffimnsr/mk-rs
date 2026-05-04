@@ -7,10 +7,11 @@ Arguments:
   [TRAILING_ARGS]...  Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)
 
 Options:
-      --dry-run         Print the resolved task plan without executing commands
-      --force           Bypass task cache and force execution
-      --json-events     Emit newline-delimited JSON execution events
-  -F, --fzf             Choose task with fuzzy finder before execution
-      --label <FILTER>  Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
-  -h, --help            Print help
-  -V, --version         Print version
+      --dry-run          Print the resolved task plan without executing commands
+      --force            Bypass task cache and force execution
+      --json-events      Emit newline-delimited JSON execution events
+  -F, --fzf              Choose task with fuzzy finder before execution
+      --label <FILTER>   Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
+      --set <KEY=VALUE>  Filter matrix task variants by KEY=VALUE. Repeatable; all must match.
+  -h, --help             Print help
+  -V, --version          Print version

@@ -1,0 +1,51 @@
+{
+  "root_task": "build",
+  "steps": [
+    {
+      "base_dir": "<TMPDIR>",
+      "commands": [
+        {
+          "command": "echo linux-x86_64",
+          "interactive": false,
+          "retrigger": false,
+          "shell": "sh",
+          "type": "local_run",
+          "work_dir": null
+        }
+      ],
+      "dependencies": [],
+      "description": "build for linux-x86_64",
+      "execution_mode": "sequential",
+      "matrix": {
+        "arch": "x86_64",
+        "os": "linux"
+      },
+      "max_parallel": null,
+      "name": "build[arch=x86_64,os=linux]",
+      "skipped_reason": null
+    },
+    {
+      "base_dir": "<TMPDIR>",
+      "commands": [
+        {
+          "command": "echo macos-x86_64",
+          "interactive": false,
+          "retrigger": false,
+          "shell": "sh",
+          "type": "local_run",
+          "work_dir": null
+        }
+      ],
+      "dependencies": [],
+      "description": "build for macos-x86_64",
+      "execution_mode": "sequential",
+      "matrix": {
+        "arch": "x86_64",
+        "os": "macos"
+      },
+      "max_parallel": null,
+      "name": "build[arch=x86_64,os=macos]",
+      "skipped_reason": null
+    }
+  ]
+}

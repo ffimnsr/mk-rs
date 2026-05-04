@@ -194,6 +194,7 @@ Capability matrix:
 - `doctor`: supported
 - `watch`: unsupported
 - `labels`: unsupported
+- `matrixes`: unsupported
 
 ### Cache semantics
 
@@ -258,6 +259,12 @@ mk run --label kind=test
 
 # run tasks that match area=ci AND kind=build
 mk run --label area=ci --label kind=build
+
+# run only linux matrix variants for one task
+mk run build --set os=linux
+
+# run one explicit matrix variant
+mk run build --set os=linux --set arch=x86_64
 ```
 
 Show execution plans for matching tasks:
@@ -265,12 +272,17 @@ Show execution plans for matching tasks:
 ```bash
 mk plan --label area=ci
 mk plan --label area=ci --json
+
+# show only one matrix variant in plan output
+mk plan build --set os=linux --set arch=x86_64
 ```
 
 Notes:
 
 - Multiple `--label` flags are combined as AND; all filters must match for a task to be selected.
+- Multiple `--set` flags are combined as AND; all selectors must match for a matrix variant to be selected.
 - `mk run --label` runs all matching tasks in deterministic sorted order.
+- `mk run --set` and `mk plan --set` apply to structured matrix tasks only; Make-backed configs are not supported.
 - `mk run --fzf` opens a fuzzy task selector before execution. This is task selection only; it is separate from command `interactive: true`, which controls stdin for command steps.
 - Task `labels` are distinct from `container_build.labels`, which are OCI image labels applied during a container build.
 - Label keys starting with `mk.` are reserved; `mk validate` warns if they are used.

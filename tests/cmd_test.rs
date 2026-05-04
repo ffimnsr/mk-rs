@@ -5413,6 +5413,309 @@ fn test_mk_78_vault_init_already_exists() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_mk_79_run_expands_matrix_tasks_in_deterministic_order() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let log_file = temp_dir.path().join("matrix-order.log");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-run.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+            - aarch64
+        commands:
+          - command: printf '%s\\n' '${{{{ matrix.arch }}}}-${{{{ matrix.os }}}}' >> {}
+            verbose: false
+    ",
+      log_file.to_utf8()?
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .assert()
+    .success();
+
+  assert_eq!(
+    std::fs::read_to_string(&log_file)?,
+    "x86_64-linux\nx86_64-macos\naarch64-linux\naarch64-macos\n"
+  );
+  Ok(())
+}
+
+#[test]
+fn test_mk_79_plan_shows_matrix_variants_and_resolved_commands() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-plan.yaml",
+    "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+        commands:
+          - command: echo ${{ matrix.os }}-${{ matrix.arch }}
+            verbose: false
+    ",
+  )?;
+
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("build")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+
+  assert!(stdout.contains("1. build[arch=x86_64,os=linux]"));
+  assert!(stdout.contains("2. build[arch=x86_64,os=macos]"));
+  assert!(stdout.contains("local: echo linux-x86_64"));
+  assert!(stdout.contains("local: echo macos-x86_64"));
+
+  let linux_pos = stdout
+    .find("build[arch=x86_64,os=linux]")
+    .expect("linux variant missing");
+  let macos_pos = stdout
+    .find("build[arch=x86_64,os=macos]")
+    .expect("macos variant missing");
+  assert!(
+    linux_pos < macos_pos,
+    "matrix variants should keep deterministic order"
+  );
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_run_set_can_select_multiple_matrix_matches() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let log_file = temp_dir.path().join("matrix-multi.log");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-run-set-multi.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+        commands:
+          - command: printf '%s\\n' '${{{{ matrix.os }}}}-${{{{ matrix.arch }}}}' >> {}
+            verbose: false
+    ",
+      log_file.to_utf8()?
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .arg("--set")
+    .arg("arch=x86_64")
+    .assert()
+    .success();
+
+  assert_eq!(
+    std::fs::read_to_string(&log_file)?,
+    "linux-x86_64\nmacos-x86_64\n"
+  );
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_run_set_can_select_one_matrix_match() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let log_file = temp_dir.path().join("matrix-one.log");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-run-set-one.yaml",
+    &format!(
+      "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+            - aarch64
+        commands:
+          - command: printf '%s\\n' '${{{{ matrix.arch }}}}-${{{{ matrix.os }}}}' >> {}
+            verbose: false
+    ",
+      log_file.to_utf8()?
+    ),
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .arg("--set")
+    .arg("os=linux")
+    .arg("--set")
+    .arg("arch=aarch64")
+    .assert()
+    .success();
+
+  assert_eq!(std::fs::read_to_string(&log_file)?, "aarch64-linux\n");
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_run_set_rejects_unknown_matrix_key() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-run-set-invalid-key.yaml",
+    "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("build")
+    .arg("--set")
+    .arg("arch=x86_64")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Unknown matrix selector key 'arch' for task 'build'",
+    ));
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_plan_set_filters_matrix_variants() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-plan-set.yaml",
+    "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+        commands:
+          - command: echo ${{ matrix.os }}-${{ matrix.arch }}
+            verbose: false
+    ",
+  )?;
+
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("build")
+    .arg("--set")
+    .arg("os=linux")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let stdout = String::from_utf8(output)?;
+
+  assert!(stdout.contains("build[arch=x86_64,os=linux]"));
+  assert!(!stdout.contains("build[arch=x86_64,os=macos]"));
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_plan_set_rejects_unknown_matrix_value() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-plan-set-invalid-value.yaml",
+    "
+    tasks:
+      build:
+        matrix:
+          os:
+            - linux
+        commands:
+          - command: echo build
+            verbose: false
+    ",
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("build")
+    .arg("--set")
+    .arg("os=windows")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Unknown matrix selector value 'windows' for key 'os' in task 'build'",
+    ));
+  Ok(())
+}
+
+#[test]
+fn test_mk_80_plan_set_rejects_makefile_configs() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  std::fs::write(temp_dir.path().join("Makefile"), "build:\n\t@echo build\n")?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(temp_dir.path().join("Makefile"))
+    .arg("plan")
+    .arg("build")
+    .arg("--set")
+    .arg("os=linux")
+    .assert()
+    .failure()
+    .stderr(predicates::str::contains(
+      "Matrix selectors are not supported for Makefile configs",
+    ));
+  Ok(())
+}
+
+#[test]
 fn test_mk_79_vault_purge_secret_not_found() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_yaml(

@@ -16,13 +16,13 @@ Instruction for items in this section:
 
 ### Phase 1: Schema
 
-- [ ] Add task-level `matrix` schema field
+- [x] Add task-level `matrix` schema field
   - Add `matrix` map field to task schema with string list values.
   - Reject empty matrix keys and empty value lists during validation.
   - Keep field optional for non-matrix tasks.
   - Add schema and validation tests for valid and invalid matrix definitions.
 
-- [ ] Add `${{ matrix.KEY }}` interpolation
+- [x] Add `${{ matrix.KEY }}` interpolation
   - Resolve matrix values in task command strings, env values, and task names shown in plans.
   - Return validation errors for unknown matrix keys referenced in matrix-aware fields.
   - Keep existing `${{ outputs.NAME }}` interpolation behavior unchanged.
@@ -30,13 +30,13 @@ Instruction for items in this section:
 
 ### Phase 2: Expansion
 
-- [ ] Expand matrix tasks into deterministic execution variants
+- [x] Expand matrix tasks into deterministic execution variants
   - Generate one task variant per cartesian product combination.
   - Sort expanded variants by matrix key name and declared value order.
   - Keep non-matrix task execution behavior unchanged.
   - Add integration test covering two-key matrix expansion order.
 
-- [ ] Show matrix variants in `mk plan`
+- [x] Show matrix variants in `mk plan`
   - Print expanded variant names and resolved command strings in text output.
   - Include matrix values in JSON plan output.
   - Update `tests/snapshots/plan-json.snap` or add dedicated matrix plan snapshot.
@@ -44,11 +44,12 @@ Instruction for items in this section:
 
 ### Phase 3: Targeted Execution
 
-- [ ] Add `mk run --set KEY=VALUE` for matrix filtering
+- [x] Add `mk run --set KEY=VALUE` for matrix filtering
   - Allow repeatable `--set` flags to select a subset of matrix variants.
   - Return an error when `--set` references unknown matrix keys or values.
   - Apply same filter support to `mk plan`.
   - Add integration tests for one match, multiple matches, and invalid selectors.
+  - Add a docs on README, also add that Make-backed tasks are not supported
 
 ## Parallel Execution
 

@@ -11,7 +11,7 @@ use crate::cache::CacheStore;
 use crate::defaults::{default_ignore_errors, default_shell, default_verbose};
 use crate::secrets::SecretConfig;
 
-use super::{ActiveTasks, CompletedTasks, ContainerRuntime, Shell, TaskRoot};
+use super::{ActiveTasks, CompletedTasks, ContainerRuntime, MatrixSelector, Shell, TaskRoot};
 
 /// Used to pass information to tasks
 /// This use arc to allow for sharing of data between tasks
@@ -23,6 +23,9 @@ pub struct TaskContext {
   pub completed_tasks: CompletedTasks,
   pub multi: Arc<MultiProgress>,
   pub env_vars: HashMap<String, String>,
+  pub matrix_vars: HashMap<String, String>,
+  pub matrix_selectors: Vec<MatrixSelector>,
+  pub matrix_selector_task_name: Option<String>,
   pub task_outputs: Arc<Mutex<HashMap<String, String>>>,
   pub secret_config: Option<SecretConfig>,
   pub shell: Option<Arc<Shell>>,
@@ -47,6 +50,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      matrix_vars: HashMap::new(),
+      matrix_selectors: Vec::new(),
+      matrix_selector_task_name: None,
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: None,
       shell: None,
@@ -71,6 +77,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
       env_vars: HashMap::new(),
+      matrix_vars: HashMap::new(),
+      matrix_selectors: Vec::new(),
+      matrix_selector_task_name: None,
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: None,
       shell: None,
@@ -95,6 +104,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(MultiProgress::new()),
       env_vars: HashMap::new(),
+      matrix_vars: HashMap::new(),
+      matrix_selectors: Vec::new(),
+      matrix_selector_task_name: None,
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: None,
       shell: None,
@@ -134,6 +146,9 @@ impl TaskContext {
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi,
       env_vars,
+      matrix_vars: HashMap::new(),
+      matrix_selectors: Vec::new(),
+      matrix_selector_task_name: None,
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: None,
       shell: None,
@@ -157,6 +172,9 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      matrix_vars: context.matrix_vars.clone(),
+      matrix_selectors: context.matrix_selectors.clone(),
+      matrix_selector_task_name: context.matrix_selector_task_name.clone(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: context.secret_config.clone(),
       shell: context.shell.clone(),
@@ -180,6 +198,9 @@ impl TaskContext {
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
       env_vars: context.env_vars.clone(),
+      matrix_vars: context.matrix_vars.clone(),
+      matrix_selectors: context.matrix_selectors.clone(),
+      matrix_selector_task_name: context.matrix_selector_task_name.clone(),
       task_outputs: Arc::new(Mutex::new(HashMap::new())),
       secret_config: context.secret_config.clone(),
       shell: context.shell.clone(),

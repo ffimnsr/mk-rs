@@ -2,17 +2,20 @@ use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use rand::Rng as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use std::fmt::Write as _;
 use std::io::BufRead as _;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{
   contains_output_reference, extract_output_references, interpolate_template_string, is_shell_command,
-  CommandRunner, Precondition, Shell, TaskContext, TaskDependency,
+  CommandRunner, MatrixSelector, Precondition, Shell, TaskContext, TaskDependency,
 };
 use crate::cache::{compute_fingerprint, expand_patterns_in_dir, CacheEntry};
 use crate::defaults::default_verbose;
@@ -79,6 +82,11 @@ pub struct TaskArgs {
   /// The description of the task
   #[serde(default)]
   pub description: String,
+
+  /// The matrix variants available for this task
+  #[schemars(with = "std::collections::HashMap<String, Vec<String>>")]
+  #[serde(default)]
+  pub matrix: HashMap<String, Vec<String>>,
 
   /// The environment variables to set before running the task
   #[schemars(with = "std::collections::HashMap<String, String>")]
@@ -172,6 +180,12 @@ pub struct CommandResult {
   message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TaskMatrixVariant {
+  pub name: String,
+  pub values: BTreeMap<String, String>,
+}
+
 impl Task {
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     match self {
@@ -243,6 +257,60 @@ impl TaskArgs {
   }
 
   pub fn run(&self, context: &mut TaskContext) -> anyhow::Result<()> {
+    if self.matrix.is_empty() {
+      return self.run_single(context);
+    }
+
+    let base_task_name = context
+      .current_task_name
+      .clone()
+      .unwrap_or_else(|| String::from("<task>"));
+    let selectors = if context.matrix_selector_task_name.as_deref() == Some(base_task_name.as_str()) {
+      context.matrix_selectors.as_slice()
+    } else {
+      &[]
+    };
+    let variants = self.select_matrix_variants(&base_task_name, selectors)?;
+    let base_env = context.env_vars.clone();
+    let base_matrix = context.matrix_vars.clone();
+    let base_task_outputs = context.task_outputs.clone();
+    let base_secret_config = context.secret_config.clone();
+    let base_shell = context.shell.clone();
+    let base_container_runtime = context.container_runtime.clone();
+    let base_ignore_errors = context.ignore_errors;
+    let base_verbose = context.verbose;
+    let base_current_task_name = context.current_task_name.clone();
+
+    for variant in variants {
+      context.env_vars = base_env.clone();
+      context.matrix_vars = variant
+        .values
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+      context.task_outputs = Arc::new(Mutex::new(HashMap::new()));
+      context.secret_config = base_secret_config.clone();
+      context.shell = base_shell.clone();
+      context.container_runtime = base_container_runtime.clone();
+      context.ignore_errors = base_ignore_errors;
+      context.verbose = base_verbose;
+      context.set_current_task_name(&variant.name);
+      self.run_single(context)?;
+    }
+
+    context.env_vars = base_env;
+    context.matrix_vars = base_matrix;
+    context.task_outputs = base_task_outputs;
+    context.secret_config = base_secret_config;
+    context.shell = base_shell;
+    context.container_runtime = base_container_runtime;
+    context.ignore_errors = base_ignore_errors;
+    context.verbose = base_verbose;
+    context.current_task_name = base_current_task_name;
+    Ok(())
+  }
+
+  fn run_single(&self, context: &mut TaskContext) -> anyhow::Result<()> {
     assert!(!self.commands.is_empty());
 
     // Validate parallel execution requirements early
@@ -375,6 +443,115 @@ impl TaskArgs {
     self.update_cache(context)?;
 
     Ok(())
+  }
+
+  pub(crate) fn expand_matrix_variants(&self, task_name: &str) -> anyhow::Result<Vec<TaskMatrixVariant>> {
+    if self.matrix.is_empty() {
+      return Ok(vec![TaskMatrixVariant {
+        name: task_name.to_string(),
+        values: BTreeMap::new(),
+      }]);
+    }
+
+    let mut matrix_keys = self.matrix.keys().cloned().collect::<Vec<_>>();
+    matrix_keys.sort();
+
+    for key in &matrix_keys {
+      if key.trim().is_empty() {
+        anyhow::bail!("Matrix key must not be empty");
+      }
+      if self.matrix.get(key).map_or(true, Vec::is_empty) {
+        anyhow::bail!("Matrix '{}' must define at least one value", key);
+      }
+    }
+
+    let mut variants = Vec::new();
+    let mut current = BTreeMap::new();
+    self.expand_matrix_variants_recursive(task_name, &matrix_keys, 0, &mut current, &mut variants);
+    Ok(variants)
+  }
+
+  pub(crate) fn select_matrix_variants(
+    &self,
+    task_name: &str,
+    selectors: &[MatrixSelector],
+  ) -> anyhow::Result<Vec<TaskMatrixVariant>> {
+    let variants = self.expand_matrix_variants(task_name)?;
+    if selectors.is_empty() {
+      return Ok(variants);
+    }
+
+    if self.matrix.is_empty() {
+      anyhow::bail!("Task '{}' does not define a matrix", task_name);
+    }
+
+    let mut seen_keys = HashSet::new();
+    for selector in selectors {
+      if !seen_keys.insert(selector.key.clone()) {
+        anyhow::bail!("Duplicate matrix selector key '{}'", selector.key);
+      }
+
+      let values = self.matrix.get(&selector.key).ok_or_else(|| {
+        anyhow::anyhow!(
+          "Unknown matrix selector key '{}' for task '{}'",
+          selector.key,
+          task_name
+        )
+      })?;
+
+      if !values.iter().any(|value| value == &selector.value) {
+        anyhow::bail!(
+          "Unknown matrix selector value '{}' for key '{}' in task '{}'",
+          selector.value,
+          selector.key,
+          task_name
+        );
+      }
+    }
+
+    let variants = variants
+      .into_iter()
+      .filter(|variant| {
+        selectors.iter().all(|selector| {
+          variant
+            .values
+            .get(&selector.key)
+            .is_some_and(|value| value == &selector.value)
+        })
+      })
+      .collect::<Vec<_>>();
+
+    if variants.is_empty() {
+      anyhow::bail!("No matrix variants matched selectors for task '{}'", task_name);
+    }
+
+    Ok(variants)
+  }
+
+  fn expand_matrix_variants_recursive(
+    &self,
+    task_name: &str,
+    matrix_keys: &[String],
+    index: usize,
+    current: &mut BTreeMap<String, String>,
+    variants: &mut Vec<TaskMatrixVariant>,
+  ) {
+    if index == matrix_keys.len() {
+      variants.push(TaskMatrixVariant {
+        name: format_matrix_variant_name(task_name, current),
+        values: current.clone(),
+      });
+      return;
+    }
+
+    let key = &matrix_keys[index];
+    if let Some(values) = self.matrix.get(key) {
+      for value in values {
+        current.insert(key.clone(), value.clone());
+        self.expand_matrix_variants_recursive(task_name, matrix_keys, index + 1, current, variants);
+      }
+      current.remove(key);
+    }
   }
 
   /// Validate if the task can be run in parallel
@@ -827,6 +1004,19 @@ fn sorted_env_vars(env_vars: &HashMap<String, String>) -> Vec<(String, String)> 
   pairs
 }
 
+fn format_matrix_variant_name(task_name: &str, values: &BTreeMap<String, String>) -> String {
+  if values.is_empty() {
+    return task_name.to_string();
+  }
+
+  let selector = values
+    .iter()
+    .map(|(key, value)| format!("{}={}", key, value))
+    .collect::<Vec<_>>()
+    .join(",");
+  format!("{}[{}]", task_name, selector)
+}
+
 fn fingerprint_task_key(context: &TaskContext, task: &TaskArgs) -> String {
   context.current_task_name.clone().unwrap_or_else(|| {
     if !task.description.is_empty() {
@@ -852,6 +1042,13 @@ fn stable_task_fingerprint(task: &TaskArgs) -> String {
     .collect();
   environment.sort();
 
+  let mut matrix: Vec<_> = task
+    .matrix
+    .iter()
+    .map(|(key, values)| (key.clone(), values.clone()))
+    .collect();
+  matrix.sort_by(|left, right| left.0.cmp(&right.0));
+
   let mut secrets_path = task.secrets_path.clone();
   secrets_path.sort();
 
@@ -869,6 +1066,7 @@ fn stable_task_fingerprint(task: &TaskArgs) -> String {
   );
   write_section(&mut out, "labels", stable_string_pairs_fingerprint(&labels));
   write_section(&mut out, "description", json_value(&task.description));
+  write_section(&mut out, "matrix", stable_string_list_pairs_fingerprint(&matrix));
   write_section(
     &mut out,
     "environment",
@@ -1033,6 +1231,14 @@ fn stable_string_pairs_fingerprint(values: &[(String, String)]) -> String {
   json_value(&values)
 }
 
+fn stable_string_list_pairs_fingerprint(values: &[(String, Vec<String>)]) -> String {
+  let values = values
+    .iter()
+    .map(|(key, values)| format!("{}={}", json_value(key), json_value(values)))
+    .collect::<Vec<_>>();
+  json_value(&values)
+}
+
 fn stable_strings_fingerprint(values: &[String]) -> String {
   json_value(values)
 }
@@ -1137,6 +1343,7 @@ mod test {
 
         assert_eq!(task.labels.len(), 0);
         assert_eq!(task.description, "This is a task");
+        assert_eq!(task.matrix.len(), 0);
         assert_eq!(task.environment.len(), 1);
         assert_eq!(task.env_file.len(), 2);
       } else {
@@ -1174,6 +1381,7 @@ mod test {
         assert_eq!(task.description, "This is a task");
         assert_eq!(task.depends_on.len(), 0);
         assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.matrix.len(), 0);
         assert_eq!(task.env_file.len(), 0);
         assert_eq!(task.environment.len(), 2);
       } else {
@@ -1205,6 +1413,7 @@ mod test {
         assert_eq!(task.description.len(), 0);
         assert_eq!(task.depends_on.len(), 0);
         assert_eq!(task.labels.len(), 0);
+        assert_eq!(task.matrix.len(), 0);
         assert_eq!(task.env_file.len(), 0);
         assert_eq!(task.environment.len(), 0);
       } else {
@@ -1560,6 +1769,169 @@ mod test {
   }
 
   #[test]
+  fn test_task_15_matrix_field() -> anyhow::Result<()> {
+    let yaml = "
+      commands:
+        - command: echo build
+      matrix:
+        os:
+          - linux
+          - macos
+        arch:
+          - x86_64
+    ";
+
+    let task = serde_yaml::from_str::<Task>(yaml)?;
+
+    if let Task::Task(task) = &task {
+      assert_eq!(
+        task.matrix.get("os"),
+        Some(&vec!["linux".to_string(), "macos".to_string()])
+      );
+      assert_eq!(task.matrix.get("arch"), Some(&vec!["x86_64".to_string()]));
+    } else {
+      panic!("Expected Task::Task");
+    }
+
+    Ok(())
+  }
+
+  #[test]
+  fn test_expand_matrix_variants_uses_sorted_keys_and_declared_value_order() -> anyhow::Result<()> {
+    let task = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - linux
+          - macos
+        arch:
+          - x86_64
+          - aarch64
+      "#,
+    )?;
+
+    assert_eq!(
+      task.expand_matrix_variants("build")?,
+      vec![
+        TaskMatrixVariant {
+          name: "build[arch=x86_64,os=linux]".to_string(),
+          values: BTreeMap::from([
+            ("arch".to_string(), "x86_64".to_string()),
+            ("os".to_string(), "linux".to_string()),
+          ]),
+        },
+        TaskMatrixVariant {
+          name: "build[arch=x86_64,os=macos]".to_string(),
+          values: BTreeMap::from([
+            ("arch".to_string(), "x86_64".to_string()),
+            ("os".to_string(), "macos".to_string()),
+          ]),
+        },
+        TaskMatrixVariant {
+          name: "build[arch=aarch64,os=linux]".to_string(),
+          values: BTreeMap::from([
+            ("arch".to_string(), "aarch64".to_string()),
+            ("os".to_string(), "linux".to_string()),
+          ]),
+        },
+        TaskMatrixVariant {
+          name: "build[arch=aarch64,os=macos]".to_string(),
+          values: BTreeMap::from([
+            ("arch".to_string(), "aarch64".to_string()),
+            ("os".to_string(), "macos".to_string()),
+          ]),
+        },
+      ]
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn test_select_matrix_variants_returns_multiple_matches() -> anyhow::Result<()> {
+    let task = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - linux
+          - macos
+        arch:
+          - x86_64
+      "#,
+    )?;
+
+    let variants = task.select_matrix_variants(
+      "build",
+      &[MatrixSelector {
+        key: "arch".to_string(),
+        value: "x86_64".to_string(),
+      }],
+    )?;
+
+    assert_eq!(variants.len(), 2);
+    Ok(())
+  }
+
+  #[test]
+  fn test_select_matrix_variants_rejects_unknown_key() -> anyhow::Result<()> {
+    let task = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - linux
+      "#,
+    )?;
+
+    let err = task
+      .select_matrix_variants(
+        "build",
+        &[MatrixSelector {
+          key: "arch".to_string(),
+          value: "x86_64".to_string(),
+        }],
+      )
+      .expect_err("selector should fail");
+
+    assert!(err
+      .to_string()
+      .contains("Unknown matrix selector key 'arch' for task 'build'"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_select_matrix_variants_rejects_unknown_value() -> anyhow::Result<()> {
+    let task = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - linux
+      "#,
+    )?;
+
+    let err = task
+      .select_matrix_variants(
+        "build",
+        &[MatrixSelector {
+          key: "os".to_string(),
+          value: "windows".to_string(),
+        }],
+      )
+      .expect_err("selector should fail");
+
+    assert!(err
+      .to_string()
+      .contains("Unknown matrix selector value 'windows' for key 'os' in task 'build'"));
+    Ok(())
+  }
+
+  #[test]
   fn test_parallel_interactive_rejected() -> anyhow::Result<()> {
     let yaml = r#"
           commands:
@@ -1824,6 +2196,31 @@ mod test {
         key_name: team
         secrets_path:
           - app/two
+      "#,
+    )?;
+
+    assert_ne!(stable_task_fingerprint(&first), stable_task_fingerprint(&second));
+    Ok(())
+  }
+
+  #[test]
+  fn test_stable_task_fingerprint_changes_when_matrix_changes() -> anyhow::Result<()> {
+    let first = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - linux
+      "#,
+    )?;
+    let second = parse_task_args(
+      r#"
+      commands:
+        - command: echo hi
+      matrix:
+        os:
+          - macos
       "#,
     )?;
 

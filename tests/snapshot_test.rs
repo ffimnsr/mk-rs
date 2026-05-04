@@ -209,6 +209,43 @@ fn snapshot_plan_json() -> anyhow::Result<()> {
 }
 
 #[test]
+fn snapshot_matrix_plan_json() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "matrix-tasks.yaml",
+    "
+    tasks:
+      build:
+        description: build for ${{ matrix.os }}-${{ matrix.arch }}
+        matrix:
+          os:
+            - linux
+            - macos
+          arch:
+            - x86_64
+        commands:
+          - command: echo ${{ matrix.os }}-${{ matrix.arch }}
+            verbose: false
+    ",
+  )?;
+  let output = Command::new(cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("build")
+    .arg("--json")
+    .assert()
+    .success()
+    .get_output()
+    .stdout
+    .clone();
+  let temp_root = temp_dir.path().to_utf8()?;
+  let actual = common::normalize_snapshot_text(&String::from_utf8(output)?, &[(temp_root, "<TMPDIR>")]);
+  assert_snapshot("matrix-plan-json.snap", &actual)
+}
+
+#[test]
 fn snapshot_schema() -> anyhow::Result<()> {
   let output = Command::new(cargo::cargo_bin!("mk"))
     .arg("schema")

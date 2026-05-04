@@ -14,7 +14,9 @@ use clap_complete::Shell;
 use console::style;
 use mk_lib::file::DisplayPath as _;
 use mk_lib::label_filter::{matches_all, LabelFilter};
-use mk_lib::schema::{run_task_by_name, ContainerRuntime, Task, TaskContext, TaskPlan, TaskRoot};
+use mk_lib::schema::{
+  run_task_by_name, ContainerRuntime, MatrixSelector, Task, TaskContext, TaskPlan, TaskRoot,
+};
 use mk_lib::version::get_version_digits;
 use notify::{Event, RecursiveMode, Watcher};
 use once_cell::sync::Lazy;
@@ -145,6 +147,13 @@ enum Command {
     labels: Vec<String>,
 
     #[arg(
+      long = "set",
+      help = "Filter matrix task variants by KEY=VALUE. Repeatable; all must match.",
+      value_name = "KEY=VALUE"
+    )]
+    sets: Vec<MatrixSelector>,
+
+    #[arg(
       last = true,
       help = "Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)"
     )]
@@ -192,6 +201,13 @@ enum Command {
       value_name = "FILTER"
     )]
     labels: Vec<String>,
+
+    #[arg(
+      long = "set",
+      help = "Filter matrix task variants by KEY=VALUE. Repeatable; all must match.",
+      value_name = "KEY=VALUE"
+    )]
+    sets: Vec<MatrixSelector>,
   },
   #[command(visible_aliases = ["s"], arg_required_else_help = true, about = "Access stored secrets")]
   Secrets(Box<Secrets>),
@@ -532,10 +548,12 @@ impl CliEntry {
         json_events,
         fuzzy,
         labels,
+        sets,
         trailing_args,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
         self.ensure_makefile_label_filters_supported(&filters)?;
+        self.ensure_makefile_matrix_selectors_supported(sets)?;
         let names = if *fuzzy {
           vec![self.select_run_task(&filters)?]
         } else {
@@ -543,11 +561,11 @@ impl CliEntry {
         };
         if *dry_run {
           for name in &names {
-            self.print_plan(name, false)?;
+            self.print_plan(name, false, sets)?;
           }
         } else {
           for name in &names {
-            self.run_task(name, *force, *json_events, trailing_args.clone())?;
+            self.run_task(name, *force, *json_events, trailing_args.clone(), sets)?;
           }
         }
       },
@@ -571,12 +589,14 @@ impl CliEntry {
         task_name,
         json,
         labels,
+        sets,
       }) => {
         let filters: Vec<LabelFilter> = labels.iter().map(|s| LabelFilter::parse(s)).collect();
         self.ensure_makefile_label_filters_supported(&filters)?;
+        self.ensure_makefile_matrix_selectors_supported(sets)?;
         let names = self.resolve_run_tasks(task_name.as_deref(), &filters)?;
         for name in &names {
-          self.print_plan(name, *json)?;
+          self.print_plan(name, *json, sets)?;
         }
       },
       Some(Command::Secrets(secrets)) => {
@@ -616,7 +636,7 @@ impl CliEntry {
       },
       None => {
         if let Some(task_name) = &self.args.task_name {
-          self.run_task(task_name, false, false, self.args.trailing_args.clone())?;
+          self.run_task(task_name, false, false, self.args.trailing_args.clone(), &[])?;
         } else {
           anyhow::bail!("No subcommand or task name provided. Use `--help` flag for more information.");
         }
@@ -719,6 +739,16 @@ impl CliEntry {
     Ok(())
   }
 
+  fn ensure_makefile_matrix_selectors_supported(&self, selectors: &[MatrixSelector]) -> anyhow::Result<()> {
+    if self.task_root.is_makefile_config() && !selectors.is_empty() {
+      anyhow::bail!(
+        "Matrix selectors are not supported for Makefile configs. Make-backed tasks do not define structured matrix variants."
+      );
+    }
+
+    Ok(())
+  }
+
   /// Resolve task names from an optional explicit name or label filters.
   /// Returns a sorted list of matching task names.
   fn resolve_run_tasks(
@@ -774,9 +804,12 @@ impl CliEntry {
     force: bool,
     json_events: bool,
     args: Vec<String>,
+    selectors: &[MatrixSelector],
   ) -> anyhow::Result<()> {
     assert!(!task_name.is_empty());
-    let context = TaskContext::new_with_options(self.task_root.clone(), force, json_events, args);
+    let mut context = TaskContext::new_with_options(self.task_root.clone(), force, json_events, args);
+    context.matrix_selectors = selectors.to_vec();
+    context.matrix_selector_task_name = Some(task_name.to_string());
     run_task_by_name(&context, task_name)
   }
 
@@ -870,7 +903,7 @@ impl CliEntry {
 
     // Run the task once immediately before waiting for changes.
     println!("Running initial task '{task_name}'...");
-    let _ = self.run_task(task_name, false, false, task_args.clone());
+    let _ = self.run_task(task_name, false, false, task_args.clone(), &[]);
 
     let mut pending_since: Option<std::time::Instant> = None;
 
@@ -913,7 +946,7 @@ impl CliEntry {
             println!();
           }
           println!("Change detected — re-running task '{task_name}'...");
-          let _ = self.run_task(task_name, false, false, task_args.clone());
+          let _ = self.run_task(task_name, false, false, task_args.clone(), &[]);
         }
       }
     }
@@ -1644,8 +1677,8 @@ function _mk() {{
     Ok(())
   }
 
-  fn print_plan(&self, task_name: &str, json: bool) -> anyhow::Result<()> {
-    let plan = self.task_root.plan_task(task_name)?;
+  fn print_plan(&self, task_name: &str, json: bool, selectors: &[MatrixSelector]) -> anyhow::Result<()> {
+    let plan = self.task_root.plan_task_with_selectors(task_name, selectors)?;
     if json {
       Self::print_json(&plan)?;
     } else {

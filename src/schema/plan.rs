@@ -1,10 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::Serialize;
 
 use crate::defaults::default_shell;
 
-use super::{CommandRunner, Shell, Task, TaskArgs, TaskRoot};
+use super::{
+  interpolate_matrix_template_string, CommandRunner, MatrixSelector, Shell, Task, TaskArgs, TaskRoot,
+};
 
 #[derive(Debug, Serialize)]
 pub struct TaskPlan {
@@ -15,6 +17,7 @@ pub struct TaskPlan {
 #[derive(Debug, Serialize)]
 pub struct PlannedTask {
   pub name: String,
+  pub matrix: Option<BTreeMap<String, String>>,
   pub description: Option<String>,
   pub commands: Vec<PlannedCommand>,
   pub dependencies: Vec<String>,
@@ -24,7 +27,7 @@ pub struct PlannedTask {
   pub skipped_reason: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlannedExecutionMode {
   Sequential,
@@ -122,7 +125,15 @@ impl PlannedCommand {
 
 impl TaskRoot {
   pub fn plan_task(&self, task_name: &str) -> anyhow::Result<TaskPlan> {
-    let mut planner = Planner::default();
+    self.plan_task_with_selectors(task_name, &[])
+  }
+
+  pub fn plan_task_with_selectors(
+    &self,
+    task_name: &str,
+    selectors: &[MatrixSelector],
+  ) -> anyhow::Result<TaskPlan> {
+    let mut planner = Planner::new(task_name, selectors);
     planner.visit_task(self, task_name)?;
     Ok(TaskPlan {
       root_task: task_name.to_string(),
@@ -131,14 +142,25 @@ impl TaskRoot {
   }
 }
 
-#[derive(Default)]
 struct Planner {
   steps: Vec<PlannedTask>,
   visiting: HashSet<String>,
   visited: HashSet<String>,
+  root_task_name: String,
+  root_matrix_selectors: Vec<MatrixSelector>,
 }
 
 impl Planner {
+  fn new(task_name: &str, selectors: &[MatrixSelector]) -> Self {
+    Self {
+      steps: Vec::new(),
+      visiting: HashSet::new(),
+      visited: HashSet::new(),
+      root_task_name: task_name.to_string(),
+      root_matrix_selectors: selectors.to_vec(),
+    }
+  }
+
   fn visit_task(&mut self, root: &TaskRoot, task_name: &str) -> anyhow::Result<()> {
     if self.visited.contains(task_name) {
       return Ok(());
@@ -155,108 +177,152 @@ impl Planner {
       )
     })?;
 
-    let planned_task = match task {
-      Task::String(command) => PlannedTask {
-        name: task_name.to_string(),
-        description: None,
-        commands: vec![PlannedCommand::CommandRun {
-          command: command.clone(),
-          shell: default_shell().cmd(),
-        }],
-        dependencies: Vec::new(),
-        base_dir: root.config_base_dir().to_string_lossy().into_owned(),
-        execution_mode: PlannedExecutionMode::Sequential,
-        max_parallel: None,
-        skipped_reason: None,
+    match task {
+      Task::String(command) => {
+        self.steps.push(PlannedTask {
+          name: task_name.to_string(),
+          matrix: None,
+          description: None,
+          commands: vec![PlannedCommand::CommandRun {
+            command: command.clone(),
+            shell: default_shell().cmd(),
+          }],
+          dependencies: Vec::new(),
+          base_dir: root.config_base_dir().to_string_lossy().into_owned(),
+          execution_mode: PlannedExecutionMode::Sequential,
+          max_parallel: None,
+          skipped_reason: None,
+        });
       },
       Task::Task(task) => {
         for dependency in &task.depends_on {
           self.visit_task(root, dependency.resolve_name())?;
         }
 
-        let commands = if root.is_makefile_config() {
-          vec![PlannedCommand::MakeRun {
-            makefile: root
-              .source_path
-              .as_ref()
-              .map(|path| path.to_string_lossy().into_owned())
-              .unwrap_or_else(|| String::from("Makefile")),
-            target: task_name.to_string(),
-          }]
+        let variants = if task_name == self.root_task_name {
+          task.select_matrix_variants(task_name, &self.root_matrix_selectors)?
         } else {
-          task
-            .commands
-            .iter()
-            .map(|command| PlannedCommand::from_task_command(root, task, command))
-            .collect()
+          task.expand_matrix_variants(task_name)?
+        };
+        let dependencies = task
+          .depends_on
+          .iter()
+          .map(|dependency| dependency.resolve_name().to_string())
+          .collect::<Vec<_>>();
+        let base_dir = task.task_base_dir_from_root(root).to_string_lossy().into_owned();
+        let execution_mode = if task.is_parallel() {
+          PlannedExecutionMode::Parallel
+        } else {
+          PlannedExecutionMode::Sequential
+        };
+        let max_parallel = if task.is_parallel() {
+          Some(task.max_parallel())
+        } else {
+          None
         };
 
-        PlannedTask {
-          name: task_name.to_string(),
-          description: if task.description.is_empty() {
-            None
-          } else {
-            Some(task.description.clone())
-          },
-          commands,
-          dependencies: task
-            .depends_on
-            .iter()
-            .map(|dependency| dependency.resolve_name().to_string())
-            .collect(),
-          base_dir: task.task_base_dir_from_root(root).to_string_lossy().into_owned(),
-          execution_mode: if task.is_parallel() {
-            PlannedExecutionMode::Parallel
-          } else {
-            PlannedExecutionMode::Sequential
-          },
-          max_parallel: if task.is_parallel() {
-            Some(task.max_parallel())
-          } else {
-            None
-          },
-          skipped_reason: None,
-        }
+        let planned_variants = variants
+          .into_iter()
+          .map(|variant| {
+            let matrix = variant.values.clone();
+            let commands = if root.is_makefile_config() {
+              vec![PlannedCommand::MakeRun {
+                makefile: root
+                  .source_path
+                  .as_ref()
+                  .map(|path| path.to_string_lossy().into_owned())
+                  .unwrap_or_else(|| String::from("Makefile")),
+                target: task_name.to_string(),
+              }]
+            } else {
+              task
+                .commands
+                .iter()
+                .map(|command| PlannedCommand::from_task_command(root, task, command, &variant.values))
+                .collect()
+            };
+
+            PlannedTask {
+              name: variant.name,
+              matrix: if matrix.is_empty() {
+                None
+              } else {
+                Some(matrix.clone())
+              },
+              description: if task.description.is_empty() {
+                None
+              } else {
+                Some(interpolate_matrix_template_string(&task.description, &matrix))
+              },
+              commands,
+              dependencies: dependencies.clone(),
+              base_dir: base_dir.clone(),
+              execution_mode,
+              max_parallel,
+              skipped_reason: None,
+            }
+          })
+          .collect::<Vec<_>>();
+
+        self.steps.extend(planned_variants);
       },
-    };
+    }
 
     self.visiting.remove(task_name);
     self.visited.insert(task_name.to_string());
-    self.steps.push(planned_task);
     Ok(())
   }
 }
 
 impl From<&CommandRunner> for PlannedCommand {
   fn from(value: &CommandRunner) -> Self {
-    Self::from_task_command(&TaskRoot::default(), &TaskArgs::default(), value)
+    Self::from_task_command(
+      &TaskRoot::default(),
+      &TaskArgs::default(),
+      value,
+      &BTreeMap::new(),
+    )
   }
 }
 
 impl PlannedCommand {
-  fn from_task_command(root: &TaskRoot, task: &TaskArgs, value: &CommandRunner) -> Self {
+  fn from_task_command(
+    root: &TaskRoot,
+    task: &TaskArgs,
+    value: &CommandRunner,
+    matrix: &BTreeMap<String, String>,
+  ) -> Self {
     match value {
       CommandRunner::CommandRun(command) => PlannedCommand::CommandRun {
-        command: command.clone(),
+        command: interpolate_matrix_template_string(command, matrix),
         shell: effective_shell(task, None).cmd(),
       },
       CommandRunner::LocalRun(local_run) => PlannedCommand::LocalRun {
-        command: local_run.command.clone(),
+        command: interpolate_matrix_template_string(&local_run.command, matrix),
         shell: Some(effective_shell(task, local_run.shell.as_ref()).cmd()),
         work_dir: local_run
           .work_dir
           .as_ref()
-          .map(|work_dir| root.resolve_from_config(work_dir).to_string_lossy().into_owned()),
+          .map(|work_dir| interpolate_matrix_template_string(work_dir, matrix))
+          .map(|work_dir| root.resolve_from_config(&work_dir).to_string_lossy().into_owned()),
         interactive: local_run.interactive_enabled(),
         retrigger: local_run.retrigger_enabled(),
       },
       CommandRunner::SshRun(ssh_run) => PlannedCommand::SshRun {
-        host: ssh_run.ssh_run.host.clone(),
-        user: ssh_run.ssh_run.user.clone(),
+        host: interpolate_matrix_template_string(&ssh_run.ssh_run.host, matrix),
+        user: ssh_run
+          .ssh_run
+          .user
+          .as_ref()
+          .map(|user| interpolate_matrix_template_string(user, matrix)),
         port: ssh_run.ssh_run.port,
-        command: ssh_run.ssh_run.command.clone(),
+        command: interpolate_matrix_template_string(&ssh_run.ssh_run.command, matrix),
         shell: ssh_run.ssh_run.shell.as_ref().map(|shell| shell.cmd()),
-        work_dir: ssh_run.ssh_run.work_dir.clone(),
+        work_dir: ssh_run
+          .ssh_run
+          .work_dir
+          .as_ref()
+          .map(|work_dir| interpolate_matrix_template_string(work_dir, matrix)),
         interactive: ssh_run.interactive_enabled(),
       },
       CommandRunner::ContainerRun(container_run) => PlannedCommand::ContainerRun {
@@ -313,13 +379,13 @@ impl PlannedCommand {
         task: task_run.task.clone(),
       },
       CommandRunner::JsonExtract(json_extract) => PlannedCommand::JsonExtract {
-        extract_json_from: json_extract.extract_json_from.clone(),
-        json_path: json_extract.json_path.clone(),
-        save_as: json_extract.save_as.clone(),
+        extract_json_from: interpolate_matrix_template_string(&json_extract.extract_json_from, matrix),
+        json_path: interpolate_matrix_template_string(&json_extract.json_path, matrix),
+        save_as: interpolate_matrix_template_string(&json_extract.save_as, matrix),
       },
       CommandRunner::WriteOutput(write_output) => PlannedCommand::WriteOutput {
-        write_output: write_output.write_output.clone(),
-        to_file: write_output.to_file.clone(),
+        write_output: interpolate_matrix_template_string(&write_output.write_output, matrix),
+        to_file: interpolate_matrix_template_string(&write_output.to_file, matrix),
         create_parents: write_output.create_parents.unwrap_or(false),
       },
     }
@@ -420,6 +486,69 @@ mod tests {
       _ => panic!("Expected PlannedCommand::LocalRun"),
     }
 
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_task_expands_matrix_variants() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        build:
+          matrix:
+            os:
+              - linux
+              - macos
+            arch:
+              - x86_64
+          commands:
+            - command: echo ${{ matrix.os }}-${{ matrix.arch }}
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task("build")?;
+
+    assert_eq!(plan.steps.len(), 2);
+    assert_eq!(plan.steps[0].name, "build[arch=x86_64,os=linux]");
+    assert_eq!(plan.steps[1].name, "build[arch=x86_64,os=macos]");
+
+    match &plan.steps[0].commands[0] {
+      PlannedCommand::LocalRun { command, .. } => assert_eq!(command, "echo linux-x86_64"),
+      _ => panic!("Expected PlannedCommand::LocalRun"),
+    }
+
+    assert_eq!(
+      plan.steps[0].matrix.as_ref().and_then(|matrix| matrix.get("os")),
+      Some(&"linux".to_string())
+    );
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_task_with_selectors_filters_root_variants() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        build:
+          matrix:
+            os:
+              - linux
+              - macos
+            arch:
+              - x86_64
+          commands:
+            - command: echo ${{ matrix.os }}-${{ matrix.arch }}
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task_with_selectors(
+      "build",
+      &[MatrixSelector {
+        key: "os".to_string(),
+        value: "linux".to_string(),
+      }],
+    )?;
+
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].name, "build[arch=x86_64,os=linux]");
     Ok(())
   }
 }

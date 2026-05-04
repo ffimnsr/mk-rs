@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use serde::Serialize;
 
 use super::{
-  contains_output_reference, extract_output_references, CommandRunner, ContainerRuntime, Include, Task,
-  TaskRoot, UseCargo, UseNpm,
+  contains_output_reference, extract_matrix_references, extract_output_references, CommandRunner,
+  ContainerRuntime, Include, Task, TaskRoot, UseCargo, UseNpm,
 };
 use crate::file::ToUtf8 as _;
 use crate::schema::Precondition;
@@ -189,6 +189,8 @@ impl TaskRoot {
         }
       },
       Task::Task(task) => {
+        self.validate_matrix(task_name, task, report);
+
         if task.commands.is_empty() && !self.is_makefile_config() {
           report.push_error(
             Some(task_name),
@@ -317,7 +319,25 @@ impl TaskRoot {
 
         self.validate_command_outputs(task_name, task, report);
         self.validate_labels(task_name, task, report);
+        self.validate_matrix_references(task_name, task, report);
       },
+    }
+  }
+
+  fn validate_matrix(&self, task_name: &str, task: &super::TaskArgs, report: &mut ValidationReport) {
+    for (key, values) in &task.matrix {
+      if key.trim().is_empty() {
+        report.push_error(Some(task_name), Some("matrix"), "Matrix key must not be empty");
+      }
+
+      if values.is_empty() {
+        let matrix_name = if key.is_empty() { "<empty>" } else { key };
+        report.push_error(
+          Some(task_name),
+          Some("matrix"),
+          format!("Matrix '{}' must define at least one value", matrix_name),
+        );
+      }
     }
   }
 
@@ -338,6 +358,148 @@ impl TaskRoot {
           Some(task_name),
           Some("labels"),
           format!("Label '{}' has an empty value", key),
+        );
+      }
+    }
+  }
+
+  fn validate_matrix_references(
+    &self,
+    task_name: &str,
+    task: &super::TaskArgs,
+    report: &mut ValidationReport,
+  ) {
+    self.validate_matrix_references_in_value(task_name, "name", task_name, &task.matrix, report);
+
+    for value in task.environment.values() {
+      self.validate_matrix_references_in_value(task_name, "environment", value, &task.matrix, report);
+    }
+
+    for command in &task.commands {
+      match command {
+        CommandRunner::CommandRun(command) => {
+          self.validate_matrix_references_in_value(task_name, "command", command, &task.matrix, report);
+        },
+        CommandRunner::LocalRun(local_run) => {
+          self.validate_matrix_references_in_value(
+            task_name,
+            "command",
+            &local_run.command,
+            &task.matrix,
+            report,
+          );
+          if let Some(test) = &local_run.test {
+            self.validate_matrix_references_in_value(task_name, "test", test, &task.matrix, report);
+          }
+        },
+        CommandRunner::SshRun(ssh_run) => {
+          self.validate_matrix_references_in_value(
+            task_name,
+            "ssh_run.host",
+            &ssh_run.ssh_run.host,
+            &task.matrix,
+            report,
+          );
+          if let Some(user) = &ssh_run.ssh_run.user {
+            self.validate_matrix_references_in_value(task_name, "ssh_run.user", user, &task.matrix, report);
+          }
+          self.validate_matrix_references_in_value(
+            task_name,
+            "ssh_run.command",
+            &ssh_run.ssh_run.command,
+            &task.matrix,
+            report,
+          );
+          if let Some(test) = &ssh_run.ssh_run.test {
+            self.validate_matrix_references_in_value(task_name, "ssh_run.test", test, &task.matrix, report);
+          }
+          if let Some(work_dir) = &ssh_run.ssh_run.work_dir {
+            self.validate_matrix_references_in_value(
+              task_name,
+              "ssh_run.work_dir",
+              work_dir,
+              &task.matrix,
+              report,
+            );
+          }
+          if let Some(identity_file) = &ssh_run.ssh_run.identity_file {
+            self.validate_matrix_references_in_value(
+              task_name,
+              "ssh_run.identity_file",
+              identity_file,
+              &task.matrix,
+              report,
+            );
+          }
+          for option in &ssh_run.ssh_run.options {
+            self.validate_matrix_references_in_value(
+              task_name,
+              "ssh_run.options",
+              option,
+              &task.matrix,
+              report,
+            );
+          }
+        },
+        CommandRunner::JsonExtract(json_extract) => {
+          self.validate_matrix_references_in_value(
+            task_name,
+            "extract_json_from",
+            &json_extract.extract_json_from,
+            &task.matrix,
+            report,
+          );
+          self.validate_matrix_references_in_value(
+            task_name,
+            "json_path",
+            &json_extract.json_path,
+            &task.matrix,
+            report,
+          );
+          self.validate_matrix_references_in_value(
+            task_name,
+            "save_as",
+            &json_extract.save_as,
+            &task.matrix,
+            report,
+          );
+        },
+        CommandRunner::WriteOutput(write_output) => {
+          self.validate_matrix_references_in_value(
+            task_name,
+            "write_output",
+            &write_output.write_output,
+            &task.matrix,
+            report,
+          );
+          self.validate_matrix_references_in_value(
+            task_name,
+            "to_file",
+            &write_output.to_file,
+            &task.matrix,
+            report,
+          );
+        },
+        CommandRunner::ContainerRun(_) | CommandRunner::ContainerBuild(_) | CommandRunner::TaskRun(_) => {},
+      }
+    }
+  }
+
+  fn validate_matrix_references_in_value(
+    &self,
+    task_name: &str,
+    field: &str,
+    value: &str,
+    matrix: &HashMap<String, Vec<String>>,
+    report: &mut ValidationReport,
+  ) {
+    let mut seen = HashSet::new();
+    for key in extract_matrix_references(value) {
+      if !matrix.contains_key(&key) && seen.insert(key.clone()) {
+        report.push_error(
+          Some(task_name),
+          Some(field),
+          format!("Unknown matrix key reference: {}", key),
         );
       }
     }
@@ -1408,6 +1570,119 @@ mod tests {
       &report,
       "inputs",
       "Cached task contains shell-derived or runtime-derived command inputs but declares no inputs; cache invalidation may miss external changes"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_allows_valid_matrix_definition() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          matrix:
+            os:
+              - linux
+              - macos
+            arch:
+              - x86_64
+          environment:
+            TARGET: ${{ matrix.os }}-${{ matrix.arch }}
+          commands:
+            - command: echo ${{ matrix.os }} ${{ matrix.arch }}
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!report.has_errors());
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_empty_matrix_key() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          matrix:
+            "":
+              - linux
+          commands:
+            - command: echo build
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(&report, "matrix", "Matrix key must not be empty"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_empty_matrix_value_list() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          matrix:
+            os: []
+          commands:
+            - command: echo build
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "matrix",
+      "Matrix 'os' must define at least one value"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_unknown_matrix_reference_in_command() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          matrix:
+            os:
+              - linux
+          commands:
+            - command: echo ${{ matrix.arch }}
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "command",
+      "Unknown matrix key reference: arch"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_rejects_unknown_matrix_reference_in_environment() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          matrix:
+            os:
+              - linux
+          environment:
+            TARGET: ${{ matrix.arch }}
+          commands:
+            - command: echo build
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "environment",
+      "Unknown matrix key reference: arch"
     ));
     Ok(())
   }
