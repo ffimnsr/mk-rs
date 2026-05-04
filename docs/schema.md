@@ -62,6 +62,8 @@ mk schema > schema.json
 | `mk run <task> --force` | Bypass task cache and force execution. |
 | `mk run <task> --json-events` | Emit newline-delimited JSON task and command events. |
 | `mk clean-cache` | Remove persisted task cache metadata. |
+| `mk doctor` | Diagnose mk setup and configuration. |
+| `mk watch <task>` | Watch files and re-run a task on changes. |
 
 Planning commands are side-effect free and do not evaluate shell or template expressions.
 Relative `extends`, `env_file`, command `work_dir`, container build `context`, and `containerfile` paths resolve from the config file directory. Task cache `inputs` and `outputs` prefer a single effective local command `work_dir` when the task defines one consistently.
@@ -137,6 +139,7 @@ Validation errors when a deprecated root-level field and the `secrets` block bot
 | cache | TaskCache | - | false | Enable incremental cache lookups for the task. |
 | inputs | String[] | [] | false | Files or glob patterns that affect task output. |
 | outputs | String[] | [] | false | Files produced by the task. |
+| matrix | HashMap<String, String[]> | {} | false | The matrix variants available for this task. |
 | ignore_errors | bool | false | false | Ignore errors if the task fails? |
 | verbose | bool | true | false | Show verbose output. |
 

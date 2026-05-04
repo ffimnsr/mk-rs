@@ -752,6 +752,17 @@
           "description": "The labels for the task",
           "type": "object"
         },
+        "matrix": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "The matrix variants available for this task",
+          "type": "object"
+        },
         "outputs": {
           "default": [],
           "description": "Files produced by the task",

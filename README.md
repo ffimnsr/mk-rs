@@ -19,6 +19,10 @@ Yet another simple task runner.
 
 - **Simple Configuration**: Define your tasks in YAML, JSON, TOML, or Lua, or reuse existing GNU Make targets.
 - **Flexible Execution**: Run tasks locally, in containers, or as nested tasks.
+- **Matrix Task Variants**: Parameterize tasks with matrix configurations and filter them with `--set`.
+- **File Watching**: Dynamically watch files and re-run tasks on changes with `mk watch`.
+- **Secrets Management**: Fully integrated secret vault with built-in PGP or system GPG backend.
+- **Diagnostics**: Easily troubleshoot setup and configuration issues with `mk doctor`.
 - **Error Handling**: Control how errors are handled with `ignore_errors`.
 - **Verbose Output**: Enable verbose output for detailed logs.
 

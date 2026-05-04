@@ -1,5 +1,6 @@
 /.trigger
 /AGENTS.md
+/GEMINI.md
 /target
 **/*.rs.bk
 /passport.db
