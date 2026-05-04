@@ -195,21 +195,6 @@ Capability matrix:
 - `watch`: unsupported
 - `labels`: unsupported
 
-Roadmap split:
-
-- milestone 1 baseline: discovery, import, list, completion, delegated run, docs, guardrails
-- milestone 2 parity: imported descriptions, prerequisite graph import, plan, validate, doctor, selector quality
-
-Recent workflow features:
-
-- `mk validate` validates task graphs and command configuration without running anything.
-- `mk plan <task>` and `mk run <task> --dry-run` show the resolved execution plan.
-- `mk run <task> --json-events` emits newline-delimited JSON task and command events.
-- Tasks can opt into incremental caching with `inputs`, `outputs`, and `cache.enabled`.
-- Cached tasks that depend on other tasks should declare dependency-produced files in `inputs` so cache invalidation sees dependency side effects.
-- Container commands can select `runtime: docker|nerdctl|podman|auto`.
-- Local `command:` steps can save stdout with `save_output_as` and reuse it later via `${{ outputs.NAME }}`.
-
 ### Cache semantics
 
 Cache hit only skips task command execution.
