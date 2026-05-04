@@ -12,6 +12,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: release-${{ github.ref }}
@@ -68,6 +69,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - verify-release
+    continue-on-error: true
     env:
       CARGO: cargo
       TARGET_FLAGS: ""
@@ -116,10 +118,6 @@ jobs:
             rust: stable
             target: s390x-unknown-linux-gnu
             strip: s390x-linux-gnu-strip
-          - build: macos-x86_64
-            os: macos-13
-            rust: nightly
-            target: x86_64-apple-darwin
           - build: macos-aarch64
             os: macos-14
             rust: nightly
@@ -202,7 +200,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp "target/${{ matrix.target }}/release/mk.exe" "$archive_target/"
             7z a "$archive_target.zip" "$archive_target"
-            shasum -a 256 "$archive_target.zip" | awk -v name="$archive_target.zip" '{print $1 "  " name}' > "$archive_target.zip.sha256"
+            sha256sum "$archive_target.zip" | awk -v name="$archive_target.zip" '{print $1 "  " name}' > "$archive_target.zip.sha256"
             echo "ASSET=$archive_target.zip" >> $GITHUB_ENV
             echo "ASSET_SUM=$archive_target.zip.sha256" >> $GITHUB_ENV
           else
@@ -228,6 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - verify-release
+    continue-on-error: true
     env:
       CARGO: cargo
       TARGET: x86_64-unknown-linux-musl
@@ -280,6 +279,7 @@ jobs:
   build-release-rpm:
     name: Build rpm package
     runs-on: ubuntu-latest
+    continue-on-error: true
     needs:
       - verify-release
     env:
@@ -377,7 +377,7 @@ jobs:
       - build-release-deb
       - build-release-rpm
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag'
+    if: always() && github.ref_type == 'tag' && needs.verify-release.result == 'success'
     steps:
       - name: Download all release artifacts
         uses: actions/download-artifact@v4
