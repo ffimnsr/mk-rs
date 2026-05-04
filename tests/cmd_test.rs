@@ -227,10 +227,14 @@ fn wait_for_file_line_count(
     }
 
     if std::time::Instant::now() >= deadline {
+      let path_text = path
+        .to_utf8()
+        .map(str::to_string)
+        .unwrap_or_else(|_| format!("{path:?}"));
       anyhow::bail!(
         "timed out waiting for {} line(s) in {}",
         expected_lines,
-        path.display()
+        path_text
       );
     }
 
@@ -7346,7 +7350,10 @@ fn test_watch_file_change_triggers_rerun() -> anyhow::Result<()> {
   let stdout = String::from_utf8_lossy(&output.stdout);
   let run_log_contents = std::fs::read_to_string(&run_log)?;
   let occurrences = run_log_contents.lines().count();
-  assert!(occurrences >= 2, "expected at least 2 task runs, got {occurrences} in:\n{run_log_contents}");
+  assert!(
+    occurrences >= 2,
+    "expected at least 2 task runs, got {occurrences} in:\n{run_log_contents}"
+  );
   assert!(
     stdout.contains("Change detected") || stdout.contains("re-running"),
     "expected rerun reason in output, got:\n{stdout}"
