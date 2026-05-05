@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::Serialize;
 
@@ -6,6 +6,7 @@ use crate::defaults::default_shell;
 
 use super::{
   interpolate_matrix_template_string, CommandRunner, MatrixSelector, Shell, Task, TaskArgs, TaskRoot,
+  WhenOutcome,
 };
 
 #[derive(Debug, Serialize)]
@@ -222,6 +223,15 @@ impl Planner {
           None
         };
 
+        // Evaluate `when` conditions at plan time using process env only (side-effect free).
+        let plan_skipped_reason = task
+          .when
+          .as_ref()
+          .and_then(|when| match when.evaluate(&HashMap::new()) {
+            WhenOutcome::Skip(reason) => Some(reason),
+            WhenOutcome::Run => None,
+          });
+
         let planned_variants = variants
           .into_iter()
           .map(|variant| {
@@ -260,7 +270,7 @@ impl Planner {
               base_dir: base_dir.clone(),
               execution_mode,
               max_parallel,
-              skipped_reason: None,
+              skipped_reason: plan_skipped_reason.clone(),
             }
           })
           .collect::<Vec<_>>();
@@ -550,6 +560,88 @@ mod tests {
 
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.steps[0].name, "build[arch=x86_64,os=linux]");
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_sets_skipped_reason_when_os_condition_fails() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        greet:
+          when:
+            os:
+              - __nonexistent_os__
+          commands:
+            - echo hi
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task("greet")?;
+
+    assert!(plan.steps[0].skipped_reason.is_some());
+    assert!(plan.steps[0].skipped_reason.as_deref().unwrap().contains("os"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_no_skipped_reason_when_os_condition_passes() -> anyhow::Result<()> {
+    let current_os = std::env::consts::OS;
+    let yaml = format!(
+      "
+      tasks:
+        greet:
+          when:
+            os:
+              - {current_os}
+          commands:
+            - echo hi
+    "
+    );
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(&yaml)?;
+    let plan = task_root.plan_task("greet")?;
+
+    assert!(plan.steps[0].skipped_reason.is_none());
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_no_skipped_reason_when_no_when_condition() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        greet:
+          commands:
+            - echo hi
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task("greet")?;
+
+    assert!(plan.steps[0].skipped_reason.is_none());
+    Ok(())
+  }
+
+  #[test]
+  fn test_plan_sets_skipped_reason_when_file_missing() -> anyhow::Result<()> {
+    let yaml = "
+      tasks:
+        greet:
+          when:
+            file_exists:
+              - /tmp/__mk_plan_test_nonexistent_file_xyz__
+          commands:
+            - echo hi
+    ";
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let plan = task_root.plan_task("greet")?;
+
+    assert!(plan.steps[0].skipped_reason.is_some());
+    assert!(plan.steps[0]
+      .skipped_reason
+      .as_deref()
+      .unwrap()
+      .contains("file_exists"));
     Ok(())
   }
 }

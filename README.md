@@ -292,6 +292,63 @@ Notes:
 - Label keys starting with `mk.` are reserved; `mk validate` warns if they are used.
 - `mk validate` also warns on empty label keys or empty label values.
 
+### Conditional task execution
+
+Tasks can declare a `when` block with conditions that are evaluated before execution. When any condition fails the task is skipped instead of failing.
+
+Supported condition keys:
+
+| Key | Meaning |
+|---|---|
+| `os` | List of allowed OS names (`linux`, `macos`, `windows`, …). Task skips when the current OS is not in the list. |
+| `env` | List of `KEY=VALUE` strings. Task skips when any variable does not match. |
+| `file_exists` | List of paths. Task skips when any path does not exist on the filesystem. |
+| `command_exists` | List of command names. Task skips when any command is not found on `PATH`. |
+
+All declared conditions must pass for the task to run. An empty `when` block is accepted and has no effect.
+
+```yaml
+tasks:
+  # Only run on Linux
+  linux-setup:
+    when:
+      os:
+        - linux
+    commands:
+      - apt-get install -y build-essential
+
+  # Only run when CI=true is set in the environment
+  ci-checks:
+    when:
+      env:
+        - CI=true
+    commands:
+      - cargo test --release
+
+  # Only run when a lock file exists
+  audit:
+    when:
+      file_exists:
+        - Cargo.lock
+    commands:
+      - cargo audit
+
+  # Only run when docker is available
+  container-build:
+    when:
+      command_exists:
+        - docker
+    commands:
+      - docker build -t myapp .
+```
+
+Notes:
+
+- A skipped task prints `Skipping task '<name>': <reason>` to stdout.
+- When `--json-events` is active, a `task_skipped` event is emitted with `task` and `reason` fields.
+- `mk plan` evaluates `when` conditions at plan time (using the process environment) and marks skipped tasks with a `skip:` line in text output or a `skipped_reason` field in JSON output.
+- Failed conditions skip tasks; they do not cause a non-zero exit status.
+
 ### Shell completion install examples
 
 Task-name completion is dynamic for Bash, Zsh, and Fish: generated completion scripts call back into `mk` and read task names from the active config file. PowerShell and Elvish currently keep the static Clap-generated behavior.

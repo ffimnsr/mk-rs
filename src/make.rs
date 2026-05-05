@@ -16,10 +16,10 @@ pub fn locate_make_binary() -> anyhow::Result<PathBuf> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MakeRuleRecord {
-  target: String,
-  is_not_a_target: bool,
-  prerequisites: Vec<String>,
+pub struct MakeRuleRecord {
+  pub target: String,
+  pub is_not_a_target: bool,
+  pub prerequisites: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,7 +129,7 @@ fn discover_make_rule_records(file_path: &Path) -> anyhow::Result<Vec<MakeRuleRe
   Ok(parse_make_database_rule_records(&stdout))
 }
 
-fn parse_make_database_rule_records(stdout: &str) -> Vec<MakeRuleRecord> {
+pub fn parse_make_database_rule_records(stdout: &str) -> Vec<MakeRuleRecord> {
   let mut in_files_section = false;
   let mut pending_not_a_target = false;
   let mut phony_targets = BTreeSet::new();

@@ -11,7 +11,6 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-hashbrown = "0.16.1"
 serde_yaml = { package = "mk_ext_serde_yaml", path = "../crates/serde-yaml" }
 serde_json = "1.0.134"
 toml = "0.8.19"
@@ -30,6 +29,48 @@ bench = false
 [[bin]]
 name = "fuzz_label_filter"
 path = "fuzz_targets/fuzz_label_filter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_make_parse"
+path = "fuzz_targets/fuzz_make_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_template_interpolate"
+path = "fuzz_targets/fuzz_template_interpolate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_matrix_selector"
+path = "fuzz_targets/fuzz_matrix_selector.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_env_parse"
+path = "fuzz_targets/fuzz_env_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_cache_deserialize"
+path = "fuzz_targets/fuzz_cache_deserialize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vault_meta"
+path = "fuzz_targets/fuzz_vault_meta.rs"
 test = false
 doc = false
 bench = false

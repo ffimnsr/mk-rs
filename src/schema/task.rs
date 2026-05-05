@@ -154,6 +154,10 @@ pub struct TaskArgs {
   #[serde(default)]
   pub verbose: Option<bool>,
 
+  /// Conditional execution predicate; task is skipped when any condition fails
+  #[serde(default)]
+  pub when: Option<super::WhenCondition>,
+
   /// Original legacy secret scalar fields before normalization.
   #[schemars(skip)]
   #[serde(skip)]
@@ -356,6 +360,23 @@ impl TaskArgs {
     context.extend_env_vars(defined_env);
     context.extend_env_vars(additional_env);
     context.extend_env_vars(secret_env);
+
+    // Evaluate `when` conditions against the now-resolved environment.
+    if let Some(when) = &self.when {
+      if let super::WhenOutcome::Skip(reason) = when.evaluate(&context.env_vars) {
+        let task_name = context
+          .current_task_name
+          .clone()
+          .unwrap_or_else(|| "<task>".to_string());
+        println!("Skipping task '{}': {}", task_name, reason);
+        context.emit_event(&serde_json::json!({
+          "event": "task_skipped",
+          "task": task_name,
+          "reason": reason,
+        }))?;
+        return Ok(());
+      }
+    }
 
     let mut rng = rand::thread_rng();
     // Spinners can be found here:

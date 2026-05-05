@@ -320,6 +320,7 @@ impl TaskRoot {
         self.validate_command_outputs(task_name, task, report);
         self.validate_labels(task_name, task, report);
         self.validate_matrix_references(task_name, task, report);
+        self.validate_when(task_name, task, report);
       },
     }
   }
@@ -336,6 +337,58 @@ impl TaskRoot {
           Some(task_name),
           Some("matrix"),
           format!("Matrix '{}' must define at least one value", matrix_name),
+        );
+      }
+    }
+  }
+
+  fn validate_when(&self, task_name: &str, task: &super::TaskArgs, report: &mut ValidationReport) {
+    let Some(when) = &task.when else {
+      return;
+    };
+
+    for value in &when.os {
+      if value.trim().is_empty() {
+        report.push_error(
+          Some(task_name),
+          Some("when.os"),
+          "when.os entry must not be empty",
+        );
+      }
+    }
+
+    for value in &when.env {
+      if value.trim().is_empty() {
+        report.push_error(
+          Some(task_name),
+          Some("when.env"),
+          "when.env entry must not be empty",
+        );
+      } else if !value.contains('=') {
+        report.push_error(
+          Some(task_name),
+          Some("when.env"),
+          format!("when.env entry must use KEY=VALUE format: '{}'", value),
+        );
+      }
+    }
+
+    for value in &when.file_exists {
+      if value.trim().is_empty() {
+        report.push_error(
+          Some(task_name),
+          Some("when.file_exists"),
+          "when.file_exists entry must not be empty",
+        );
+      }
+    }
+
+    for value in &when.command_exists {
+      if value.trim().is_empty() {
+        report.push_error(
+          Some(task_name),
+          Some("when.command_exists"),
+          "when.command_exists entry must not be empty",
         );
       }
     }
@@ -1684,6 +1737,172 @@ mod tests {
       "environment",
       "Unknown matrix key reference: arch"
     ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_accepts_all_known_keys() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            os:
+              - linux
+              - macos
+            env:
+              - CI=true
+            file_exists:
+              - Cargo.toml
+            command_exists:
+              - cargo
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!report.has_errors(), "unexpected errors: {:?}", report.issues);
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_rejects_unknown_key() {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            platform: linux
+          commands:
+            - command: echo deploy
+    "#;
+
+    assert!(
+      serde_yaml::from_str::<TaskRoot>(yaml).is_err(),
+      "expected deserialization to fail for unknown when key"
+    );
+  }
+
+  #[test]
+  fn test_validate_when_rejects_empty_os_entry() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            os:
+              - ""
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(&report, "when.os", "when.os entry must not be empty"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_rejects_env_entry_without_equals() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            env:
+              - CI
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "when.env",
+      "when.env entry must use KEY=VALUE format: 'CI'"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_rejects_empty_env_entry() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            env:
+              - ""
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(&report, "when.env", "when.env entry must not be empty"));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_rejects_empty_file_exists_entry() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            file_exists:
+              - ""
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "when.file_exists",
+      "when.file_exists entry must not be empty"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_rejects_empty_command_exists_entry() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        deploy:
+          when:
+            command_exists:
+              - ""
+          commands:
+            - command: echo deploy
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(has_error(
+      &report,
+      "when.command_exists",
+      "when.command_exists entry must not be empty"
+    ));
+    Ok(())
+  }
+
+  #[test]
+  fn test_validate_when_absent_produces_no_errors() -> anyhow::Result<()> {
+    let yaml = r#"
+      tasks:
+        build:
+          commands:
+            - command: echo build
+    "#;
+
+    let task_root = serde_yaml::from_str::<TaskRoot>(yaml)?;
+    let report = task_root.validate();
+
+    assert!(!report.has_errors());
     Ok(())
   }
 }

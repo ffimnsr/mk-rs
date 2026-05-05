@@ -144,7 +144,7 @@ pub(crate) fn load_env_files_in_dir(
   Ok(local_env)
 }
 
-pub(crate) fn parse_env_contents(contents: &str) -> HashMap<String, String> {
+pub fn parse_env_contents(contents: &str) -> HashMap<String, String> {
   let mut env_vars = HashMap::new();
 
   for line in contents.lines() {

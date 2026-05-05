@@ -7579,3 +7579,432 @@ fn test_watch_mkignore_negated_pattern_reinclude() -> anyhow::Result<()> {
 
   Ok(())
 }
+
+// ── when: conditional execution (Phase 2) ────────────────────────────────────
+
+#[test]
+fn test_when_os_matching_runs_task() -> anyhow::Result<()> {
+  let current_os = std::env::consts::OS;
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-os.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - {current_os}
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      current_os = current_os,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success();
+  assert!(marker.exists(), "task should have run when OS matched");
+  Ok(())
+}
+
+#[test]
+fn test_when_os_non_matching_skips_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-os-skip.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - this-os-does-not-exist
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Skipping task 'deploy'"))
+    .stdout(predicates::str::contains("when.os"));
+  assert!(!marker.exists(), "task should have been skipped");
+  Ok(())
+}
+
+#[test]
+fn test_when_os_skip_emits_json_event() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-os-json.yaml",
+    r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - this-os-does-not-exist
+    commands:
+      - command: echo hello
+        verbose: false
+"#,
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .arg("--json-events")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("\"event\":\"task_skipped\""))
+    .stdout(predicates::str::contains("\"task\":\"deploy\""));
+  Ok(())
+}
+
+#[test]
+fn test_when_env_matching_runs_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-env-match.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      env:
+        - CI=true
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .env("CI", "true")
+    .assert()
+    .success();
+  assert!(marker.exists(), "task should have run when env matched");
+  Ok(())
+}
+
+#[test]
+fn test_when_env_mismatch_skips_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-env-mismatch.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      env:
+        - DEPLOY_TARGET=prod
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .env("DEPLOY_TARGET", "staging")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Skipping task 'deploy'"))
+    .stdout(predicates::str::contains("when.env"));
+  assert!(!marker.exists(), "task should have been skipped");
+  Ok(())
+}
+
+#[test]
+fn test_when_env_missing_skips_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-env-missing.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      env:
+        - REQUIRED_VAR=value
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .env_remove("REQUIRED_VAR")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Skipping task 'deploy'"))
+    .stdout(predicates::str::contains("when.env"));
+  assert!(!marker.exists(), "task should have been skipped");
+  Ok(())
+}
+
+#[test]
+fn test_when_file_exists_present_runs_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let sentinel = temp_dir.path().join("sentinel.txt");
+  std::fs::write(&sentinel, "present")?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-file-exists.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      file_exists:
+        - {sentinel}
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      sentinel = common::sh_path(&sentinel),
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success();
+  assert!(marker.exists(), "task should have run when file existed");
+  Ok(())
+}
+
+#[test]
+fn test_when_file_exists_missing_skips_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-file-missing.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      file_exists:
+        - /this/path/does/not/exist/ever
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Skipping task 'deploy'"))
+    .stdout(predicates::str::contains("when.file_exists"));
+  assert!(!marker.exists(), "task should have been skipped");
+  Ok(())
+}
+
+#[test]
+fn test_when_command_exists_present_runs_task() -> anyhow::Result<()> {
+  let cmd_name = if cfg!(windows) { "cmd" } else { "sh" };
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-cmd-exists.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      command_exists:
+        - {cmd_name}
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      cmd_name = cmd_name,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success();
+  assert!(marker.exists(), "task should have run when command existed");
+  Ok(())
+}
+
+#[test]
+fn test_when_command_exists_missing_skips_task() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let marker = temp_dir.path().join("ran.txt");
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-cmd-missing.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      command_exists:
+        - this-command-does-not-exist-ever
+    commands:
+      - command: touch {marker}
+        verbose: false
+"#,
+      marker = common::sh_path(&marker),
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Skipping task 'deploy'"))
+    .stdout(predicates::str::contains("when.command_exists"));
+  assert!(!marker.exists(), "task should have been skipped");
+  Ok(())
+}
+
+// ── when: conditional execution (Phase 3 — plan) ─────────────────────────────
+
+#[test]
+fn test_plan_when_os_mismatch_shows_skip_in_text() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-plan-os.yaml",
+    r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - __nonexistent_os__
+    commands:
+      - echo deploy
+"#,
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("skip:"))
+    .stdout(predicates::str::contains("when.os"));
+  Ok(())
+}
+
+#[test]
+fn test_plan_when_os_match_no_skip_in_text() -> anyhow::Result<()> {
+  let current_os = std::env::consts::OS;
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-plan-os-pass.yaml",
+    &format!(
+      r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - {current_os}
+    commands:
+      - echo deploy
+"#
+    ),
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("skip:").not());
+  Ok(())
+}
+
+#[test]
+fn test_plan_when_os_mismatch_shows_skip_in_json() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "when-plan-os-json.yaml",
+    r#"
+tasks:
+  deploy:
+    when:
+      os:
+        - __nonexistent_os__
+    commands:
+      - echo deploy
+"#,
+  )?;
+  Command::new(assert_cmd::cargo::cargo_bin!("mk"))
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("plan")
+    .arg("--json")
+    .arg("deploy")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("skipped_reason"))
+    .stdout(predicates::str::contains("when.os"));
+  Ok(())
+}

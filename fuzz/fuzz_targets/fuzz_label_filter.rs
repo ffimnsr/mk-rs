@@ -1,6 +1,6 @@
 #![no_main]
 
-use hashbrown::HashMap;
+use std::collections::HashMap;
 use libfuzzer_sys::fuzz_target;
 use mk_lib::label_filter::{
   matches_all,

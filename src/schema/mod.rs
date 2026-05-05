@@ -10,6 +10,7 @@ mod task_root;
 mod use_cargo;
 mod use_npm;
 mod validation;
+mod when;
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -81,6 +82,7 @@ pub use task_root::*;
 pub use use_cargo::*;
 pub use use_npm::*;
 pub use validation::*;
+pub use when::*;
 
 use crate::secrets::load_secret_value;
 
