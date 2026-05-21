@@ -832,6 +832,17 @@
             "boolean",
             "null"
           ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WhenCondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Conditional execution predicate; task is skipped when any condition fails"
         }
       },
       "required": [
@@ -981,6 +992,45 @@
             "string",
             "null"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "WhenCondition": {
+      "additionalProperties": false,
+      "description": "Conditional execution predicate for a task.\n\nAll provided keys are evaluated before the task runs. A task is skipped\nwhen any declared condition fails. Unknown keys are rejected at parse time.",
+      "properties": {
+        "command_exists": {
+          "default": [],
+          "description": "Command names that must be present on `PATH` before the task runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "default": [],
+          "description": "Environment variable conditions in `KEY=VALUE` format. The task is\nskipped when any entry does not match the current environment.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "file_exists": {
+          "default": [],
+          "description": "Filesystem paths that must exist before the task runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "os": {
+          "default": [],
+          "description": "Target OS values that permit execution. The task is skipped when the\ncurrent OS does not appear in this list.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
