@@ -31,7 +31,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-rust-${{ runner.os }}
+          shared-key: mk-rust-${{ runner.os }}-lint
           cache-on-failure: "true"
       - name: Check formatting
         run: cargo fmt --all --check
@@ -50,7 +50,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-rust-${{ runner.os }}
+          shared-key: mk-rust-${{ runner.os }}-docs
           cache-on-failure: "true"
       - name: Build docs with warnings denied
         env:
@@ -69,7 +69,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-rust-${{ runner.os }}
+          shared-key: mk-rust-${{ runner.os }}-bench
           cache-on-failure: "true"
       - name: Compile benchmarks
         run: cargo bench --workspace --no-run --locked
@@ -87,7 +87,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-rust-${{ runner.os }}
+          shared-key: mk-rust-${{ runner.os }}-check
           cache-on-failure: "true"
       - name: Run cargo check tool
         run: cargo check --all-targets --all-features --tests --benches --release --locked --verbose
@@ -140,7 +140,9 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-rust-${{ runner.os }}
+          # Isolate cache per target: cross containers must never reuse host
+          # proc-macro artifacts built against a different glibc.
+          shared-key: mk-rust-${{ runner.os }}-test-${{ matrix.build }}
           cache-on-failure: "true"
       - name: Set up QEMU
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''

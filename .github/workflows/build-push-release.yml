@@ -34,7 +34,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-release-${{ runner.os }}
+          shared-key: mk-release-${{ runner.os }}-verify
           cache-on-failure: "true"
       - name: Resolve release version
         id: version
@@ -144,7 +144,9 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-release-${{ runner.os }}
+          # Isolate cache per target: cross containers must never reuse host
+          # proc-macro artifacts built against a different glibc.
+          shared-key: mk-release-${{ runner.os }}-${{ matrix.target }}
           cache-on-failure: "true"
       - name: Install cross
         if: matrix.os == 'ubuntu-latest' && matrix.target != ''
@@ -247,7 +249,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-release-${{ runner.os }}
+          shared-key: mk-release-${{ runner.os }}-deb
           cache-on-failure: "true"
       - name: Install cargo-deb
         shell: bash
@@ -302,7 +304,7 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: mk-release-${{ runner.os }}
+          shared-key: mk-release-${{ runner.os }}-rpm
           cache-on-failure: "true"
       - name: Build release binary
         run: ${{ env.CARGO }} build --locked --verbose --release --target ${{ env.TARGET }} ${{ env.TARGET_FLAGS }}
