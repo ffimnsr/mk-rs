@@ -1,11 +1,6 @@
-use std::io::{BufRead as _, BufReader};
-use std::thread;
-
-use crate::handle_output;
-use crate::schema::get_output_handler;
-use anyhow::Context;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use std::process::Stdio;
 
 use super::TaskContext;
 
@@ -63,7 +58,7 @@ impl CommandRunner {
       CommandRunner::LocalRun(local_run) => local_run.execute(context),
       CommandRunner::SshRun(ssh_run) => ssh_run.execute(context),
       CommandRunner::TaskRun(task_run) => task_run.execute(context),
-      CommandRunner::CommandRun(command) => self.execute_command(context, command),
+      CommandRunner::CommandRun(command) => self.execute_command(context, command, allow_cancellation),
     };
 
     context.emit_event(&serde_json::json!({
@@ -76,31 +71,40 @@ impl CommandRunner {
     result
   }
 
-  fn execute_command(&self, context: &TaskContext, command: &str) -> anyhow::Result<()> {
+  fn execute_command(
+    &self,
+    context: &TaskContext,
+    command: &str,
+    allow_cancellation: bool,
+  ) -> anyhow::Result<()> {
     assert!(!command.is_empty());
 
     let ignore_errors = context.ignore_errors();
     let verbose = context.verbose();
     let shell = context.shell();
 
-    let stdout = get_output_handler(verbose);
-    let stderr = get_output_handler(verbose);
-
+    // Keep streams attached to the terminal when not suppressed so child
+    // processes can detect a TTY and render their own progress output.
     let mut cmd = shell.proc();
-    cmd.arg(command).stdout(stdout).stderr(stderr);
+    cmd
+      .arg(command)
+      .stdout(uncaptured_output(verbose))
+      .stderr(uncaptured_output(verbose));
 
     // Inject environment variables
     for (key, value) in context.env_vars.iter() {
       cmd.env(key, value);
     }
 
-    let mut cmd = cmd.spawn()?;
-    if verbose {
-      handle_output!(cmd.stdout, context);
-      handle_output!(cmd.stderr, context);
-    }
-
-    let status = cmd.wait()?;
+    let mut child = cmd.spawn()?;
+    // Hide mk's progress bars while the child owns the terminal, then restore
+    // them once the command exits. Parallel commands already share one terminal,
+    // so only the serial path gets an exclusive draw window.
+    let status = if verbose && !allow_cancellation {
+      context.multi.suspend(|| child.wait())?
+    } else {
+      child.wait()?
+    };
     if !status.success() && !ignore_errors {
       anyhow::bail!("Command failed - {}", command);
     }
@@ -119,6 +123,17 @@ impl CommandRunner {
       CommandRunner::TaskRun(_) => "task_run",
       CommandRunner::CommandRun(_) => "command_run",
     }
+  }
+}
+
+/// Stdio for streams that mk does not capture. Inheriting keeps the child's
+/// streams attached to the terminal so tools can detect a TTY and render their
+/// own progress output.
+pub(crate) fn uncaptured_output(verbose: bool) -> Stdio {
+  if verbose {
+    Stdio::inherit()
+  } else {
+    Stdio::null()
   }
 }
 

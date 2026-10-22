@@ -8008,3 +8008,65 @@ tasks:
     .stdout(predicates::str::contains("when.os"));
   Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn test_verbose_command_streams_output_without_newline() -> anyhow::Result<()> {
+  use std::io::Read as _;
+  use std::process::Stdio;
+  use std::sync::mpsc;
+  use std::time::Duration;
+
+  let temp_dir = TempDir::new()?;
+  let config_file_path = common::setup_yaml(
+    &temp_dir,
+    "stream-output.yaml",
+    r#"
+tasks:
+  stream:
+    commands:
+      - printf 'partial-output'; sleep 5; printf '\ndone\n'
+"#,
+  )?;
+
+  let mut child = std::process::Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("-c")
+    .arg(&config_file_path)
+    .arg("run")
+    .arg("stream")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
+
+  let mut stdout = child.stdout.take().expect("stdout pipe");
+  let (tx, rx) = mpsc::channel();
+  std::thread::spawn(move || {
+    let mut buffer = [0_u8; 64];
+    while let Ok(read) = stdout.read(&mut buffer) {
+      if read == 0 {
+        break;
+      }
+      if tx
+        .send(String::from_utf8_lossy(&buffer[..read]).to_string())
+        .is_err()
+      {
+        break;
+      }
+    }
+  });
+
+  // Output without a trailing newline must reach the terminal while the
+  // command is still running, as progress bars rely on carriage returns.
+  let received = rx
+    .recv_timeout(Duration::from_secs(3))
+    .expect("expected streamed output before command exit");
+  assert!(
+    received.contains("partial-output"),
+    "expected streamed output, got {received:?}"
+  );
+
+  let status = child.wait()?;
+  assert!(status.success());
+  Ok(())
+}

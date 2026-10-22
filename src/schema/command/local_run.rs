@@ -16,6 +16,7 @@ use std::os::fd::AsRawFd as _;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt as _;
 
+use super::uncaptured_output;
 use crate::defaults::{default_ignore_errors, default_verbose};
 use crate::handle_output;
 #[cfg(unix)]
@@ -96,6 +97,9 @@ impl LocalRun {
     // to the parent process. This is because the command will be run in the
     // foreground and the user will be able to see the output.
     let verbose = interactive || self.verbose(context);
+    // Streams that are not captured stay attached to the terminal so child
+    // processes keep TTY detection and can draw their own progress bars.
+    let inherit_output = !interactive && verbose && !capture_stdout && !capture_stderr;
 
     // Skip the command if the test fails
     if self.test(context).is_err() {
@@ -121,10 +125,21 @@ impl LocalRun {
       verbose,
       interactive,
     )?;
-    let result = if allow_cancellation {
-      spawned.wait_for_completion_or_cancellation(context, &command)?
+    let command_arg = command.as_str();
+    let wait = move || {
+      if allow_cancellation {
+        spawned.wait_for_completion_or_cancellation(context, command_arg)
+      } else {
+        spawned.wait_for_completion()
+      }
+    };
+    // Hide mk's progress bars while the child owns the terminal, then restore
+    // them once the command exits. Parallel commands already share one terminal,
+    // so only the serial path gets an exclusive draw window.
+    let result = if inherit_output && !allow_cancellation {
+      context.multi.suspend(wait)?
     } else {
-      spawned.wait_for_completion()?
+      wait()?
     };
     self.finish_execution(
       context,
@@ -167,7 +182,7 @@ impl LocalRun {
       } else if capture_stderr {
         cmd.stderr(Stdio::piped());
       } else {
-        cmd.stderr(get_output_handler(verbose));
+        cmd.stderr(uncaptured_output(verbose));
       }
     } else if capture_stderr {
       cmd.stderr(Stdio::piped());
@@ -175,21 +190,19 @@ impl LocalRun {
         context.multi.set_draw_target(ProgressDrawTarget::hidden());
         cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit());
       } else {
-        cmd.stdout(get_output_handler(verbose));
+        cmd.stdout(uncaptured_output(verbose));
       }
-    } else if verbose {
-      if interactive {
-        context.multi.set_draw_target(ProgressDrawTarget::hidden());
+    } else if interactive {
+      context.multi.set_draw_target(ProgressDrawTarget::hidden());
 
-        cmd
-          .stdin(Stdio::inherit())
-          .stdout(Stdio::inherit())
-          .stderr(Stdio::inherit());
-      } else {
-        let stdout = get_output_handler(verbose);
-        let stderr = get_output_handler(verbose);
-        cmd.stdout(stdout).stderr(stderr);
-      }
+      cmd
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    } else {
+      cmd
+        .stdout(uncaptured_output(verbose))
+        .stderr(uncaptured_output(verbose));
     }
 
     if let Some(work_dir) = self.resolved_work_dir(context) {
@@ -253,13 +266,6 @@ impl LocalRun {
     } else {
       None
     };
-
-    if verbose && !interactive && !capture_stdout {
-      handle_output!(child.stdout, context);
-    }
-    if verbose && !interactive && !capture_stderr {
-      handle_output!(child.stderr, context);
-    }
 
     Ok(SpawnedLocalCommand {
       child,
@@ -349,6 +355,7 @@ impl LocalRun {
 
     #[cfg(unix)]
     {
+      let inherit_output = verbose && !capture_stdout && !capture_stderr;
       let _raw_mode = RawModeGuard::acquire()?;
       let term = Term::stderr();
       let _ = term.write_line("Press R or r to restart the running command.");
@@ -356,12 +363,18 @@ impl LocalRun {
 
       loop {
         let spawned = self.spawn_command(context, command, capture_stdout, capture_stderr, verbose, false)?;
-        match spawned.wait_for_completion_or_retrigger() {
-          Ok(CommandOutcome::Completed {
+        let wait = move || spawned.wait_for_completion_or_retrigger();
+        let outcome = if inherit_output {
+          context.multi.suspend(wait)?
+        } else {
+          wait()?
+        };
+        match outcome {
+          CommandOutcome::Completed {
             status,
             captured_stdout,
             captured_stderr,
-          }) => {
+          } => {
             let capture_exit_code = self.save_exit_code_as.is_some();
             return self.finish_execution(
               context,
@@ -377,13 +390,12 @@ impl LocalRun {
               },
             );
           },
-          Ok(CommandOutcome::RestartRequested) => {
+          CommandOutcome::RestartRequested => {
             let _ = term.write_line("Restarting command...");
           },
-          Ok(CommandOutcome::Interrupted) => {
+          CommandOutcome::Interrupted => {
             return Err(ExecutionInterrupted.into());
           },
-          Err(error) => return Err(error),
         }
       }
     }
@@ -398,16 +410,21 @@ impl LocalRun {
     if !context.json_events {
       let _ = context.multi.println(request.reason);
     }
-    let result = self
-      .spawn_command(
-        context,
-        command,
-        request.capture_stdout,
-        request.capture_stderr,
-        request.verbose,
-        false,
-      )?
-      .wait_for_completion()?;
+    let spawned = self.spawn_command(
+      context,
+      command,
+      request.capture_stdout,
+      request.capture_stderr,
+      request.verbose,
+      false,
+    )?;
+    let inherit_output = request.verbose && !request.capture_stdout && !request.capture_stderr;
+    let wait = move || spawned.wait_for_completion();
+    let result = if inherit_output {
+      context.multi.suspend(wait)?
+    } else {
+      wait()?
+    };
     self.finish_execution(context, command, result, request.options)
   }
 

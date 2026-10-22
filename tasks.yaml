@@ -5,6 +5,10 @@ tasks:
     commands:
       - command: cargo install --locked mk
     description: Install mk
+  install-local:
+    commands:
+      - command: cargo install --locked --force --path . --root ~/.local
+    description: Build and install mk from this checkout to ~/.local/bin
   install-githooks:
     commands:
       - command: git config --local core.hooksPath .githooks
