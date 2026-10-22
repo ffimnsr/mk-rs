@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.19 - 2026-10-22
+
+### Features
+
+- add conditional task execution (when clause) (`f00cc1c`)
+- update schema as it drifted because of `when` (`c0ea177`)
+- update display on stdout output (`95b93f5`)
+
+### Fixes
+
+- clear lint, format, and test failures (`d09094b`)
+
+### Documentation
+
+- sync README, schema, and update wiki submodule (`9ceb2ec`)
+
+### Maintenance
+
+- bump yanked spin to 0.9.9 (`6a09b54`)
+
 ## 0.7.18 - 2026-05-05
 
 ### Features
