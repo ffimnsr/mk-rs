@@ -221,6 +221,8 @@ impl LocalRun {
       }
     }
 
+    cmd.env(TaskContext::NESTED_PROCESS_ENV, "1");
+
     // Inject environment variables
     for (key, value) in context.env_vars.iter() {
       cmd.env(key, value);

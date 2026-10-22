@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use indicatif::{MultiProgress, ProgressDrawTarget};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -12,6 +13,10 @@ use crate::defaults::{default_ignore_errors, default_shell, default_verbose};
 use crate::secrets::SecretConfig;
 
 use super::{ActiveTasks, CompletedTasks, ContainerRuntime, MatrixSelector, Shell, TaskRoot};
+
+const STATUS_SPINNER_TEMPLATE: &str = "{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ";
+const STATUS_SPINNER_TICK_CHARS: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⦿";
+const STATUS_SPINNER_TICK_INTERVAL: Duration = Duration::from_millis(80);
 
 /// Used to pass information to tasks
 /// This use arc to allow for sharing of data between tasks
@@ -22,6 +27,7 @@ pub struct TaskContext {
   pub active_tasks: ActiveTasks,
   pub completed_tasks: CompletedTasks,
   pub multi: Arc<MultiProgress>,
+  pub status_pb: Arc<Mutex<Option<ProgressBar>>>,
   pub env_vars: HashMap<String, String>,
   pub matrix_vars: HashMap<String, String>,
   pub matrix_selectors: Vec<MatrixSelector>,
@@ -42,6 +48,16 @@ pub struct TaskContext {
 }
 
 impl TaskContext {
+  pub const NESTED_PROCESS_ENV: &'static str = "MK_NESTED_PROCESS";
+
+  fn new_multi_progress(json_events: bool) -> Arc<MultiProgress> {
+    if json_events || std::env::var_os(Self::NESTED_PROCESS_ENV).is_some() {
+      Arc::new(MultiProgress::with_draw_target(ProgressDrawTarget::hidden()))
+    } else {
+      Arc::new(MultiProgress::new())
+    }
+  }
+
   pub fn empty() -> Self {
     let mp = MultiProgress::with_draw_target(ProgressDrawTarget::hidden());
     Self {
@@ -49,6 +65,7 @@ impl TaskContext {
       active_tasks: Arc::new(Mutex::new(HashSet::new())),
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
+      status_pb: Arc::new(Mutex::new(None)),
       env_vars: HashMap::new(),
       matrix_vars: HashMap::new(),
       matrix_selectors: Vec::new(),
@@ -76,6 +93,7 @@ impl TaskContext {
       active_tasks: Arc::new(Mutex::new(HashSet::new())),
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi: Arc::new(mp),
+      status_pb: Arc::new(Mutex::new(None)),
       env_vars: HashMap::new(),
       matrix_vars: HashMap::new(),
       matrix_selectors: Vec::new(),
@@ -102,7 +120,8 @@ impl TaskContext {
       task_root: task_root.clone(),
       active_tasks: Arc::new(Mutex::new(HashSet::new())),
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
-      multi: Arc::new(MultiProgress::new()),
+      multi: Self::new_multi_progress(false),
+      status_pb: Arc::new(Mutex::new(None)),
       env_vars: HashMap::new(),
       matrix_vars: HashMap::new(),
       matrix_selectors: Vec::new(),
@@ -130,11 +149,7 @@ impl TaskContext {
     forwarded_args: Vec<String>,
   ) -> Self {
     let cache_store = CacheStore::load_in_dir(&task_root.cache_base_dir()).unwrap_or_default();
-    let multi = if json_events {
-      Arc::new(MultiProgress::with_draw_target(ProgressDrawTarget::hidden()))
-    } else {
-      Arc::new(MultiProgress::new())
-    };
+    let multi = Self::new_multi_progress(json_events);
     let mut env_vars: HashMap<String, String> = HashMap::new();
     env_vars.insert("MK_RUN_ARGC".to_string(), forwarded_args.len().to_string());
     for (i, arg) in forwarded_args.iter().enumerate() {
@@ -145,6 +160,7 @@ impl TaskContext {
       active_tasks: Arc::new(Mutex::new(HashSet::new())),
       completed_tasks: Arc::new(Mutex::new(HashSet::new())),
       multi,
+      status_pb: Arc::new(Mutex::new(None)),
       env_vars,
       matrix_vars: HashMap::new(),
       matrix_selectors: Vec::new(),
@@ -171,6 +187,7 @@ impl TaskContext {
       active_tasks: context.active_tasks.clone(),
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
+      status_pb: context.status_pb.clone(),
       env_vars: context.env_vars.clone(),
       matrix_vars: context.matrix_vars.clone(),
       matrix_selectors: context.matrix_selectors.clone(),
@@ -183,7 +200,7 @@ impl TaskContext {
       verbose: context.verbose,
       force: context.force,
       json_events: context.json_events,
-      is_nested: true,
+      is_nested: context.current_task_name.is_some(),
       forwarded_args: context.forwarded_args.clone(),
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
@@ -197,6 +214,7 @@ impl TaskContext {
       active_tasks: context.active_tasks.clone(),
       completed_tasks: context.completed_tasks.clone(),
       multi: context.multi.clone(),
+      status_pb: context.status_pb.clone(),
       env_vars: context.env_vars.clone(),
       matrix_vars: context.matrix_vars.clone(),
       matrix_selectors: context.matrix_selectors.clone(),
@@ -214,6 +232,54 @@ impl TaskContext {
       cache_store: context.cache_store.clone(),
       current_task_name: context.current_task_name.clone(),
       cancellation_requested: context.cancellation_requested.clone(),
+    }
+  }
+
+  pub fn format_status_message(&self, detail: &str) -> String {
+    match self.current_task_name.as_deref() {
+      Some(name) if !name.is_empty() && name != "<task>" => format!("{}: {}", name, detail),
+      _ => detail.to_string(),
+    }
+  }
+
+  pub fn update_status(&self, prefix: impl Into<String>, detail: impl AsRef<str>) {
+    let Ok(mut guard) = self.status_pb.lock() else {
+      return;
+    };
+    let prefix = prefix.into();
+    let message = self.format_status_message(detail.as_ref());
+
+    let pb = guard.get_or_insert_with(|| {
+      let pb = self.multi.add(ProgressBar::new_spinner());
+      if let Ok(style) = ProgressStyle::with_template(STATUS_SPINNER_TEMPLATE) {
+        pb.set_style(style.tick_chars(STATUS_SPINNER_TICK_CHARS));
+      }
+      pb.set_prefix(prefix.clone());
+      pb.set_message(message.clone());
+      pb.enable_steady_tick(STATUS_SPINNER_TICK_INTERVAL);
+      pb
+    });
+
+    pb.set_prefix(prefix);
+    pb.set_message(message);
+  }
+
+  pub fn finish_status_with_message(&self, detail: impl AsRef<str>) {
+    let Ok(mut guard) = self.status_pb.lock() else {
+      return;
+    };
+    if let Some(pb) = guard.take() {
+      pb.finish_with_message(self.format_status_message(detail.as_ref()));
+    }
+  }
+
+  pub fn clear_status(&self) {
+    let Ok(mut guard) = self.status_pb.lock() else {
+      return;
+    };
+    if let Some(pb) = guard.take() {
+      pb.finish_and_clear();
+      self.multi.remove(&pb);
     }
   }
 
@@ -425,5 +491,25 @@ mod test {
     assert_eq!(context.get_task_output("tag")?, Some("v1.0.0".to_string()));
     assert!(context.has_task_output("tag")?);
     Ok(())
+  }
+
+  #[test]
+  fn test_task_context_single_status_spinner_updates_in_place() {
+    let mut root_context = TaskContext::empty();
+    root_context.set_current_task_name("dev:oracle");
+    root_context.update_status("1/2", "Running task dependencies...");
+
+    let child_context = TaskContext::from_context(&root_context);
+    assert!(child_context.is_nested);
+    child_context.update_status("0/3", "Running task commands in parallel...");
+
+    let guard = root_context.status_pb.lock().expect("status lock");
+    let pb = guard.as_ref().expect("shared spinner should exist");
+    assert_eq!(pb.prefix(), "0/3");
+    assert_eq!(pb.message(), "dev:oracle: Running task commands in parallel...");
+    drop(guard);
+
+    root_context.finish_status_with_message("Commands completed.");
+    assert!(root_context.status_pb.lock().expect("status lock").is_none());
   }
 }

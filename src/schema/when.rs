@@ -199,12 +199,10 @@ mod tests {
 
   #[test]
   fn test_file_exists_present_runs() {
-    // Use an absolute path that is guaranteed to exist.
-    let abs = std::fs::canonicalize("Cargo.toml")
-      .map(|p| p.to_string_lossy().into_owned())
-      .unwrap_or_else(|_| "Cargo.toml".to_string());
+    // Use an absolute path independent of the process cwd, which other tests may mutate.
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let when = WhenCondition {
-      file_exists: vec![abs],
+      file_exists: vec![manifest.to_string_lossy().into_owned()],
       ..Default::default()
     };
     assert_eq!(when.evaluate(&HashMap::new()), WhenOutcome::Run);

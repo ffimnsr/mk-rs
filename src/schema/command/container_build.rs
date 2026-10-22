@@ -117,11 +117,11 @@ impl ContainerBuild {
     if let Some(tags) = &self.container_build.tags {
       for tag in tags {
         let tag = self.get_tag(context, tag.trim())?;
-        let tag = format!("{}:{}", &self.container_build.image_name, tag);
+        let tag = format!("{}:{}", self.container_build.image_name, tag);
         cmd.arg("-t").arg(tag);
       }
     } else {
-      let tag = format!("{}:latest", &self.container_build.image_name);
+      let tag = format!("{}:latest", self.container_build.image_name);
       cmd.arg("-t").arg(tag);
     }
 

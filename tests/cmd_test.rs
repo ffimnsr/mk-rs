@@ -3656,9 +3656,7 @@ fn test_mk_45_ssh_run_captures_output_and_exit_code() -> anyhow::Result<()> {
               command: pwd
               save_output_as: remote_pwd
               save_exit_code_as: remote_code
-            verbose: false
           - command: printf '%s|%s' \"${{{{ outputs.remote_pwd }}}}\" \"${{{{ outputs.remote_code }}}}\"
-            verbose: false
     ",
       remote_dir.to_string_lossy()
     ),
@@ -5120,19 +5118,16 @@ fn test_mk_71_run_label_filter_runs_matching_tasks() -> anyhow::Result<()> {
         description: CI test
         commands:
           - command: echo ran-ci-test
-            verbose: false
       ci-build:
         labels:
           kind: build
         description: CI build
         commands:
           - command: echo ran-ci-build
-            verbose: false
       deploy:
         description: deploy (no labels)
         commands:
           - command: echo ran-deploy
-            verbose: false
     ",
   )?;
   let output = Command::new(cargo::cargo_bin!("mk"))
@@ -5167,14 +5162,12 @@ fn test_mk_71_run_label_filter_multiple_matches_sorted_order() -> anyhow::Result
         description: b task
         commands:
           - command: echo ran-b
-            verbose: false
       a-task:
         labels:
           kind: test
         description: a task
         commands:
           - command: echo ran-a
-            verbose: false
     ",
   )?;
   let output = Command::new(cargo::cargo_bin!("mk"))
@@ -6677,7 +6670,6 @@ fn test_trailing_args_via_run_subcommand() -> anyhow::Result<()> {
       greet:
         commands:
           - command: echo '${{ args.0 }} ${{ args.1 }}'
-            verbose: false
     ",
   )?;
 
@@ -6708,7 +6700,6 @@ fn test_trailing_args_via_direct_task_shortcut() -> anyhow::Result<()> {
       greet:
         commands:
           - command: echo '${{ args.0 }}'
-            verbose: false
     ",
   )?;
 
@@ -6737,7 +6728,6 @@ fn test_trailing_args_len_expression() -> anyhow::Result<()> {
       count:
         commands:
           - command: echo '${{ args.len }}'
-            verbose: false
     ",
   )?;
 
@@ -6769,7 +6759,6 @@ fn test_trailing_args_env_vars_injected() -> anyhow::Result<()> {
       envcheck:
         commands:
           - command: echo \"argc=$MK_RUN_ARGC arg0=$MK_RUN_ARG_0\"
-            verbose: false
     ",
   )?;
 
@@ -6800,7 +6789,6 @@ fn test_trailing_args_preserve_leading_hyphens() -> anyhow::Result<()> {
       flags:
         commands:
           - command: echo '${{ args.0 }} ${{ args.1 }}'
-            verbose: false
     ",
   )?;
 
@@ -6861,7 +6849,6 @@ fn test_trailing_args_no_args_gives_zero_len() -> anyhow::Result<()> {
       count:
         commands:
           - command: echo '${{ args.len }}'
-            verbose: false
     ",
   )?;
 
@@ -7267,7 +7254,6 @@ fn test_watch_uses_task_inputs_as_default_paths() -> anyhow::Result<()> {
           - input.txt
         commands:
           - command: echo build-ran
-            verbose: false
     ",
   )?;
 
@@ -7483,7 +7469,6 @@ fn test_watch_mkignore_suppresses_ignored_file_changes() -> anyhow::Result<()> {
       count:
         commands:
           - command: echo run
-            verbose: false
     ",
   )?;
 
@@ -7544,7 +7529,6 @@ fn test_watch_mkignore_negated_pattern_reinclude() -> anyhow::Result<()> {
       stamp:
         commands:
           - command: echo stamped
-            verbose: false
     ",
   )?;
 

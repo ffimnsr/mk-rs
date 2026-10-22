@@ -1,5 +1,4 @@
-use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
-use rand::Rng as _;
+use indicatif::HumanDuration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -11,7 +10,7 @@ use std::io::BufRead as _;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::{
   contains_output_reference, extract_output_references, interpolate_template_string, is_shell_command,
@@ -321,7 +320,6 @@ impl TaskArgs {
     self.validate_parallel_commands()?;
 
     let started = Instant::now();
-    let tick_interval = Duration::from_millis(80);
 
     if let Some(shell) = &self.shell {
       context.set_shell(shell);
@@ -378,58 +376,39 @@ impl TaskArgs {
       }
     }
 
-    let mut rng = rand::thread_rng();
-    // Spinners can be found here:
-    // https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json
-    let pb_style =
-      ProgressStyle::with_template("{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ")?
-        .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⦿");
-
-    let depends_on_pb = context.multi.add(ProgressBar::new(self.depends_on.len() as u64));
-
     if !self.depends_on.is_empty() {
-      depends_on_pb.set_style(pb_style.clone());
-      depends_on_pb.set_message("Running task dependencies...");
-      depends_on_pb.enable_steady_tick(tick_interval);
+      let total = self.depends_on.len();
       for (i, dependency) in self.depends_on.iter().enumerate() {
-        thread::sleep(Duration::from_millis(rng.gen_range(40..300)));
-        depends_on_pb.set_prefix(format!("{}/{}", i + 1, self.depends_on.len()));
-        dependency.run(context)?;
-        depends_on_pb.inc(1);
-      }
-
-      let message = format!("Dependencies completed in {}.", HumanDuration(started.elapsed()));
-      if context.is_nested {
-        depends_on_pb.finish_and_clear();
-      } else {
-        depends_on_pb.finish_with_message(message);
+        context.update_status(
+          format!("{}/{}", i + 1, total),
+          format!("Running task dependency '{}'...", dependency.resolve_name()),
+        );
+        if let Err(err) = dependency.run(context) {
+          if !context.is_nested {
+            context.clear_status();
+          }
+          return Err(err);
+        }
       }
     }
 
-    let precondition_pb = context
-      .multi
-      .add(ProgressBar::new(self.preconditions.len() as u64));
-
     if !self.preconditions.is_empty() {
-      precondition_pb.set_style(pb_style.clone());
-      precondition_pb.set_message("Running task precondition...");
-      precondition_pb.enable_steady_tick(tick_interval);
+      let total = self.preconditions.len();
       for (i, precondition) in self.preconditions.iter().enumerate() {
-        thread::sleep(Duration::from_millis(rng.gen_range(40..300)));
-        precondition_pb.set_prefix(format!("{}/{}", i + 1, self.preconditions.len()));
-        precondition.execute(context)?;
-        precondition_pb.inc(1);
-      }
-
-      let message = format!("Preconditions completed in {}.", HumanDuration(started.elapsed()));
-      if context.is_nested {
-        precondition_pb.finish_and_clear();
-      } else {
-        precondition_pb.finish_with_message(message);
+        context.update_status(format!("{}/{}", i + 1, total), "Running task precondition...");
+        if let Err(err) = precondition.execute(context) {
+          if !context.is_nested {
+            context.clear_status();
+          }
+          return Err(err);
+        }
       }
     }
 
     if self.should_skip_from_cache(context)? {
+      if !context.is_nested {
+        context.clear_status();
+      }
       context.emit_event(&serde_json::json!({
         "event": "task_skipped",
         "task": context.current_task_name.clone().unwrap_or_else(|| "<task>".to_string()),
@@ -441,23 +420,21 @@ impl TaskArgs {
     if self.is_parallel() {
       self.execute_commands_parallel(context)?;
     } else {
-      let command_pb = context.multi.add(ProgressBar::new(self.commands.len() as u64));
-      command_pb.set_style(pb_style);
-      command_pb.set_message("Running task command...");
-      command_pb.enable_steady_tick(tick_interval);
+      let total = self.commands.len();
       for (i, command) in self.commands.iter().enumerate() {
-        thread::sleep(Duration::from_millis(rng.gen_range(100..400)));
-        command_pb.set_prefix(format!("{}/{}", i + 1, self.commands.len()));
+        context.update_status(format!("{}/{}", i + 1, total), "Running task command...");
         self.refresh_output_env(context)?;
-        command.execute(context)?;
-        command_pb.inc(1);
+        if let Err(err) = command.execute(context) {
+          if !context.is_nested {
+            context.clear_status();
+          }
+          return Err(err);
+        }
       }
 
-      let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
-      if context.is_nested {
-        command_pb.finish_and_clear();
-      } else {
-        command_pb.finish_with_message(message);
+      if !context.is_nested {
+        let message = format!("Commands completed in {}.", HumanDuration(started.elapsed()));
+        context.finish_status_with_message(message);
       }
     }
 
@@ -612,13 +589,10 @@ impl TaskArgs {
     let command_count = self.commands.len();
     let max_parallel = self.max_parallel().min(command_count.max(1));
     let fail_fast = self.fail_fast();
-    let command_pb = context.multi.add(ProgressBar::new(command_count as u64));
-    command_pb.set_style(ProgressStyle::with_template(
-      "{spinner:.green} [{prefix:.bold.dim}] {wide_msg:.cyan/blue} ",
-    )?);
-    command_pb.set_prefix("?/?");
-    command_pb.set_message("Running task commands in parallel...");
-    command_pb.enable_steady_tick(Duration::from_millis(80));
+    context.update_status(
+      format!("0/{}", command_count),
+      "Running task commands in parallel...",
+    );
     let mut failures = Vec::new();
 
     // Clone all commands upfront to avoid borrowing issues
@@ -677,16 +651,15 @@ impl TaskArgs {
           }
 
           completed += 1;
-          command_pb.set_prefix(format!("{}/{}", completed, command_count));
-          command_pb.inc(1);
-
-          command_pb.set_message(format!(
-            "Running task commands in parallel (completed {})",
-            index + 1
-          ));
+          context.update_status(
+            format!("{}/{}", completed, command_count),
+            format!("Running task commands in parallel (completed {})", index + 1),
+          );
         },
         Err(e) => {
-          command_pb.finish_with_message("Error receiving command results");
+          if !context.is_nested {
+            context.finish_status_with_message("Error receiving command results");
+          }
           return Err(anyhow::anyhow!("Channel error: {}", e));
         },
       }
@@ -700,18 +673,17 @@ impl TaskArgs {
     context.clear_cancellation();
 
     if !failures.is_empty() {
-      command_pb.finish_with_message("Some commands failed");
+      if !context.is_nested {
+        context.finish_status_with_message("Some commands failed");
+      }
 
       // Sort failures by command index for clearer error reporting
       failures.sort();
       return Err(anyhow::anyhow!("Failed commands:\n{}", failures.join("\n")));
     }
 
-    let message = "Commands completed in parallel";
-    if context.is_nested {
-      command_pb.finish_and_clear();
-    } else {
-      command_pb.finish_with_message(message);
+    if !context.is_nested {
+      context.finish_status_with_message("Commands completed in parallel");
     }
 
     Ok(())

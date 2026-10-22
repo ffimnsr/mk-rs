@@ -88,6 +88,7 @@ impl CommandRunner {
     let mut cmd = shell.proc();
     cmd
       .arg(command)
+      .env(TaskContext::NESTED_PROCESS_ENV, "1")
       .stdout(uncaptured_output(verbose))
       .stderr(uncaptured_output(verbose));
 
