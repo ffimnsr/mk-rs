@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json::Value;
 
+use crate::help_examples::SCHEMA_VIEW_EXAMPLES;
 use crate::json_output::print_json_value;
 
 /// Subcommands for inspecting the task configuration schema offline.
@@ -18,7 +19,10 @@ pub(crate) struct Schema {
 /// The available schema subcommands.
 #[derive(Debug, Subcommand)]
 enum SchemaCommand {
-  #[command(about = "Print the JSON Schema for the task configuration file")]
+  #[command(
+    about = "Print the JSON Schema for the task configuration file",
+    after_long_help = SCHEMA_VIEW_EXAMPLES
+  )]
   View,
 }
 

@@ -4,9 +4,11 @@ use mk_lib::secrets::list_secret_paths;
 use prettytable::format::consts;
 use prettytable::{row, Table};
 
+use crate::help_examples::LIST_SECRETS_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = LIST_SECRETS_EXAMPLES)]
 pub struct ListSecrets {
   #[arg(help = "Optional secret path prefix")]
   path: Option<String>,

@@ -3,15 +3,79 @@ Run specific tasks
 Usage: mk run [OPTIONS] [TASK_NAME] [-- <TRAILING_ARGS>...]
 
 Arguments:
-  [TASK_NAME]         The task name to run
-  [TRAILING_ARGS]...  Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)
+  [TASK_NAME]
+          The task name to run
+
+  [TRAILING_ARGS]...
+          Arguments forwarded to the task (available as ${{ args.0 }}, ${{ args.1 }}, etc.)
 
 Options:
-      --dry-run          Print the resolved task plan without executing commands
-      --force            Bypass task cache and force execution
-      --json-events      Emit newline-delimited JSON execution events
-  -F, --fzf              Choose task with fuzzy finder before execution
-      --label <FILTER>   Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
-      --set <KEY=VALUE>  Filter matrix task variants by KEY=VALUE. Repeatable; all must match.
-  -h, --help             Print help
-  -V, --version          Print version
+      --dry-run
+          Print the resolved task plan without executing commands
+
+      --force
+          Bypass task cache and force execution
+
+      --json-events
+          Emit newline-delimited JSON execution events
+
+  -F, --fzf
+          Choose task with fuzzy finder before execution
+
+      --label <FILTER>
+          Run tasks matching label (KEY or KEY=VALUE). Repeatable; all must match.
+
+      --set <KEY=VALUE>
+          Filter matrix task variants by KEY=VALUE. Repeatable; all must match.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Examples:
+  # Run one task and forward arguments
+  mk run deploy -- production
+
+  # Run tasks matching labels
+  mk run --label ci --label env=prod
+
+  # Preview the resolved plan without executing commands
+  mk run build --dry-run
+
+  # Run one matrix variant
+  mk run test --set os=linux
+
+Offline Podman:
+  # tasks.yaml
+  container_runtime: podman
+
+  tasks:
+    build-image:
+      commands:
+        - container_build:
+            image_name: localhost/mk-rust
+            context: .
+            containerfile: ./Containerfile
+            tags:
+              - latest
+            runtime: podman
+
+    test-in-podman:
+      depends_on:
+        - name: build-image
+      commands:
+        - container_command:
+            - cargo
+            - test
+            - --locked
+          image: localhost/mk-rust:latest
+          runtime: podman
+
+  # Build once while online, then run without network access:
+  mk run build-image
+  mk run test-in-podman
+
+  # mk adds no explicit pull step. Pre-pull or pre-build every image you need,
+  # including Containerfile base images, before going offline.

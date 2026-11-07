@@ -10,6 +10,9 @@ mod cli_entry;
 /// Local GPG key completion helpers
 mod gpg_completion;
 
+/// Shared long-help examples
+mod help_examples;
+
 /// Canonical JSON command output helpers
 mod json_output;
 

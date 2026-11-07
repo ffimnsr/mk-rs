@@ -3,9 +3,11 @@ use mk_lib::secrets::{load_secret_value, verify_vault};
 use std::fs::File;
 use std::io::Write as _;
 
+use crate::help_examples::EXPORT_SECRET_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = EXPORT_SECRET_EXAMPLES)]
 pub struct ExportSecret {
   #[arg(help = "The secret identifier")]
   path: String,

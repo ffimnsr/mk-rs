@@ -331,6 +331,48 @@ fn test_completion_scripts_include_dynamic_gpg_key_hook() -> anyhow::Result<()> 
 }
 
 #[test]
+fn test_primary_help_surfaces_include_examples() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let cases: &[&[&str]] = &[
+    &["run", "--help"],
+    &["list", "--help"],
+    &["plan", "--help"],
+    &["validate", "--help"],
+    &["watch", "--help"],
+    &["init", "--help"],
+    &["completion", "--help"],
+    &["doctor", "--help"],
+    &["schema", "view", "--help"],
+    &["secrets", "help"],
+    &["secrets", "doctor", "--help"],
+    &["secrets", "key", "--help"],
+    &["secrets", "vault", "--help"],
+    &["secrets", "key", "generate-key", "--help"],
+    &["secrets", "key", "import-key", "--help"],
+    &["secrets", "key", "export-key", "--help"],
+    &["secrets", "key", "list-keys", "--help"],
+    &["secrets", "key", "purge-key", "--help"],
+    &["secrets", "vault", "init-vault", "--help"],
+    &["secrets", "vault", "store-secret", "--help"],
+    &["secrets", "vault", "show-secret", "--help"],
+    &["secrets", "vault", "export-secret", "--help"],
+    &["secrets", "vault", "list-secrets", "--help"],
+    &["secrets", "vault", "purge-secret", "--help"],
+  ];
+
+  for args in cases {
+    Command::new(cargo::cargo_bin!("mk"))
+      .current_dir(temp_dir.path())
+      .args(*args)
+      .assert()
+      .success()
+      .stdout(predicates::str::contains("Examples:"));
+  }
+
+  Ok(())
+}
+
+#[test]
 fn test_secrets_help_includes_examples() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
 

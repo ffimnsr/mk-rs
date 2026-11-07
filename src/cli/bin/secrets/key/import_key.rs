@@ -7,11 +7,13 @@ use anyhow::Context as _;
 use clap::Args;
 use mk_lib::file::DisplayPath as _;
 
+use crate::help_examples::IMPORT_KEY_EXAMPLES;
 use crate::secrets::context::Context;
 
 use super::KEY_LOCATION_HELP;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = IMPORT_KEY_EXAMPLES)]
 pub struct ImportKey {
   /// The GPG key ID or fingerprint to import from the local keyring
   #[arg(

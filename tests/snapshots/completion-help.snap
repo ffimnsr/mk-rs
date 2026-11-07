@@ -3,8 +3,20 @@ Generate shell completions
 Usage: mk completion <SHELL>
 
 Arguments:
-  <SHELL>  The shell to generate completions for [possible values: bash, elvish, fish, powershell, zsh]
+  <SHELL>
+          The shell to generate completions for
+          
+          [possible values: bash, elvish, fish, powershell, zsh]
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Examples:
+  mk completion bash > ~/.local/share/bash-completion/completions/mk
+  mk completion zsh > ~/.zfunc/_mk
+  mk completion fish > ~/.config/fish/completions/mk.fish
+  mk completion powershell > mk-completion.ps1

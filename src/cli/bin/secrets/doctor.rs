@@ -2,9 +2,11 @@ use clap::Args;
 
 use mk_lib::secrets::{SecretBackend, SecretValueSource};
 
+use crate::help_examples::SECRETS_DOCTOR_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = SECRETS_DOCTOR_EXAMPLES)]
 pub struct Doctor {}
 
 impl Doctor {

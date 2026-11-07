@@ -8,9 +8,11 @@ use mk_lib::secrets::{
 };
 use serde_yaml::{Mapping, Value};
 
+use crate::help_examples::INIT_VAULT_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = INIT_VAULT_EXAMPLES)]
 pub struct InitVault {
   #[arg(short, long, help = "The path to the secret vault")]
   vault_location: Option<String>,

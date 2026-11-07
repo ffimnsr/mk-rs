@@ -7,11 +7,13 @@ use mk_lib::file::DisplayPath as _;
 use pgp::composed::{ArmorOptions, EncryptionCaps, KeyType, SecretKeyParamsBuilder};
 use rand::thread_rng;
 
+use crate::help_examples::GENERATE_KEY_EXAMPLES;
 use crate::secrets::context::Context;
 
 use super::KEY_LOCATION_HELP;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = GENERATE_KEY_EXAMPLES)]
 pub struct GenerateKey {
   /// The location to store the private key
   #[arg(short, long, help = KEY_LOCATION_HELP)]

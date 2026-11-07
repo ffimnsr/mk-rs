@@ -6,6 +6,10 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::help_examples::{
+  COMPLETION_EXAMPLES, DOCTOR_EXAMPLES, INIT_EXAMPLES, LIST_EXAMPLES, PLAN_EXAMPLES, RUN_EXAMPLES,
+  VALIDATE_EXAMPLES, WATCH_EXAMPLES,
+};
 use crate::json_output::print_json;
 use crate::schema_command::Schema;
 use crate::secrets::Secrets;
@@ -108,14 +112,21 @@ pub(crate) fn command() -> clap::Command {
 /// The available subcommands
 #[derive(Debug, Subcommand)]
 enum Command {
-  #[command(about = "Initialize a sample task config file in the current directory")]
+  #[command(
+    about = "Initialize a sample task config file in the current directory",
+    after_long_help = INIT_EXAMPLES
+  )]
   Init {
     #[arg(short, long, help = "Overwrite existing config file if present")]
     force: bool,
     #[arg(help = "Optional output path for the created config file")]
     output: Option<String>,
   },
-  #[command(visible_aliases = ["r"], about = "Run specific tasks")]
+  #[command(
+    visible_aliases = ["r"],
+    about = "Run specific tasks",
+    after_long_help = RUN_EXAMPLES
+  )]
   Run {
     #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
     task_name: Option<String>,
@@ -161,7 +172,11 @@ enum Command {
     )]
     trailing_args: Vec<String>,
   },
-  #[command(visible_aliases = ["ls"], about = "List all available tasks")]
+  #[command(
+    visible_aliases = ["ls"],
+    about = "List all available tasks",
+    after_long_help = LIST_EXAMPLES
+  )]
   List {
     #[arg(short, long, help = "Show list that does not include headers")]
     plain: bool,
@@ -179,17 +194,27 @@ enum Command {
     )]
     labels: Vec<String>,
   },
-  #[command(visible_aliases = ["comp", "completions"], about = "Generate shell completions")]
+  #[command(
+    visible_aliases = ["comp", "completions"],
+    about = "Generate shell completions",
+    after_long_help = COMPLETION_EXAMPLES
+  )]
   Completion {
     #[arg(required = true, value_enum, help = "The shell to generate completions for")]
     shell: Shell,
   },
-  #[command(about = "Validate task configuration without executing tasks")]
+  #[command(
+    about = "Validate task configuration without executing tasks",
+    after_long_help = VALIDATE_EXAMPLES
+  )]
   Validate {
     #[arg(long, help = "Show validation results in JSON format")]
     json: bool,
   },
-  #[command(about = "Show the resolved execution plan for a task")]
+  #[command(
+    about = "Show the resolved execution plan for a task",
+    after_long_help = PLAN_EXAMPLES
+  )]
   Plan {
     #[arg(help = "The task name to inspect", value_hint = clap::ValueHint::Other)]
     task_name: Option<String>,
@@ -220,9 +245,15 @@ enum Command {
   CleanCache,
   #[command(about = "View the task configuration JSON Schema")]
   Schema(Schema),
-  #[command(about = "Diagnose mk setup and configuration")]
+  #[command(
+    about = "Diagnose mk setup and configuration",
+    after_long_help = DOCTOR_EXAMPLES
+  )]
   Doctor,
-  #[command(about = "Watch files and re-run a task on changes")]
+  #[command(
+    about = "Watch files and re-run a task on changes",
+    after_long_help = WATCH_EXAMPLES
+  )]
   Watch {
     #[arg(help = "The task name to run", value_hint = clap::ValueHint::Other)]
     task_name: Option<String>,

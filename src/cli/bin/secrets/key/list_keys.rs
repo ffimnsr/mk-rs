@@ -8,11 +8,13 @@ use pgp::types::KeyDetails as _;
 use prettytable::format::consts;
 use prettytable::{row, Table};
 
+use crate::help_examples::LIST_KEYS_EXAMPLES;
 use crate::secrets::context::Context;
 
 use super::KEY_LOCATION_HELP;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = LIST_KEYS_EXAMPLES)]
 pub struct ListKeys {
   /// The location to store the private key
   #[arg(short, long, help = KEY_LOCATION_HELP)]

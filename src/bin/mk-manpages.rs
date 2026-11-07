@@ -8,6 +8,8 @@ use clap_mangen::Man;
 
 #[path = "../cli/bin/cli_entry.rs"]
 mod cli_entry;
+#[path = "../cli/bin/help_examples.rs"]
+mod help_examples;
 #[path = "../cli/bin/json_output.rs"]
 mod json_output;
 #[path = "../cli/bin/schema_command.rs"]

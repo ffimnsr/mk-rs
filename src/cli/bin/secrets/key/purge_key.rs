@@ -3,11 +3,13 @@ use std::path::Path;
 
 use clap::Args;
 
+use crate::help_examples::PURGE_KEY_EXAMPLES;
 use crate::secrets::context::Context;
 
 use super::KEY_LOCATION_HELP;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = PURGE_KEY_EXAMPLES)]
 pub struct PurgeKey {
   /// The location to store the private key
   #[arg(short, long, help = KEY_LOCATION_HELP)]

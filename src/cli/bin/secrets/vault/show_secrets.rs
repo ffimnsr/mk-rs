@@ -5,9 +5,11 @@ use prettytable::format::consts;
 use prettytable::{row, Table};
 use std::io::Write as _;
 
+use crate::help_examples::SHOW_SECRET_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = SHOW_SECRET_EXAMPLES)]
 pub struct ShowSecret {
   #[arg(help = "The secret identifier")]
   path: String,

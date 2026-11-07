@@ -1,5 +1,7 @@
 use clap::{Args, Subcommand};
 
+use crate::help_examples::SECRETS_KEY_EXAMPLES;
+
 use super::context::Context;
 
 pub use export_key::ExportKey;
@@ -19,6 +21,7 @@ pub const KEY_LOCATION_HELP: &str = "The path to where the private keys are stor
 
 /// The struct that represents the key command
 #[derive(Debug, Args)]
+#[command(after_long_help = SECRETS_KEY_EXAMPLES)]
 pub struct Key {
   /// The subcommand to run
   #[command(subcommand)]

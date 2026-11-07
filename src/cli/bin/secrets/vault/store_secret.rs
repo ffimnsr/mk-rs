@@ -8,10 +8,12 @@ use std::fs::{self, File};
 use std::io::{self, IsTerminal, Read as _, Write as _};
 use std::path::Path;
 
+use crate::help_examples::STORE_SECRET_EXAMPLES;
 use crate::secrets::context::Context;
 use crate::secrets::vault::verify_key;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = STORE_SECRET_EXAMPLES)]
 pub struct StoreSecret {
   #[arg(help = "The secret identifier")]
   path: String,

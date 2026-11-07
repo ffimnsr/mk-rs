@@ -3,5 +3,12 @@ Diagnose mk setup and configuration
 Usage: mk doctor
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Examples:
+  mk doctor
+  mk -c tasks.toml doctor

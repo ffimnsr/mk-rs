@@ -5,11 +5,13 @@ use std::path::Path;
 use clap::Args;
 use pgp::composed::{ArmorOptions, Deserializable as _, SignedSecretKey};
 
+use crate::help_examples::EXPORT_KEY_EXAMPLES;
 use crate::secrets::context::Context;
 
 use super::KEY_LOCATION_HELP;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = EXPORT_KEY_EXAMPLES)]
 pub struct ExportKey {
   #[arg(short, long, help = "The output file")]
   output: String,

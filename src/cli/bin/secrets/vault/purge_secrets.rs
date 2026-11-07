@@ -4,9 +4,11 @@ use std::path::Path;
 use clap::Args;
 use mk_lib::secrets::verify_vault;
 
+use crate::help_examples::PURGE_SECRET_EXAMPLES;
 use crate::secrets::context::Context;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = PURGE_SECRET_EXAMPLES)]
 pub struct PurgeSecret {
   #[arg(help = "The secret identifier")]
   path: String,

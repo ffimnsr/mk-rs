@@ -11,6 +11,8 @@ pub use store_secret::StoreSecret;
 
 use super::context::Context;
 
+use crate::help_examples::SECRETS_VAULT_EXAMPLES;
+
 mod export_secrets;
 mod init_vault;
 mod list_secrets;
@@ -19,6 +21,7 @@ mod show_secrets;
 mod store_secret;
 
 #[derive(Debug, Args)]
+#[command(after_long_help = SECRETS_VAULT_EXAMPLES)]
 pub struct Vault {
   #[command(subcommand)]
   command: Option<VaultCommand>,
