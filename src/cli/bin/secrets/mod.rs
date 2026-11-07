@@ -9,8 +9,50 @@ mod key;
 mod utils;
 mod vault;
 
+const SECRETS_EXAMPLES: &str = "\
+Examples:
+  # Generate a built-in PGP key and initialize a vault
+  mk secrets key generate-key --name default
+  mk secrets vault init
+
+  # Store a secret from stdin and read it back
+  printf 's3cret' | mk secrets vault store app/token
+  mk secrets vault show app/token
+
+  # Use a hardware-backed GPG key
+  mk secrets key import -g <KEY_ID> --name yubikey
+  mk secrets vault init -g <KEY_ID>
+
+  # Export a secret to a dotenv file
+  mk secrets vault export app/env > .env
+
+  # Inspect resolved secret settings
+  mk secrets doctor
+
+Secret data:
+  Secret paths are slash-separated names:
+    app/token
+    app/production/env
+
+  Single value, referenced in config with ${{ secrets.<path> }}:
+    mk secrets vault store app/token 's3cret'
+
+  Dotenv content, loaded into task environment with secrets_path:
+    printf 'DATABASE_URL=postgres://...\\nAPI_KEY=example\\n' | mk secrets vault store app/production/env
+
+    secrets:
+      secrets_path:
+        - app/production/env
+
+    tasks:
+      deploy:
+        environment:
+          API_TOKEN: ${{ secrets.app/token }}
+";
+
 /// The struct that represents the secrets command
 #[derive(Debug, Args)]
+#[command(after_long_help = SECRETS_EXAMPLES)]
 pub struct Secrets {
   #[command(subcommand)]
   command: Option<SecretsCommand>,

@@ -330,6 +330,24 @@ fn test_completion_scripts_include_dynamic_gpg_key_hook() -> anyhow::Result<()> 
   Ok(())
 }
 
+#[test]
+fn test_secrets_help_includes_examples() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("secrets")
+    .arg("help")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("Examples:"))
+    .stdout(predicates::str::contains("mk secrets vault store app/token"))
+    .stdout(predicates::str::contains("Secret data:"))
+    .stdout(predicates::str::contains("secrets_path:"));
+
+  Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn test_gpg_key_completion_candidates_respect_prefix() -> anyhow::Result<()> {
