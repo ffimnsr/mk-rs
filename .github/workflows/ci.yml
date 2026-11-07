@@ -18,9 +18,57 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
+  # Always run so docs-only pushes still produce a successful CI run for the
+  # release gate in build-push-release.yml.
+  changes:
+    name: Detect changed files
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Filter documentation-only changes
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${GITHUB_SHA}"
+          fi
+
+          if [[ -z "${base}" || "${base}" =~ ^0+$ ]]; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          changed="$(git diff --name-only "${base}" "${head}" || true)"
+          if [[ -z "${changed}" ]]; then
+            # Be conservative when the change set cannot be determined.
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          printf '%s\n' "${changed}"
+
+          if grep -Evq '^(docs/|wiki/|LICENSE|COPYRIGHT|[^/]+\.md$)' <<< "${changed}"; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "code=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   lint:
     name: Lint and Format
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v6.0.2
       - name: Install Rust toolchain
@@ -41,6 +89,8 @@ jobs:
   docs:
     name: Docs
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v6.0.2
       - name: Install Rust toolchain
@@ -60,6 +110,8 @@ jobs:
   bench-smoke:
     name: Bench Smoke
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v6.0.2
       - name: Install Rust toolchain
@@ -77,6 +129,8 @@ jobs:
   check-pass:
     name: Check
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v6.0.2
       - name: Install Rust
@@ -96,7 +150,9 @@ jobs:
     name: Test (${{ matrix.build }})
     runs-on: ${{ matrix.os }}
     needs:
+      - changes
       - check-pass
+    if: needs.changes.outputs.code == 'true'
     env:
       CARGO: cargo
       TARGET_FLAGS: ""
