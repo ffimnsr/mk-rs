@@ -1,9 +1,18 @@
 name: Release
 
+# Tag pushes release only when the resolved code commit already has green CI.
+# The workflow_run trigger handles the opposite ordering (tag before CI finishes).
 on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -15,7 +24,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-publish
   cancel-in-progress: false
 
 jobs:
@@ -23,59 +32,151 @@ jobs:
     name: Verify release inputs
     runs-on: ubuntu-latest
     outputs:
-      mk_version: ${{ steps.version.outputs.mk_version }}
+      mk_version: ${{ steps.release.outputs.mk_version }}
+      release_ref: ${{ steps.release.outputs.release_ref }}
+      should_build: ${{ steps.release.outputs.should_build }}
+      publish: ${{ steps.release.outputs.publish }}
     steps:
       - uses: actions/checkout@v6.0.2
-      - name: Resolve release version
-        id: version
+        with:
+          fetch-depth: 0
+      - name: Resolve release target
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-          else
-            VERSION="$(grep '^version = ' Cargo.toml | head -n1 | cut -d '"' -f2)"
+          EVENT="${GITHUB_EVENT_NAME}"
+          SHOULD_BUILD=false
+          PUBLISH=false
+          RELEASE_REF="${GITHUB_REF}"
+          VERSION=""
+          CI_SHA=""
+          TAG_SHA=""
+
+          resolve_ci_commit() {
+            local target="$1"
+            while true; do
+              local parent
+              if ! parent="$(git rev-parse "${target}^" 2>/dev/null)"; then
+                break
+              fi
+
+              local changed
+              changed="$(git diff --name-only "${parent}" "${target}" || true)"
+
+              # Empty or documentation-only commits reuse the parent's CI run.
+              # Keep this pattern in sync with .github/workflows/ci.yml.
+              if [[ -z "${changed}" ]] || ! grep -Evq '^(docs/|wiki/|LICENSE|COPYRIGHT|[^/]+\.md$)' <<< "${changed}"; then
+                target="${parent}"
+                continue
+              fi
+
+              break
+            done
+
+            printf '%s\n' "${target}"
+          }
+
+          has_successful_ci() {
+            local sha="$1"
+            local runs_json
+            if ! runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=100" 2>/dev/null)"; then
+              return 1
+            fi
+
+            jq -e '[.workflow_runs[] | select(.event == "push" and .head_branch == "main" and .status == "completed" and .conclusion == "success")] | length > 0' \
+              <<< "${runs_json}" >/dev/null
+          }
+
+          skip_release() {
+            echo "$1"
+            echo "mk_version=" >> "${GITHUB_OUTPUT}"
+            echo "release_ref=${RELEASE_REF}" >> "${GITHUB_OUTPUT}"
+            echo "should_build=false" >> "${GITHUB_OUTPUT}"
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+
+          case "${EVENT}" in
+            push)
+              VERSION="${GITHUB_REF_NAME}"
+              TAG_SHA="${GITHUB_SHA}"
+              RELEASE_REF="${GITHUB_REF}"
+
+              if ! grep -q "version = \"${VERSION}\"" <(git show "${TAG_SHA}:Cargo.toml"); then
+                echo "Tag ${VERSION} does not match Cargo.toml at ${TAG_SHA}" >&2
+                exit 1
+              fi
+
+              CI_SHA="$(resolve_ci_commit "${TAG_SHA}")"
+              if ! has_successful_ci "${CI_SHA}"; then
+                skip_release "CI for ${CI_SHA} is not green yet; the CI workflow_run trigger will release after it completes."
+              fi
+
+              SHOULD_BUILD=true
+              PUBLISH=true
+              ;;
+            workflow_run)
+              if [[ "${WORKFLOW_RUN_CONCLUSION}" != "success" || "${WORKFLOW_RUN_EVENT}" != "push" || "${WORKFLOW_RUN_BRANCH}" != "main" ]]; then
+                skip_release "Skipping CI workflow_run: conclusion=${WORKFLOW_RUN_CONCLUSION} event=${WORKFLOW_RUN_EVENT} branch=${WORKFLOW_RUN_BRANCH}"
+              fi
+
+              CI_SHA="${WORKFLOW_RUN_HEAD_SHA}"
+              VERSION="$(git show "${CI_SHA}:Cargo.toml" | grep '^version = ' | head -n1 | cut -d '"' -f2)"
+              RELEASE_REF="refs/tags/${VERSION}"
+
+              if ! TAG_SHA="$(git rev-list -n1 "${RELEASE_REF}" 2>/dev/null)"; then
+                skip_release "No tag ${VERSION} found for CI commit ${CI_SHA}."
+              fi
+
+              if [[ "$(resolve_ci_commit "${TAG_SHA}")" != "${CI_SHA}" ]]; then
+                skip_release "Tag ${VERSION} does not resolve to CI commit ${CI_SHA}."
+              fi
+
+              SHOULD_BUILD=true
+              PUBLISH=true
+              ;;
+            workflow_dispatch)
+              VERSION="$(grep '^version = ' Cargo.toml | head -n1 | cut -d '"' -f2)"
+              SHOULD_BUILD=true
+              PUBLISH=false
+              ;;
+            *)
+              skip_release "Unsupported event ${EVENT}."
+              ;;
+          esac
+
+          if [[ "${PUBLISH}" == true ]] && gh release view "${VERSION}" --json tagName >/dev/null 2>&1; then
+            skip_release "Release ${VERSION} already exists; nothing to do."
           fi
 
           echo "MK_VERSION=${VERSION}" >> "${GITHUB_ENV}"
           echo "mk_version=${VERSION}" >> "${GITHUB_OUTPUT}"
-      - name: Show the version
-        run: |
-          echo "version is: $MK_VERSION"
-      - name: Check that tag version and Cargo.toml version are the same
-        if: github.ref_type == 'tag'
-        shell: bash
-        run: |
-          if ! grep -q "version = \"$MK_VERSION\"" Cargo.toml; then
-            echo "version does not match Cargo.toml" >&2
-            exit 1
+          echo "release_ref=${RELEASE_REF}" >> "${GITHUB_OUTPUT}"
+          echo "should_build=${SHOULD_BUILD}" >> "${GITHUB_OUTPUT}"
+          echo "publish=${PUBLISH}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${CI_SHA}" == "${GITHUB_SHA}" ]]; then
+            echo "Release ${VERSION}: tag commit requires its own CI run (${CI_SHA})"
+          elif [[ -n "${CI_SHA}" ]]; then
+            echo "Release ${VERSION}: using CI from ${CI_SHA} (tag commit ${GITHUB_SHA} has no code changes)"
+          else
+            echo "Release ${VERSION}: manual build without publishing"
           fi
-      - name: Require successful CI run for tagged commit
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&per_page=100")"
-          success_url="$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main" and .status == "completed" and .conclusion == "success")][0].html_url // empty' <<< "${runs_json}")"
-
-          if [[ -z "${success_url}" ]]; then
-            echo "No successful CI run on main found for commit ${GITHUB_SHA}" >&2
-            echo "Wait for CI to finish, or re-run this workflow after CI passes." >&2
-            jq -r '.workflow_runs[]? | "\(.status) \(.conclusion // "-") \(.event) \(.head_branch // "-") \(.html_url)"' <<< "${runs_json}" >&2 || true
-            exit 1
-          fi
-
-          echo "CI passed for ${GITHUB_SHA}: ${success_url}"
 
   build-release-package:
     name: Build package (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs:
       - verify-release
+    if: needs.verify-release.outputs.should_build == 'true'
     continue-on-error: true
     env:
       CARGO: cargo
@@ -139,6 +240,8 @@ jobs:
             target: i686-pc-windows-msvc
     steps:
       - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.verify-release.outputs.release_ref }}
       - name: Install packages (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -235,6 +338,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - verify-release
+    if: needs.verify-release.outputs.should_build == 'true'
     continue-on-error: true
     env:
       CARGO: cargo
@@ -245,6 +349,8 @@ jobs:
       MK_VERSION: ${{ needs.verify-release.outputs.mk_version }}
     steps:
       - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.verify-release.outputs.release_ref }}
       - name: Install packages (Ubuntu)
         run: |
           ci/ubuntu-install-packages
@@ -291,6 +397,7 @@ jobs:
     continue-on-error: true
     needs:
       - verify-release
+    if: needs.verify-release.outputs.should_build == 'true'
     env:
       CARGO: cargo
       TARGET: x86_64-unknown-linux-musl
@@ -300,6 +407,8 @@ jobs:
       MK_VERSION: ${{ needs.verify-release.outputs.mk_version }}
     steps:
       - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.verify-release.outputs.release_ref }}
       - name: Install packages (Ubuntu)
         run: |
           ci/ubuntu-install-packages
@@ -386,7 +495,7 @@ jobs:
       - build-release-deb
       - build-release-rpm
     runs-on: ubuntu-latest
-    if: always() && github.ref_type == 'tag' && needs.verify-release.result == 'success'
+    if: always() && needs.verify-release.result == 'success' && needs.verify-release.outputs.publish == 'true'
     steps:
       - name: Download all release artifacts
         uses: actions/download-artifact@v4
@@ -414,6 +523,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - verify-release
+    if: needs.verify-release.outputs.should_build == 'true'
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
@@ -424,15 +534,17 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.verify-release.outputs.release_ref }}
       - name: Install cosign
-        if: github.ref_type == 'tag'
+        if: needs.verify-release.outputs.publish == 'true'
         uses: sigstore/cosign-installer@v4.1.1
         with:
           cosign-release: 'v3.0.5'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Log into registry ${{ env.REGISTRY }}
-        if: github.ref_type == 'tag'
+        if: needs.verify-release.outputs.publish == 'true'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -444,7 +556,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ needs.verify-release.outputs.publish == 'true' }}
             type=semver,pattern={{version}},value=${{ env.MK_VERSION }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.MK_VERSION }}
             type=semver,pattern={{major}},value=${{ env.MK_VERSION }}
@@ -455,13 +567,13 @@ jobs:
           context: .
           file: ./Containerfile
           platforms: linux/amd64
-          push: ${{ github.ref_type == 'tag' }}
+          push: ${{ needs.verify-release.outputs.publish == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Sign the published Docker image
-        if: github.ref_type == 'tag'
+        if: needs.verify-release.outputs.publish == 'true'
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
