@@ -26,16 +26,6 @@ jobs:
       mk_version: ${{ steps.version.outputs.mk_version }}
     steps:
       - uses: actions/checkout@v6.0.2
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-      - name: Cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: mk-release-${{ runner.os }}-verify
-          cache-on-failure: "true"
       - name: Resolve release version
         id: version
         shell: bash
@@ -61,8 +51,25 @@ jobs:
             echo "version does not match Cargo.toml" >&2
             exit 1
           fi
-      - name: Run cargo check tool
-        run: cargo check --locked --verbose
+      - name: Require successful CI run for tagged commit
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&per_page=100")"
+          success_url="$(jq -r '[.workflow_runs[] | select(.event == "push" and .head_branch == "main" and .status == "completed" and .conclusion == "success")][0].html_url // empty' <<< "${runs_json}")"
+
+          if [[ -z "${success_url}" ]]; then
+            echo "No successful CI run on main found for commit ${GITHUB_SHA}" >&2
+            echo "Wait for CI to finish, or re-run this workflow after CI passes." >&2
+            jq -r '.workflow_runs[]? | "\(.status) \(.conclusion // "-") \(.event) \(.head_branch // "-") \(.html_url)"' <<< "${runs_json}" >&2 || true
+            exit 1
+          fi
+
+          echo "CI passed for ${GITHUB_SHA}: ${success_url}"
 
   build-release-package:
     name: Build package (${{ matrix.target }})
