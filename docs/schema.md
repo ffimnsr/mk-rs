@@ -46,14 +46,14 @@ Add a modeline comment at the top of your tasks file:
 ### Generate the schema locally
 
 ```bash
-mk schema > schema.json
+mk schema view > schema.json
 ```
 
 ## CLI Commands
 
 | Command | Description |
 | --- | --- |
-| `mk schema` | Print the JSON Schema for the task configuration file. |
+| `mk schema view` | Print the JSON Schema for the task configuration file without network access. |
 | `mk validate` | Validate task configuration without executing tasks. |
 | `mk validate --json` | Emit validation results in JSON format. |
 | `mk plan <task>` | Show the resolved dependency and command plan for a task. |

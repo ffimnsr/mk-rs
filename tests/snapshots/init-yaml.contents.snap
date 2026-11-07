@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json
+# View the schema offline with: mk schema view
 
 tasks:
   greet:

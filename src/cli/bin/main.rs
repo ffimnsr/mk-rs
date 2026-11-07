@@ -7,6 +7,15 @@ use mk_lib::schema::ExecutionInterrupted;
 /// The entry point for the CLI
 mod cli_entry;
 
+/// Local GPG key completion helpers
+mod gpg_completion;
+
+/// Canonical JSON command output helpers
+mod json_output;
+
+/// Schema inspection subcommands
+mod schema_command;
+
 /// The struct that represents the stored secrets
 mod secrets;
 
@@ -26,6 +35,10 @@ fn main() -> anyhow::Result<()> {
 
 fn run() -> anyhow::Result<()> {
   if CliEntry::maybe_print_task_completion_from_env()? {
+    return Ok(());
+  }
+
+  if gpg_completion::maybe_print_gpg_key_completion_from_env()? {
     return Ok(());
   }
 

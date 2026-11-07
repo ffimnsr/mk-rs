@@ -15,6 +15,7 @@ use super::KEY_LOCATION_HELP;
 pub struct ImportKey {
   /// The GPG key ID or fingerprint to import from the local keyring
   #[arg(
+    short = 'g',
     long,
     help = "GPG key ID or fingerprint from your local keyring (e.g. a YubiKey-backed key)"
   )]

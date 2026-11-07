@@ -112,6 +112,7 @@ assets = [
   ["target/man/man1/mk-plan.1", "usr/share/man/man1/", "644"],
   ["target/man/man1/mk-run.1", "usr/share/man/man1/", "644"],
   ["target/man/man1/mk-schema.1", "usr/share/man/man1/", "644"],
+  ["target/man/man1/mk-schema-view.1", "usr/share/man/man1/", "644"],
   ["target/man/man1/mk-secrets.1", "usr/share/man/man1/", "644"],
   ["target/man/man1/mk-secrets-doctor.1", "usr/share/man/man1/", "644"],
   ["target/man/man1/mk-secrets-export-secret.1", "usr/share/man/man1/", "644"],

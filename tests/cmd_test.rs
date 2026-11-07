@@ -317,6 +317,66 @@ fn test_completion_bash_includes_dynamic_task_hook() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_completion_scripts_include_dynamic_gpg_key_hook() -> anyhow::Result<()> {
+  for shell in ["bash", "zsh", "fish"] {
+    Command::new(cargo::cargo_bin!("mk"))
+      .arg("completion")
+      .arg(shell)
+      .assert()
+      .success()
+      .stdout(predicates::str::contains("MK_COMPLETE_GPG_KEYS=1"));
+  }
+
+  Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn test_gpg_key_completion_candidates_respect_prefix() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  write_fake_selector(
+    &temp_dir,
+    "gpg",
+    r#"#!/bin/sh
+printf 'sec:u:4096:1:AAAAAAAAAAAAAAAA:1700000000:::::::\n'
+printf 'sec:u:4096:1:BBBBBBBBBBBBBBBB:1700000000:::::::\n'
+"#,
+  )?;
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .env("PATH", prepend_test_path(&temp_dir))
+    .env("MK_COMPLETE_GPG_KEYS", "1")
+    .env("MK_COMPLETE_PREFIX", "aa")
+    .assert()
+    .success()
+    .stdout(predicates::str::contains("AAAAAAAAAAAAAAAA"))
+    .stdout(predicates::str::contains("BBBBBBBBBBBBBBBB").not());
+
+  Ok(())
+}
+
+#[test]
+fn test_secrets_accepts_gpg_key_id_short_flag() -> anyhow::Result<()> {
+  let temp_dir = TempDir::new()?;
+  let vault_dir = temp_dir.path().join("vault");
+
+  Command::new(cargo::cargo_bin!("mk"))
+    .current_dir(temp_dir.path())
+    .arg("secrets")
+    .arg("vault")
+    .arg("init-vault")
+    .arg("-v")
+    .arg(&vault_dir)
+    .arg("-g")
+    .arg("SHORTKEY")
+    .assert()
+    .success();
+
+  assert_eq!(read_vault_gpg_key_id(&vault_dir), Some("SHORTKEY".to_string()));
+  Ok(())
+}
+
+#[test]
 fn test_completion_task_candidates_respect_prefix_and_config() -> anyhow::Result<()> {
   let temp_dir = TempDir::new()?;
   let config_file_path = common::setup_yaml(

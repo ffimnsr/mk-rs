@@ -12,7 +12,7 @@ Commands:
   secrets      Access stored secrets [aliases: s]
   update       Check for mk (make) updates
   clean-cache  Remove mk task cache metadata
-  schema       Print the JSON Schema for the task configuration file
+  schema       View the task configuration JSON Schema
   doctor       Diagnose mk setup and configuration
   watch        Watch files and re-run a task on changes
   help         Print this message or the help of the given subcommand(s)

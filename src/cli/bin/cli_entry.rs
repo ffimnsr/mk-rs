@@ -6,6 +6,8 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::json_output::print_json;
+use crate::schema_command::Schema;
 use crate::secrets::Secrets;
 use crate::task_selector::{FuzzyTaskSelector, TaskSelectorCandidate};
 use anyhow::Context as _;
@@ -26,7 +28,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, ACCEPT, USER_AGENT};
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 static VERSION: Lazy<String> = Lazy::new(get_version_digits);
 static INIT_SCHEMA_URL: &str = "https://raw.githubusercontent.com/ffimnsr/mk-rs/main/docs/schema.json";
@@ -216,8 +218,8 @@ enum Command {
   Update,
   #[command(about = "Remove mk task cache metadata")]
   CleanCache,
-  #[command(about = "Print the JSON Schema for the task configuration file")]
-  Schema,
+  #[command(about = "View the task configuration JSON Schema")]
+  Schema(Schema),
   #[command(about = "Diagnose mk setup and configuration")]
   Doctor,
   #[command(about = "Watch files and re-run a task on changes")]
@@ -435,7 +437,7 @@ impl CliEntry {
         | Some(Command::Completion { .. })
         | Some(Command::Update)
         | Some(Command::CleanCache)
-        | Some(Command::Schema)
+        | Some(Command::Schema(_))
         | Some(Command::Doctor)
     ) || (matches!(args.command, Some(Command::Secrets(_)))
       && !Self::config_requested_explicitly(args));
@@ -609,10 +611,8 @@ impl CliEntry {
         mk_lib::cache::CacheStore::remove_in_dir(&self.task_root.cache_base_dir())?;
         println!("Cache cleared");
       },
-      Some(Command::Schema) => {
-        let schema = mk_lib::generate_schema()?;
-        let schema: serde_json::Value = serde_json::from_str(&schema)?;
-        Self::print_json_value(schema)?;
+      Some(Command::Schema(schema)) => {
+        schema.execute()?;
       },
       Some(Command::Doctor) => {
         self.run_doctor()?;
@@ -644,34 +644,6 @@ impl CliEntry {
     }
 
     Ok(())
-  }
-
-  fn print_json<T: Serialize>(value: &T) -> anyhow::Result<()> {
-    Self::print_json_value(serde_json::to_value(value)?)
-  }
-
-  fn print_json_value(value: serde_json::Value) -> anyhow::Result<()> {
-    let value = Self::canonicalize_json(value);
-    println!("{}", serde_json::to_string_pretty(&value)?);
-    Ok(())
-  }
-
-  fn canonicalize_json(value: serde_json::Value) -> serde_json::Value {
-    match value {
-      serde_json::Value::Array(items) => {
-        serde_json::Value::Array(items.into_iter().map(Self::canonicalize_json).collect::<Vec<_>>())
-      },
-      serde_json::Value::Object(map) => {
-        let mut entries = map.into_iter().collect::<Vec<_>>();
-        entries.sort_by(|left, right| left.0.cmp(&right.0));
-        let mut canonical = serde_json::Map::new();
-        for (key, value) in entries {
-          canonical.insert(key, Self::canonicalize_json(value));
-        }
-        serde_json::Value::Object(canonical)
-      },
-      other => other,
-    }
   }
 
   fn update_mk(&self) -> anyhow::Result<()> {
@@ -1260,7 +1232,7 @@ impl CliEntry {
           }
         })
         .collect();
-      Self::print_json(&tasks)?;
+      print_json(&tasks)?;
     } else {
       let mut table = Table::new();
       if !plain {
@@ -1341,6 +1313,24 @@ __mk_complete_tasks() {{
     MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$cur" "$cmd" "${{config_args[@]}}" 2>/dev/null
 }}
 
+__mk_complete_gpg_keys() {{
+    local cur="$1"
+    local cmd="$2"
+    MK_COMPLETE_GPG_KEYS=1 MK_COMPLETE_PREFIX="$cur" "$cmd" 2>/dev/null
+}}
+
+__mk_should_complete_gpg_key() {{
+    local previous="${{COMP_WORDS[COMP_CWORD-1]}}"
+
+    case "$previous" in
+        --gpg-key-id|-g)
+            return 0
+            ;;
+    esac
+
+    return 1
+}}
+
 __mk_should_complete_task() {{
     local mode="top"
     local expect_value=0
@@ -1417,6 +1407,15 @@ __mk_should_complete_task() {{
 _mk() {{
     _mk_clap_static "$@"
 
+    if __mk_should_complete_gpg_key; then
+        local cur="$2"
+        local cmd="${{COMP_WORDS[0]}}"
+        local candidate
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] && COMPREPLY+=("$candidate")
+        done < <(__mk_complete_gpg_keys "$cur" "$cmd")
+    fi
+
     if __mk_should_complete_task; then
         local cur="$2"
         local cmd="${{COMP_WORDS[0]}}"
@@ -1491,7 +1490,31 @@ function __fish_mk_complete_tasks
     env MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$current" command mk $config_args 2>/dev/null
 end
 
+function __fish_mk_complete_gpg_keys
+    set -l current (commandline -ct)
+    env MK_COMPLETE_GPG_KEYS=1 MK_COMPLETE_PREFIX="$current" command mk 2>/dev/null
+end
+
+function __fish_mk_should_complete_gpg_key
+    set -l tokens (commandline -opc)
+    set -l previous $tokens[-1]
+
+    switch $previous
+        case --gpg-key-id -g
+            return 0
+    end
+
+    return 1
+end
+
+function __fish_mk_gpg_key_candidates
+    if __fish_mk_should_complete_gpg_key
+        __fish_mk_complete_gpg_keys
+    end
+end
+
 complete -c mk -f -a "(__fish_mk_complete_tasks)"
+complete -c mk -f -a "(__fish_mk_gpg_key_candidates)"
 "#
     )
   }
@@ -1524,6 +1547,23 @@ function _mk_complete_tasks() {{
     done
 
     MK_COMPLETE_TASKS=1 MK_COMPLETE_PREFIX="$cur" "${{words[1]}}" "${{config_args[@]}}" 2>/dev/null
+}}
+
+function _mk_complete_gpg_keys() {{
+    local cur="$1"
+    MK_COMPLETE_GPG_KEYS=1 MK_COMPLETE_PREFIX="$cur" "${{words[1]}}" 2>/dev/null
+}}
+
+function _mk_should_complete_gpg_key() {{
+    local previous="${{words[CURRENT-1]}}"
+
+    case "$previous" in
+        --gpg-key-id|-g)
+            return 0
+            ;;
+    esac
+
+    return 1
 }}
 
 function _mk_should_complete_task() {{
@@ -1602,6 +1642,12 @@ function _mk_should_complete_task() {{
 function _mk() {{
     _mk_clap_static "$@"
 
+    if _mk_should_complete_gpg_key; then
+        local -a gpg_candidates
+        gpg_candidates=(${{(@f)$(_mk_complete_gpg_keys "$PREFIX")}})
+        (( $#gpg_candidates )) && compadd -a gpg_candidates
+    fi
+
     if _mk_should_complete_task; then
         local -a task_candidates
         task_candidates=(${{(@f)$(_mk_complete_tasks "$PREFIX")}})
@@ -1615,7 +1661,7 @@ function _mk() {{
   fn validate_config(&self, json: bool) -> anyhow::Result<()> {
     let report = self.task_root.validate();
     if json {
-      Self::print_json(&report)?;
+      print_json(&report)?;
     } else if report.has_errors() {
       println!("Validation failed");
       println!();
@@ -1680,7 +1726,7 @@ function _mk() {{
   fn print_plan(&self, task_name: &str, json: bool, selectors: &[MatrixSelector]) -> anyhow::Result<()> {
     let plan = self.task_root.plan_task_with_selectors(task_name, selectors)?;
     if json {
-      Self::print_json(&plan)?;
+      print_json(&plan)?;
     } else {
       self.print_plan_text(&plan);
     }
@@ -1756,6 +1802,7 @@ impl InitTemplateFormat {
     out.push_str("# yaml-language-server: $schema=");
     out.push_str(INIT_SCHEMA_URL);
     out.push('\n');
+    out.push_str("# View the schema offline with: mk schema view\n");
     out.push('\n');
     self.push_shared_flags(&mut out, has_cargo, has_npm, "", ": true\n", '\n');
     out.push_str("tasks:\n");

@@ -25,6 +25,7 @@ pub struct Secrets {
   key_name: Option<String>,
 
   #[arg(
+    short = 'g',
     long,
     conflicts_with = "key_name",
     help = "GPG key ID or fingerprint for hardware/passphrase-protected keys (delegates crypto to the system gpg binary). Cannot be combined with --key-name."

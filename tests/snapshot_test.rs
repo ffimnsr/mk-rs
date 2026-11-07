@@ -249,6 +249,7 @@ fn snapshot_matrix_plan_json() -> anyhow::Result<()> {
 fn snapshot_schema() -> anyhow::Result<()> {
   let output = Command::new(cargo::cargo_bin!("mk"))
     .arg("schema")
+    .arg("view")
     .assert()
     .success()
     .get_output()

@@ -103,7 +103,7 @@ Commands:
   secrets     Access stored secrets [aliases: s]
   update      Check for mk (make) updates
   clean-cache Remove mk task cache metadata
-  schema      Print the JSON Schema for the task configuration file
+  schema      View the task configuration JSON Schema
   help        Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -294,7 +294,7 @@ Notes:
 
 ### Shell completion install examples
 
-Task-name completion is dynamic for Bash, Zsh, and Fish: generated completion scripts call back into `mk` and read task names from the active config file. PowerShell and Elvish currently keep the static Clap-generated behavior.
+Task-name completion is dynamic for Bash, Zsh, and Fish: generated completion scripts call back into `mk` and read task names from the active config file. `--gpg-key-id` and `-g` also complete key IDs from the local `gpg --list-secret-keys` keyring. PowerShell and Elvish currently keep the static Clap-generated behavior.
 
 ```bash
 # Bash: generate completion and load it from ~/.bashrc
@@ -890,7 +890,7 @@ mk supports vault encryption and decryption via the system `gpg` binary, which a
 **Step 1 — Register your GPG key with mk**
 
 ```bash
-mk secrets key import --gpg <YOUR_KEY_ID_OR_FINGERPRINT>
+mk secrets key import -g <YOUR_KEY_ID_OR_FINGERPRINT>
 ```
 
 This validates the key is present in your local GPG keyring and saves a reference in `~/.config/mk/priv/`. The private key material never leaves the hardware.
@@ -898,8 +898,10 @@ This validates the key is present in your local GPG keyring and saves a referenc
 **Step 2 — Initialize a vault linked to your GPG key**
 
 ```bash
-mk secrets vault init --gpg-key-id <YOUR_KEY_ID> --vault-location ./.mk/vault
+mk secrets vault init -g <YOUR_KEY_ID> --vault-location ./.mk/vault
 ```
+
+`--gpg-key-id` can be shortened to `-g`. With shell completions installed, pressing Tab after either form lists key IDs from your local `gpg --list-secret-keys` keyring.
 
 This creates the vault directory and writes a `.vault-meta.toml` file that records the GPG key ID. All subsequent commands on this vault automatically use GPG without needing `--gpg-key-id` flags.
 
@@ -945,7 +947,7 @@ tasks:
 After initializing a vault, add `--write-config` to record the vault settings in your config file automatically:
 
 ```bash
-mk secrets vault init --write-config --gpg-key-id YOUR_KEY_ID --vault-location ./.mk/vault
+mk secrets vault init --write-config -g YOUR_KEY_ID --vault-location ./.mk/vault
 ```
 
 This creates the vault, writes `.vault-meta.toml`, and adds or updates the `secrets:` block in `tasks.yaml`. Unrelated config content is preserved. Only YAML config files are supported for mutation.

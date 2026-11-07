@@ -29,6 +29,7 @@ pub struct StoreSecret {
   key_name: Option<String>,
 
   #[arg(
+    short = 'g',
     long,
     conflicts_with = "key_name",
     help = "GPG key ID or fingerprint for hardware/passphrase-protected keys. Cannot be combined with --key-name."

@@ -19,6 +19,7 @@ pub struct InitVault {
   key_name: Option<String>,
 
   #[arg(
+    short = 'g',
     long,
     conflicts_with = "key_name",
     help = "GPG key ID or fingerprint to associate with this vault. When set, all vault commands (store, show, export, …) will use gpg automatically without needing the --gpg-key-id flag. Cannot be combined with --key-name."
