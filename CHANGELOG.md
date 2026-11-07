@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.20 - 2026-11-07
+
+### Features
+
+- add short gpg key flag and dynamic key completion (`01843f2`)
+
+### Fixes
+
+- isolate rust-cache per job and target (`9398abd`)
+
+### Documentation
+
+- add help examples for secret paths and config (`cf02bf1`)
+- add command examples and offline podman guidance (`d4f4d86`)
+
+### CI
+
+- require green CI before publishing tags (`2eceede`)
+- skip rust checks for documentation-only changes (`09e0adc`)
+
 ## 0.7.19 - 2026-10-22
 
 ### Features
